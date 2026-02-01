@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anosys-sdk-openai"
-version = "1.0.0"
+version = "1.0.1"
 description = "AnoSys SDK for OpenAI - Automatic instrumentation and logging for OpenAI API calls"
 authors = [{name = "AnoSys", email = "support@anosys.ai"}]
 readme = "README.md"

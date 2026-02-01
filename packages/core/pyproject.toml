@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anosys-sdk-core"
-version = "1.0.0"
+version = "1.0.1"
 description = "Core utilities for AnoSys SDK - AI observability and monitoring"
 authors = [{name = "AnoSys", email = "support@anosys.ai"}]
 readme = "README.md"
