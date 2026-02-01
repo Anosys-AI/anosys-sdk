@@ -74,5 +74,4 @@ set_tracing_processor(processor)
 | `OPENAI_API_KEY` | Yes | Your OpenAI API key |
 
 ## License
-
 Apache 2.0
