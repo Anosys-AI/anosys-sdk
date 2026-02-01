@@ -15,7 +15,7 @@ load_dotenv()
 
 # Default API endpoints
 DEFAULT_API_URL = "https://www.anosys.ai"
-API_KEY_RESOLVER_URL = "https://api.anosys.ai/api/resolveapikeys"
+API_KEY_RESOLVER_URL = "https://console.anosys.ai/api/resolveapikeys"
 
 
 def get_env_bool(var_name: str, default: bool = True) -> bool:
