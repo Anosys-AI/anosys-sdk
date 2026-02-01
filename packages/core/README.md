@@ -43,4 +43,4 @@ anosys_raw_logger({
 
 ## License
 
-MIT
+Apache 2.0

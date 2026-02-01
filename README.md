@@ -1,6 +1,6 @@
 # Anosys SDK
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 
 Python SDK for integrating with [AnoSys](https://anosys.ai) - AI observability and monitoring platform.
@@ -73,4 +73,5 @@ make build
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE)
+Apache 2.0 License - see [LICENSE](./LICENSE)
+

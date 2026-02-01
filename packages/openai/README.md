@@ -1,6 +1,6 @@
 # AnoSys SDK for OpenAI
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 
 Automatically capture and send OpenAI API calls to [AnoSys](https://anosys.ai) for monitoring, analytics, and observability.
@@ -96,4 +96,4 @@ Following [OpenTelemetry Gen AI standards](https://opentelemetry.io/docs/specs/s
 
 ## License
 
-MIT
+Apache 2.0
