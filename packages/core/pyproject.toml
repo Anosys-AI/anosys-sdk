@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anosys-sdk-core"
+version = "1.0.0"
+description = "Core utilities for AnoSys SDK - AI observability and monitoring"
+authors = [{name = "AnoSys", email = "support@anosys.ai"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Monitoring",
+]
+keywords = ["anosys", "observability", "monitoring", "logging", "ai", "llm"]
+dependencies = [
+    "requests>=2.25.1",
+    "python-dotenv>=0.21.0",
+]
+
+[project.urls]
+Homepage = "https://anosys.ai"
+Documentation = "https://docs.anosys.ai"
+Repository = "https://github.com/anosys-ai/anosys-sdk"
+
+[tool.setuptools.packages.find]
+where = ["src"]
