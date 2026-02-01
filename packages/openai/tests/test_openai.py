@@ -40,3 +40,4 @@ def test_streaming_aggregator():
     aggregator = StreamingAggregator()
     assert aggregator.get_content() == ""
     assert aggregator.get_chunks() == []
+
