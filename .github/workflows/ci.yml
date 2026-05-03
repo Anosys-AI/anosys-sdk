@@ -28,6 +28,7 @@ jobs:
           pip install -e packages/python/core
           pip install -e packages/python/openai
           pip install -e packages/python/openai_agents
+          pip install -e packages/python/claude_code
 
       - name: Lint
         run: ruff check packages/python/
@@ -40,6 +41,9 @@ jobs:
 
       - name: Test openai_agents
         run: pytest packages/python/openai_agents/tests -v
+
+      - name: Test claude_code
+        run: pytest packages/python/claude_code/tests -v
 
   test-js:
     runs-on: ubuntu-latest

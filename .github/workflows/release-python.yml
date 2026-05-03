@@ -30,6 +30,7 @@ jobs:
           cd packages/python/core && python -m build
           cd packages/python/openai && python -m build
           cd packages/python/openai_agents && python -m build
+          cd packages/python/claude_code && python -m build
 
       - name: Publish core to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -45,3 +46,8 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/python/openai_agents/dist/
+
+      - name: Publish claude_code to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/python/claude_code/dist/
