@@ -9,7 +9,7 @@ import getpass
 import os
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any, Optional
 
 INTEGRATION_VERSION = '0.2.0'
 
@@ -182,8 +182,6 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
     isSnapshotUpdate = bool(record.get('isSnapshotUpdate', False))
     promptId = record.get('promptId') or U
     level = record.get('level') or U
-    totalDurationMs = record.get('totalDurationMs')
-    hookCount = record.get('hookCount') if record.get('hookCount') is not None else U
     hasOutput = record.get('hasOutput') if record.get('hasOutput') is not None else U
     preventedContinuation = record.get('preventedContinuation') if record.get('preventedContinuation') is not None else U
 
