@@ -26,9 +26,6 @@
     "axios": "^1.7.0",
     "dotenv": "^16.0.0"
   },
-  "devDependencies": {
-    "node:test": "*"
-  },
   "scripts": {
     "test": "node --test test/basic.test.js"
   }

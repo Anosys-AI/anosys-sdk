@@ -16,12 +16,12 @@ from typing import Any, Callable, Dict, Optional
 
 import requests
 
-logger = logging.getLogger(__name__)
-
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
 from anosys_sdk_core.util.json import to_json_fallback, to_str_or_none
 from anosys_sdk_core.util.batching import assign, reassign
+
+logger = logging.getLogger(__name__)
 
 # Global configuration
 _log_api_url: str = "https://www.anosys.ai"

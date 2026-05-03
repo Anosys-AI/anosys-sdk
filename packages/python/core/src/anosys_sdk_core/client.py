@@ -10,9 +10,9 @@ from typing import Any, Dict, Optional
 
 import requests
 
-logger = logging.getLogger(__name__)
-
 from anosys_sdk_core.config import resolve_api_key
+
+logger = logging.getLogger(__name__)
 
 
 class AnosysClient:
