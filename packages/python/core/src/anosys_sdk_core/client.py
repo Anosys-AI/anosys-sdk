@@ -4,7 +4,6 @@ HTTP client for AnoSys API.
 Provides a centralized client for sending data to the AnoSys logging endpoint.
 """
 
-import json
 import logging
 from typing import Any, Dict, Optional
 
