@@ -252,7 +252,8 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
                 if t == 'text': parts.append(item.get('text', ''))
                 elif t == 'image': parts.append('[Image Content]')
                 elif t == 'tool_result':
-                    tc = item.get('content'); pr = '[Tool Error] ' if item.get('is_error') else '[Tool Result] '
+                    tc = item.get('content')
+                    pr = '[Tool Error] ' if item.get('is_error') else '[Tool Result] '
                     if isinstance(tc, str): parts.append(f"{pr}{tc}")
                     elif isinstance(tc, list):
                         sub = []
@@ -320,7 +321,9 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
                 elif bt == 'tool_use': tx.append(f"[Tool Use: {b.get('name', 'unknown')}({json.dumps(b.get('input', {}), separators=(',', ':'))})]")
                 elif bt == 'image': tx.append('[Image Content]')
             assistantText = '\n'.join(tx) if tx else None
-    elif msg_type == 'summary': assistantText = record.get('summary', ''); userPrompt = '[Session Summary Request]'
+    elif msg_type == 'summary':
+        assistantText = record.get('summary', '')
+        userPrompt = '[Session Summary Request]'
     elif msg_type == 'system':
         cnt = record.get('content', '')
         if subtype == 'stop_hook_summary':

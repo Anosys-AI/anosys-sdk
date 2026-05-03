@@ -315,7 +315,8 @@ async def main():
                 for i in range(total_lines - 1, -1, -1):
                     item = parsed[i]
                     if item and item[1] == last_uuid:
-                        found_idx = i; break
+                        found_idx = i
+                        break
                 last_line = found_idx + 1 if found_idx != -1 else 0
 
         if last_line >= total_lines:
@@ -334,11 +335,14 @@ async def main():
 
         for i in range(last_line, total_lines):
             item = parsed[i]
-            if not item: continue
+            if not item:
+                continue
             msg, uuid = item
             for f in ['cwd', 'sessionId', 'gitBranch', 'version', 'slug', 'permissionMode', 'userType']:
-                if msg.get(f): current_context[f] = msg[f]
-            if msg.get('timestamp'): current_context['last_timestamp'] = msg['timestamp']
+                if msg.get(f):
+                    current_context[f] = msg[f]
+            if msg.get('timestamp'):
+                current_context['last_timestamp'] = msg['timestamp']
 
             incremental = None
             if msg.get('type') == 'assistant' and isinstance(msg.get('message'), dict):
