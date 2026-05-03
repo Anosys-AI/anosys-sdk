@@ -2,13 +2,11 @@
 
 from anosys_sdk_claude_code.mapper import transform_record, to_unix_ms, INTEGRATION_VERSION
 from anosys_sdk_claude_code.installer import (
-    load_settings,
     update_env,
     update_stop_hooks,
     remove_stop_hooks,
     has_anosys_hook,
     get_anosys_hook_command,
-    ANOSYS_ENV_KEYS,
 )
 
 

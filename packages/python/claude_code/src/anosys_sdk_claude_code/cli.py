@@ -10,12 +10,9 @@ Commands:
 
 import argparse
 import asyncio
-import json
-import shutil
 import sys
 
 from anosys_sdk_claude_code.installer import (
-    ANOSYS_ENV_KEYS,
     BACKUP_PATH,
     SETTINGS_PATH,
     backup,
@@ -103,7 +100,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     settings = load_settings()
     if has_anosys_hook(settings):
         cmd = get_anosys_hook_command(settings)
-        print(f"AnoSys hook is INSTALLED")
+        print("AnoSys hook is INSTALLED")
         print(f"  Command: {cmd}")
         env = settings.get("env", {})
         endpoint = env.get("ANOSYS_HOOK_ENDPOINT_URL", "(not set)")
@@ -114,7 +111,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         print(f"  Redaction: {redaction}")
     else:
         print("AnoSys hook is NOT installed.")
-        print(f"  Run 'anosys-claude-code install' to set it up.")
+        print("  Run 'anosys-claude-code install' to set it up.")
 
 
 def cmd_run(args: argparse.Namespace) -> None:
