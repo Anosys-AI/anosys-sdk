@@ -1,41 +1,59 @@
-.PHONY: install install-dev test lint build clean
+.PHONY: install install-dev test lint build clean \
+        install-py install-py-dev test-py lint-py build-py \
+        install-js test-js build-js
 
-# Install all packages in development mode
-install:
-	pip install -e packages/core
-	pip install -e packages/openai
-	pip install -e packages/openai_agents
+# ── Python ────────────────────────────────────────────────────────────────────
 
-# Install with dev dependencies
-install-dev: install
+install-py:
+	pip install -e packages/python/core
+	pip install -e packages/python/openai
+	pip install -e packages/python/openai_agents
+
+install-py-dev: install-py
 	pip install pytest pytest-asyncio ruff mypy
 
-# Run tests for all packages
-test:
-	pytest packages/core/tests -v
-	pytest packages/openai/tests -v
-	pytest packages/openai_agents/tests -v
+test-py:
+	pytest packages/python/core/tests -v
+	pytest packages/python/openai/tests -v
+	pytest packages/python/openai_agents/tests -v
 
-# Run linting
-lint:
-	ruff check packages/
-	ruff format --check packages/
+lint-py:
+	ruff check packages/python/
+	ruff format --check packages/python/
 
-# Format code
-format:
-	ruff format packages/
+format-py:
+	ruff format packages/python/
 
-# Build all packages
-build:
-	cd packages/core && python -m build
-	cd packages/openai && python -m build
-	cd packages/openai_agents && python -m build
+build-py:
+	cd packages/python/core && python -m build
+	cd packages/python/openai && python -m build
+	cd packages/python/openai_agents && python -m build
+
+# ── JavaScript ────────────────────────────────────────────────────────────────
+
+install-js:
+	npm install --prefix packages/js
+
+test-js:
+	npm test --workspaces --prefix packages/js
+
+build-js:
+	npm run build --workspaces --prefix packages/js
+
+# ── Combined shortcuts ────────────────────────────────────────────────────────
+
+install: install-py install-js
+install-dev: install-py-dev install-js
+test: test-py test-js
+lint: lint-py
 
 # Clean build artifacts
 clean:
-	rm -rf packages/*/dist
-	rm -rf packages/*/build
-	rm -rf packages/*/*.egg-info
-	rm -rf packages/*/src/*.egg-info
+	rm -rf packages/python/*/dist
+	rm -rf packages/python/*/build
+	rm -rf packages/python/*/*.egg-info
+	rm -rf packages/python/*/src/*.egg-info
+	rm -rf packages/js/*/node_modules
+	rm -rf packages/js/node_modules
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type d -name .pytest_cache -exec rm -rf {} +

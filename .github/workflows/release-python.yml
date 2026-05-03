@@ -1,0 +1,47 @@
+name: Release Python
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: |
+          python -m pip install -U pip
+          python -m pip install build
+
+      - name: Build packages
+        run: |
+          cd packages/python/core && python -m build
+          cd packages/python/openai && python -m build
+          cd packages/python/openai_agents && python -m build
+
+      - name: Publish core to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/python/core/dist/
+
+      - name: Publish openai to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/python/openai/dist/
+
+      - name: Publish openai_agents to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/python/openai_agents/dist/
