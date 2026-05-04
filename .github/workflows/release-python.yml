@@ -27,10 +27,10 @@ jobs:
 
       - name: Build packages
         run: |
-          cd packages/python/core && python -m build
-          cd packages/python/openai && python -m build
-          cd packages/python/openai_agents && python -m build
-          cd packages/python/claude_code && python -m build
+          (cd packages/python/core && python -m build)
+          (cd packages/python/openai && python -m build)
+          (cd packages/python/openai_agents && python -m build)
+          (cd packages/python/claude_code && python -m build)
 
       - name: Publish core to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

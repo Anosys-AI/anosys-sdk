@@ -27,10 +27,10 @@ format-py:
 	ruff format packages/python/
 
 build-py:
-	cd packages/python/core && python -m build
-	cd packages/python/openai && python -m build
-	cd packages/python/openai_agents && python -m build
-	cd packages/python/claude_code && python -m build
+	(cd packages/python/core && python -m build)
+	(cd packages/python/openai && python -m build)
+	(cd packages/python/openai_agents && python -m build)
+	(cd packages/python/claude_code && python -m build)
 
 # ── JavaScript ────────────────────────────────────────────────────────────────
 
