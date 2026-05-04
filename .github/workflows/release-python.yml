@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   publish:
@@ -36,18 +35,22 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/python/core/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish openai to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/python/openai/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish openai_agents to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/python/openai_agents/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Publish claude_code to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/python/claude_code/dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
