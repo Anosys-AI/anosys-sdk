@@ -1,13 +1,13 @@
 {
   "name": "anosys-sdk-openai",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "AnoSys SDK for OpenAI — automatic instrumentation and logging for OpenAI API calls",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
   "homepage": "https://anosys.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/anosys-ai/anosys-sdk"
+    "url": "git+https://github.com/anosys-ai/anosys-sdk.git"
   },
   "type": "module",
   "main": "src/index.js",
