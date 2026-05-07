@@ -103,8 +103,6 @@ def setup_tracing(
     _log_api_url = api_url
 
     with _lock:
-        trace_provider = TracerProvider()
-
         exporter = AnosysHttpExporter(get_user_context=get_user_context)
         if use_batch_processor:
             span_processor = BatchSpanProcessor(
@@ -118,8 +116,22 @@ def setup_tracing(
             span_processor = SimpleSpanProcessor(exporter)
             logger.info("Using SimpleSpanProcessor for spans")
 
+        active_provider = trace.get_tracer_provider()
+        trace_provider = None
+        set_global = False
+
+        if isinstance(active_provider, TracerProvider):
+            logger.info("Detected existing global TracerProvider. Attaching processor.")
+            trace_provider = active_provider
+        else:
+            logger.info("Creating new global TracerProvider.")
+            trace_provider = TracerProvider()
+            set_global = True
+
         trace_provider.add_span_processor(span_processor)
-        trace.set_tracer_provider(trace_provider)
+
+        if set_global:
+            trace.set_tracer_provider(trace_provider)
 
         instrumentor = OpenAIInstrumentor()
         try:

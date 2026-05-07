@@ -10,7 +10,7 @@ from anosys_sdk_openai.instrumentor import AnosysOpenAILogger, setup_tracing
 # Re-export core decorators for convenience
 from anosys_sdk_core import anosys_logger, anosys_raw_logger, setup_api, setup_decorator
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 __all__ = [
     "AnosysOpenAILogger",
