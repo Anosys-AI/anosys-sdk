@@ -17,7 +17,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Default API endpoints — override via environment variables for custom deployments
-DEFAULT_API_URL = os.getenv("ANOSYS_API_URL", "https://api.anosys.ai")
+DEFAULT_API_URL = os.getenv("ANOSYS_API_URL", "https://www.anosys.ai")
 API_KEY_RESOLVER_URL = os.getenv("ANOSYS_RESOLVER_URL", "https://console.anosys.ai/api/resolveapikeys")
 
 

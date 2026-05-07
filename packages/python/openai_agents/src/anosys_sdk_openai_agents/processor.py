@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # Module-level state
 _lock = threading.Lock()
 _tracing_initialized = False
-_log_api_url = "https://api.anosys.ai"
+_log_api_url = "https://www.anosys.ai"
 
 
 class AnosysHttpExporter(SpanExporter):

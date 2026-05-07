@@ -24,7 +24,7 @@ from anosys_sdk_core.util.batching import assign, reassign
 logger = logging.getLogger(__name__)
 
 # Global configuration
-_log_api_url: str = "https://api.anosys.ai"
+_log_api_url: str = "https://www.anosys.ai"
 _key_to_cvs: Dict[str, str] = BASE_KEY_MAPPING.copy()
 _starting_indices: Dict[str, int] = DEFAULT_STARTING_INDICES.copy()
 
