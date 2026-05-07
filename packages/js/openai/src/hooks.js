@@ -150,6 +150,13 @@ export function extractSpanInfo(span) {
   assign(variables, 'input',  toStrOrNull(inputMsgs));
   assign(variables, 'output', toStrOrNull(outputMsgs));
 
+  // User context and Model Config
+  const userCtx = attrs.user_context ?? attrs.anosys?.user_context;
+  if (userCtx) assign(variables, 'user_context', userCtx);
+  
+  const modelConfig = req.parameters ?? llm.invocation_parameters;
+  if (modelConfig) assign(variables, 'llm_invocation_parameters', modelConfig);
+
   // Streaming
   const isStreaming = !!(raw['llm.is_streaming'] ?? raw['gen_ai.is_streaming'] ?? req.parameters?.stream);
   assign(variables, 'is_streaming', isStreaming);
@@ -161,6 +168,10 @@ export function extractSpanInfo(span) {
   if (span.events && span.events.length > 0) {
     assign(variables, 'events', JSON.stringify(span.events));
   }
+  
+  // Backwards compatibility for old names
+  assign(variables, 'llm_model_name', toStrOrNull(req.model ?? llm.model_name));
+  assign(variables, 'llm_token_count', toStrOrNull(usage.total_tokens ?? tokenCount));
 
   return reassign(variables, keyToCvs, { ...OPENAI_STARTING_INDICES });
 }

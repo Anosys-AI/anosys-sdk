@@ -114,6 +114,8 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "cvs3": to_str_or_none(user_context),
         "cvs60": to_str_or_none(data.get("object")),
         "cvs61": to_str_or_none(source),
+        "cvs80": to_str_or_none(data.get("workflow_name")),
+        "cvs81": to_str_or_none(data.get("group_id")),
     }
     
     # Calculate duration
@@ -298,6 +300,11 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     # Kind and resource
     assign(variables, 'kind', str(span.kind).replace('SpanKind.', '').upper())
     assign(variables, 'otel_resource', json.dumps(dict(span.resource.attributes), default=str))
+    
+    user_context = getattr(span, 'user_context', None)
+    if user_context:
+        assign(variables, 'user_context', user_context)
+        
     assign(variables, 'from_source', "openAI_Agents_Telemetry")
     
     return reassign(variables, key_to_cvs, AGENTS_STARTING_INDICES.copy())

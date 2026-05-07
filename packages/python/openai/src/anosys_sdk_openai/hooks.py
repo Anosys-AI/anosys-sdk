@@ -131,6 +131,11 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     # Attributes
     attributes = span.get('attributes', {})
     
+    # User context
+    user_context = attributes.get('user_context') or attributes.get('anosys', {}).get('user_context')
+    if user_context:
+        assign(variables, 'user_context', user_context)
+    
     # Gen AI - System
     assign(variables, 'gen_ai.system', 'openai')
     assign(variables, 'gen_ai.provider.name', 'openai')

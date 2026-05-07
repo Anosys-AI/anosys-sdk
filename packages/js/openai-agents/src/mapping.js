@@ -12,8 +12,8 @@ export const BASE_KEY_MAPPING = {
   otel_resource: 'otel_resource',
   'gen_ai.system': 'gen_ai_system', 'gen_ai.provider.name': 'gen_ai_provider_name',
   'gen_ai.operation.name': 'gen_ai_operation_name', 'server.address': 'server_address',
-  'server.port': 'server_port', 'error.type': 'error_type',
-  'gen_ai.request.model': 'gen_ai_request_model', 'gen_ai.request.temperature': 'gen_ai_request_temperature',
+  'server.port': 'server_port', 'error.type': 'cvs10',
+  'gen_ai.request.model': 'cvs69', 'gen_ai.request.temperature': 'gen_ai_request_temperature',
   'gen_ai.request.top_p': 'gen_ai_request_top_p', 'gen_ai.request.top_k': 'gen_ai_request_top_k',
   'gen_ai.request.max_tokens': 'gen_ai_request_max_tokens',
   'gen_ai.request.frequency_penalty': 'gen_ai_request_frequency_penalty',
@@ -25,21 +25,22 @@ export const BASE_KEY_MAPPING = {
   'gen_ai.response.finish_reasons': 'gen_ai_response_finish_reasons',
   'gen_ai.usage.input_tokens': 'gen_ai_usage_input_tokens',
   'gen_ai.usage.output_tokens': 'gen_ai_usage_output_tokens',
-  'gen_ai.usage.total_tokens': 'gen_ai_usage_total_tokens',
-  'gen_ai.output.type': 'gen_ai_output_type',
+  'gen_ai.usage.total_tokens': 'cvs71',
+  'gen_ai.output.type': 'cvs64',
   'gen_ai.input.messages': 'gen_ai_input_messages', 'gen_ai.output.messages': 'gen_ai_output_messages',
-  'gen_ai.system_instructions': 'gen_ai_system_instructions', 'gen_ai.tool.definitions': 'gen_ai_tool_definitions',
+  'gen_ai.system_instructions': 'cvs1', 'gen_ai.tool.definitions': 'cvs63',
   'gen_ai.agent.id': 'gen_ai_agent_id', 'gen_ai.agent.name': 'gen_ai_agent_name',
   'gen_ai.agent.description': 'gen_ai_agent_description', 'gen_ai.conversation.id': 'gen_ai_conversation_id',
   'gen_ai.data_source.id': 'gen_ai_data_source_id',
   'gen_ai.embeddings.dimension.count': 'gen_ai_embeddings_dimension_count',
-  llm_tools: 'llm_tools', llm_system: 'llm_system', llm_input: 'llm_input',
-  llm_output: 'llm_output', llm_model: 'llm_model',
-  llm_invocation_parameters: 'llm_invocation_parameters', llm_token_count: 'llm_token_count',
+  llm_tools: 'cvs63', llm_system: 'cvs1', llm_input: 'cvs1',
+  llm_output: 'cvs2', llm_model: 'cvs69', llm_model_name: 'cvs69',
+  llm_invocation_parameters: 'cvs70', llm_token_count: 'cvs71',
   llm_input_messages: 'cvs1', llm_output_messages: 'cvs2',
   input: 'cvs1', output: 'cvs2', error: 'cvs3', caller: 'cvs4',
-  error_type: 'cvs10', error_message: 'cvs11', error_stack: 'cvs12',
-  raw: 'cvs199', from_source: 'cvs200', source: 'cvs200', is_streaming: 'cvb2',
+  user_context: 'cvs5', error_type: 'cvs10', error_message: 'cvs11', 
+  error_stack: 'cvs12', raw: 'cvs199', from_source: 'cvs200', 
+  source: 'cvs200', is_streaming: 'cvb2',
 };
 
 // Agents-specific additions (mirrors Python AGENTS_KEY_MAPPING)
@@ -271,6 +272,9 @@ export function extractOtelSpanInfo(span) {
   if (span.resource?.attributes) {
     assign(variables, 'otel_resource', JSON.stringify(Object.fromEntries(Object.entries(span.resource.attributes))));
   }
+  
+  const userCtx = span.user_context ?? span.userContext;
+  if (userCtx) assign(variables, 'user_context', userCtx);
   
   assign(variables, 'from_source', 'openAI_Agents_Telemetry');
 

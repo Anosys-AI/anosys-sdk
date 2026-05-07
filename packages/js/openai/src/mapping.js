@@ -37,10 +37,10 @@ export const BASE_KEY_MAPPING = {
   'gen_ai.operation.name':                'gen_ai_operation_name',
   'server.address':                       'server_address',
   'server.port':                          'server_port',
-  'error.type':                           'error_type',
-
+  'error.type':                           'cvs10',
+ 
   // Gen AI — request
-  'gen_ai.request.model':                 'gen_ai_request_model',
+  'gen_ai.request.model':                 'cvs69',
   'gen_ai.request.temperature':           'gen_ai_request_temperature',
   'gen_ai.request.top_p':                 'gen_ai_request_top_p',
   'gen_ai.request.top_k':                 'gen_ai_request_top_k',
@@ -51,22 +51,22 @@ export const BASE_KEY_MAPPING = {
   'gen_ai.request.seed':                  'gen_ai_request_seed',
   'gen_ai.request.choice.count':          'gen_ai_request_choice_count',
   'gen_ai.request.encoding_formats':      'gen_ai_request_encoding_formats',
-
+ 
   // Gen AI — response & usage
   'gen_ai.response.model':                'gen_ai_response_model',
   'gen_ai.response.id':                   'gen_ai_response_id',
   'gen_ai.response.finish_reasons':       'gen_ai_response_finish_reasons',
   'gen_ai.usage.input_tokens':            'gen_ai_usage_input_tokens',
   'gen_ai.usage.output_tokens':           'gen_ai_usage_output_tokens',
-  'gen_ai.usage.total_tokens':            'gen_ai_usage_total_tokens',
-  'gen_ai.output.type':                   'gen_ai_output_type',
-
+  'gen_ai.usage.total_tokens':            'cvs71',
+  'gen_ai.output.type':                   'cvs64',
+ 
   // Gen AI — content
   'gen_ai.input.messages':               'gen_ai_input_messages',
   'gen_ai.output.messages':              'gen_ai_output_messages',
-  'gen_ai.system_instructions':          'gen_ai_system_instructions',
-  'gen_ai.tool.definitions':             'gen_ai_tool_definitions',
-
+  'gen_ai.system_instructions':          'cvs1',
+  'gen_ai.tool.definitions':             'cvs63',
+ 
   // Gen AI — agents & frameworks
   'gen_ai.agent.id':                     'gen_ai_agent_id',
   'gen_ai.agent.name':                   'gen_ai_agent_name',
@@ -74,27 +74,30 @@ export const BASE_KEY_MAPPING = {
   'gen_ai.conversation.id':              'gen_ai_conversation_id',
   'gen_ai.data_source.id':               'gen_ai_data_source_id',
   'gen_ai.embeddings.dimension.count':   'gen_ai_embeddings_dimension_count',
-
+ 
   // Legacy LLM fields
-  llm_tools:                'llm_tools',
-  llm_system:               'llm_system',
-  llm_input:                'llm_input',
-  llm_output:               'llm_output',
-  llm_model:                'llm_model',
-  llm_invocation_parameters:'llm_invocation_parameters',
-  llm_token_count:          'llm_token_count',
+  llm_tools:                'cvs63',
+  llm_system:               'cvs1',
+  llm_input:                'cvs1',
+  llm_output:               'cvs2',
+  llm_model:                'cvs69',
+  llm_model_name:           'cvs69',
+  llm_invocation_parameters:'cvs70',
+  llm_token_count:          'cvs71',
   llm_input_messages:       'cvs1',
   llm_output_messages:      'cvs2',
-
+ 
   // Decorator-specific
   input:          'cvs1',
   output:         'cvs2',
   error:          'cvs3',
   caller:         'cvs4',
+  user_context:   'cvs5',
+  'gen_ai.request.tool_choice':  'gen_ai_request_tool_choice',
   error_type:     'cvs10',
   error_message:  'cvs11',
   error_stack:    'cvs12',
-
+ 
   // Source tracking
   raw:         'cvs199',
   from_source: 'cvs200',
