@@ -10,10 +10,26 @@ permissions:
 
 jobs:
   publish:
+    # Only run for tags belonging to a JS package
+    if: |
+      startsWith(github.event.release.tag_name, 'openai-js-v') ||
+      startsWith(github.event.release.tag_name, 'openai-agents-js-v')
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve package directory from tag
+        id: pkg
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          case "$tag" in
+            openai-js-v*)         dir="packages/js/openai" ;;
+            openai-agents-js-v*)  dir="packages/js/openai-agents" ;;
+            *)                    echo "Unknown tag prefix: $tag" >&2; exit 1 ;;
+          esac
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "Releasing from $dir"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -21,18 +37,12 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Install dependencies
+      - name: Install workspace dependencies
         working-directory: packages/js
         run: npm install
 
-      - name: Publish openai to npm
-        working-directory: packages/js/openai
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish openai-agents to npm
-        working-directory: packages/js/openai-agents
+      - name: Publish to npm
+        working-directory: ${{ steps.pkg.outputs.dir }}
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

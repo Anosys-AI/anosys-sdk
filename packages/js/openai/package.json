@@ -1,6 +1,6 @@
 {
   "name": "anosys-sdk-openai",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "AnoSys SDK for OpenAI — automatic instrumentation and logging for OpenAI API calls",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
@@ -17,7 +17,16 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["anosys", "openai", "observability", "monitoring", "logging", "llm", "gpt", "opentelemetry"],
+  "keywords": [
+    "anosys",
+    "openai",
+    "observability",
+    "monitoring",
+    "logging",
+    "llm",
+    "gpt",
+    "opentelemetry"
+  ],
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",

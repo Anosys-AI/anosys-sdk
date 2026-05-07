@@ -9,10 +9,30 @@ permissions:
 
 jobs:
   publish:
+    # Only run for tags belonging to a Python package
+    if: |
+      startsWith(github.event.release.tag_name, 'core-v') ||
+      startsWith(github.event.release.tag_name, 'openai-py-v') ||
+      startsWith(github.event.release.tag_name, 'openai-agents-py-v') ||
+      startsWith(github.event.release.tag_name, 'claude-code-v')
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve package directory from tag
+        id: pkg
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          case "$tag" in
+            core-v*)              dir="packages/python/core" ;;
+            openai-py-v*)         dir="packages/python/openai" ;;
+            openai-agents-py-v*)  dir="packages/python/openai_agents" ;;
+            claude-code-v*)       dir="packages/python/claude_code" ;;
+            *)                    echo "Unknown tag prefix: $tag" >&2; exit 1 ;;
+          esac
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "Releasing from $dir"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,33 +44,13 @@ jobs:
           python -m pip install -U pip
           python -m pip install build
 
-      - name: Build packages
-        run: |
-          (cd packages/python/core && python -m build)
-          (cd packages/python/openai && python -m build)
-          (cd packages/python/openai_agents && python -m build)
-          (cd packages/python/claude_code && python -m build)
+      - name: Build package
+        working-directory: ${{ steps.pkg.outputs.dir }}
+        run: python -m build
 
-      - name: Publish core to PyPI
+      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: packages/python/core/dist/
+          packages-dir: ${{ steps.pkg.outputs.dir }}/dist/
           password: ${{ secrets.PYPI_API_TOKEN }}
-
-      - name: Publish openai to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: packages/python/openai/dist/
-          password: ${{ secrets.PYPI_API_TOKEN }}
-
-      - name: Publish openai_agents to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: packages/python/openai_agents/dist/
-          password: ${{ secrets.PYPI_API_TOKEN }}
-
-      - name: Publish claude_code to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: packages/python/claude_code/dist/
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
