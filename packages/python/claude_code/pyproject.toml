@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anosys-claude-code"
-version = "0.2.2"
+version = "0.2.3"
 description = "AnoSys observability hook for Claude Code — automatic audit logging of Claude Code sessions"
 authors = [{name = "AnoSys", email = "support@anosys.ai"}]
 readme = "README.md"

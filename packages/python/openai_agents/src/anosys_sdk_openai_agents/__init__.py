@@ -10,7 +10,7 @@ from anosys_sdk_openai_agents.processor import AnosysOpenAIAgentsLogger, setup_t
 # Re-export core decorators for convenience
 from anosys_sdk_core import anosys_logger, anosys_raw_logger, setup_api, setup_decorator
 
-__version__ = "1.0.3"
+__version__ = "1.0.5"
 
 __all__ = [
     "AnosysOpenAIAgentsLogger",

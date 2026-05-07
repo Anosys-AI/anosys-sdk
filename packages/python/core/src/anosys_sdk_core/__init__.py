@@ -14,7 +14,7 @@ from anosys_sdk_core.decorators import anosys_logger, anosys_raw_logger, setup_a
 from anosys_sdk_core.context import get_user_context, set_user_context
 from anosys_sdk_core.models import BASE_KEY_MAPPING
 
-__version__ = "1.0.3"
+__version__ = "1.0.5"
 
 # Backward-compat alias for users migrating from anosys-logger-4-openai
 setup_decorator = setup_api
