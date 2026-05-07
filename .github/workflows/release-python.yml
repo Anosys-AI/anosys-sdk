@@ -1,20 +1,18 @@
 name: Release Python
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "core-v*"
+      - "openai-py-v*"
+      - "openai-agents-py-v*"
+      - "claude-code-v*"
 
 permissions:
   contents: read
 
 jobs:
   publish:
-    # Only run for tags belonging to a Python package
-    if: |
-      startsWith(github.event.release.tag_name, 'core-v') ||
-      startsWith(github.event.release.tag_name, 'openai-py-v') ||
-      startsWith(github.event.release.tag_name, 'openai-agents-py-v') ||
-      startsWith(github.event.release.tag_name, 'claude-code-v')
     runs-on: ubuntu-latest
 
     steps:
@@ -23,7 +21,7 @@ jobs:
       - name: Resolve package directory from tag
         id: pkg
         run: |
-          tag="${{ github.event.release.tag_name }}"
+          tag="${GITHUB_REF##*/}"
           case "$tag" in
             core-v*)              dir="packages/python/core" ;;
             openai-py-v*)         dir="packages/python/openai" ;;
@@ -32,7 +30,8 @@ jobs:
             *)                    echo "Unknown tag prefix: $tag" >&2; exit 1 ;;
           esac
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          echo "Releasing from $dir"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag from $dir"
 
       - name: Set up Python
         uses: actions/setup-python@v5

@@ -1,8 +1,10 @@
 name: Release JavaScript
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "openai-js-v*"
+      - "openai-agents-js-v*"
 
 permissions:
   contents: read
@@ -10,10 +12,6 @@ permissions:
 
 jobs:
   publish:
-    # Only run for tags belonging to a JS package
-    if: |
-      startsWith(github.event.release.tag_name, 'openai-js-v') ||
-      startsWith(github.event.release.tag_name, 'openai-agents-js-v')
     runs-on: ubuntu-latest
 
     steps:
@@ -22,14 +20,15 @@ jobs:
       - name: Resolve package directory from tag
         id: pkg
         run: |
-          tag="${{ github.event.release.tag_name }}"
+          tag="${GITHUB_REF##*/}"
           case "$tag" in
             openai-js-v*)         dir="packages/js/openai" ;;
             openai-agents-js-v*)  dir="packages/js/openai-agents" ;;
             *)                    echo "Unknown tag prefix: $tag" >&2; exit 1 ;;
           esac
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          echo "Releasing from $dir"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag from $dir"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

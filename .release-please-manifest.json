@@ -1,8 +1,0 @@
-{
-  "packages/python/core": "1.0.3",
-  "packages/python/openai": "1.0.3",
-  "packages/python/openai_agents": "1.0.3",
-  "packages/python/claude_code": "0.2.2",
-  "packages/js/openai": "1.0.4",
-  "packages/js/openai-agents": "1.0.4"
-}
