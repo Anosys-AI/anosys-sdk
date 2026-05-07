@@ -17,7 +17,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Default API endpoints — override via environment variables for custom deployments
-DEFAULT_API_URL = os.getenv("ANOSYS_API_URL", "https://www.anosys.ai")
+DEFAULT_API_URL = os.getenv("ANOSYS_API_URL", "https://api.anosys.ai")
 API_KEY_RESOLVER_URL = os.getenv("ANOSYS_RESOLVER_URL", "https://console.anosys.ai/api/resolveapikeys")
 
 
@@ -72,7 +72,7 @@ def resolve_api_key(api_key: Optional[str] = None, timeout: int = 30) -> str:
         )
         response.raise_for_status()
         data = response.json()
-        return data.get("url", DEFAULT_API_URL)
+        return data.get("apiUrl", DEFAULT_API_URL)
     except requests.exceptions.RequestException as e:
         logger.error("Failed to resolve API key: %s", e)
         return DEFAULT_API_URL
