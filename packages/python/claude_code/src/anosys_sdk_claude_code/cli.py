@@ -27,7 +27,7 @@ from anosys_sdk_claude_code.installer import (
 )
 
 HOOK_COMMAND = "anosys-claude-code run"
-DEFAULT_ENDPOINT = "https://api.anosys.ai"
+DEFAULT_ENDPOINT = "https://www.anosys.ai"
 
 
 def _prompt(prompt: str, default: str = "") -> str:

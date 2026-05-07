@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 
 from anosys_sdk_claude_code.mapper import transform_record
 
-ENDPOINT_URL = os.environ.get('ANOSYS_HOOK_ENDPOINT_URL', 'https://api.anosys.ai')
+ENDPOINT_URL = os.environ.get('ANOSYS_HOOK_ENDPOINT_URL', 'https://www.anosys.ai')
 API_KEY = os.environ.get('ANOSYS_HOOK_API_KEY', '')
 DRY_RUN = os.environ.get('ANOSYS_HOOK_DRY_RUN', 'false').lower() == 'true'
 EXPLICIT_TRANSCRIPT = os.environ.get('ANOSYS_HOOK_TRANSCRIPT', '')
