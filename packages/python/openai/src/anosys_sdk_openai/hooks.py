@@ -128,8 +128,15 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
             status_map = {0: 'UNSET', 1: 'OK', 2: 'ERROR'}
             assign(variables, 'status_code', status_map.get(status_code, str(status_code)))
     
-    # Attributes
+    # Extract attributes
     attributes = span.get('attributes', {})
+    
+    # Standardized access (mirrors JS hooks.js)
+    gen_ai = attributes.get('gen_ai', {})
+    llm_attrs = attributes.get('llm', {})
+    req = gen_ai.get('request', {})
+    resp = gen_ai.get('response', {})
+    usage_attr = gen_ai.get('usage', {})
     
     # User context
     user_context = attributes.get('user_context') or attributes.get('anosys', {}).get('user_context')
@@ -137,8 +144,8 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         assign(variables, 'user_context', user_context)
     
     # Gen AI - System
-    assign(variables, 'gen_ai.system', 'openai')
-    assign(variables, 'gen_ai.provider.name', 'openai')
+    assign(variables, 'gen_ai.system', to_str_or_none(gen_ai.get('system') or llm_attrs.get('vendor') or gen_ai.get('provider', {}).get('name')))
+    assign(variables, 'gen_ai.provider.name', to_str_or_none(gen_ai.get('provider', {}).get('name')))
     
     # Operation name from span name
     span_name = span.get('name', '')
@@ -154,8 +161,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     assign(variables, 'server.port', server_port)
     
     # Extract model information
-    llm_attrs = attributes.get('llm', {})
-    invocation_params = llm_attrs.get('invocation_parameters', {})
+    invocation_params = req.get('parameters') or llm_attrs.get('invocation_parameters', {})
     
     if isinstance(invocation_params, str):
         try:
@@ -164,7 +170,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
             invocation_params = {}
     
     # Request configuration
-    model_name = llm_attrs.get('model_name')
+    model_name = req.get('model') or req.get('parameters', {}).get('model') or llm_attrs.get('model_name')
     if model_name:
         assign(variables, 'gen_ai.request.model', to_str_or_none(model_name))
     
@@ -259,9 +265,9 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
             token_count = {}
     
     if isinstance(token_count, dict):
-        input_tokens = token_count.get('prompt_tokens') or token_count.get('input_tokens')
-        output_tokens = token_count.get('completion_tokens') or token_count.get('output_tokens')
-        total_tokens = token_count.get('total_tokens')
+        input_tokens = usage_attr.get('input_tokens') or token_count.get('prompt_tokens') or token_count.get('input_tokens')
+        output_tokens = usage_attr.get('output_tokens') or token_count.get('completion_tokens') or token_count.get('output_tokens')
+        total_tokens = usage_attr.get('total_tokens') or token_count.get('total_tokens')
         
         if input_tokens is not None:
             assign(variables, 'gen_ai.usage.input_tokens', input_tokens)
