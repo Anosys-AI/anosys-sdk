@@ -85,3 +85,6 @@ dmypy.json
 
 # Old package directory
 /old/
+
+# Test data directory
+/testdata

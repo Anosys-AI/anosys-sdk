@@ -93,14 +93,14 @@ export function extractSpanInfo(span) {
   const usage  = genAi.usage ?? {};
 
   // System / operation
-  assign(variables, 'gen_ai.system',         toStrOrNull(genAi.system ?? llm.vendor));
+  assign(variables, 'gen_ai.system',         toStrOrNull(genAi.system ?? llm.vendor ?? genAi.provider?.name));
   assign(variables, 'gen_ai.operation.name', toStrOrNull(genAi.operation?.name));
   assign(variables, 'gen_ai.provider.name',  toStrOrNull(genAi.provider?.name));
   assign(variables, 'server.address',        toStrOrNull(attrs.server?.address));
   assign(variables, 'server.port',           toStrOrNull(attrs.server?.port));
 
   // Request parameters
-  assign(variables, 'gen_ai.request.model',              toStrOrNull(req.model ?? llm.model_name));
+  assign(variables, 'gen_ai.request.model',              toStrOrNull(req.model ?? req.parameters?.model ?? llm.model_name));
   assign(variables, 'gen_ai.request.temperature',        toStrOrNull(req.temperature ?? llm.invocation_parameters?.temperature));
   assign(variables, 'gen_ai.request.top_p',              toStrOrNull(req.top_p));
   assign(variables, 'gen_ai.request.top_k',              toStrOrNull(req.top_k));
@@ -111,6 +111,7 @@ export function extractSpanInfo(span) {
   assign(variables, 'gen_ai.request.seed',               toStrOrNull(req.seed));
   assign(variables, 'gen_ai.request.choice.count',       toStrOrNull(req.choice?.count));
   assign(variables, 'gen_ai.request.encoding_formats',   toStrOrNull(req.encoding_formats));
+  assign(variables, 'gen_ai.request.tool_choice',        toStrOrNull(req.tool_choice ?? req.parameters?.tool_choice));
 
   // Response
   assign(variables, 'gen_ai.response.model',          toStrOrNull(resp.model));
@@ -125,19 +126,41 @@ export function extractSpanInfo(span) {
   assign(variables, 'gen_ai.usage.total_tokens',  toStrOrNull(usage.total_tokens  ?? tokenCount));
 
   // Messages and content
-  const inputMsgs  = genAi.input?.messages ?? llm.input_messages;
-  const outputMsgs = genAi.output?.messages ?? llm.output_messages;
+  function flattenMessages(msgs) {
+    if (!msgs) return null;
+    if (typeof msgs === 'object' && Array.isArray(msgs.messages)) {
+      return msgs.messages.map(m => {
+        const content = m.message?.content || m.content;
+        if (content) return content;
+        if (m.message?.tool_calls) return JSON.stringify(m.message.tool_calls);
+        return JSON.stringify(m);
+      }).filter(Boolean).join('\n---\n');
+    }
+    return msgs;
+  }
+
+  const inputMsgs  = attrs.input?.value ?? flattenMessages(genAi.input?.messages) ?? llm.input_messages;
+  const outputMsgs = attrs.output?.value ?? flattenMessages(genAi.output?.messages) ?? llm.output_messages;
   assign(variables, 'gen_ai.input.messages',      toStrOrNull(inputMsgs));
   assign(variables, 'gen_ai.output.messages',     toStrOrNull(outputMsgs));
   assign(variables, 'gen_ai.system_instructions', toStrOrNull(genAi.system_instructions ?? llm.system));
   assign(variables, 'gen_ai.tool.definitions',    toStrOrNull(genAi.tool?.definitions ?? llm.tools));
 
+  // Direct input/output columns
+  assign(variables, 'input',  toStrOrNull(inputMsgs));
+  assign(variables, 'output', toStrOrNull(outputMsgs));
+
   // Streaming
-  const isStreaming = !!(raw['llm.is_streaming'] ?? raw['gen_ai.is_streaming']);
+  const isStreaming = !!(raw['llm.is_streaming'] ?? raw['gen_ai.is_streaming'] ?? req.parameters?.stream);
   assign(variables, 'is_streaming', isStreaming);
 
   // Source tag
   assign(variables, 'from_source', 'openAI_Traces');
+
+  // Events
+  if (span.events && span.events.length > 0) {
+    assign(variables, 'events', JSON.stringify(span.events));
+  }
 
   return reassign(variables, keyToCvs, { ...OPENAI_STARTING_INDICES });
 }
