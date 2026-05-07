@@ -20,7 +20,8 @@ AGENTS_KEY_MAPPING = {
     **BASE_KEY_MAPPING,
     # Agents-specific fields
     "g1": "g1",  # Creation timestamp numeric
-    "cvs3": "cvs3",  # User context
+    "cvs3": "cvs3",  # Error Summary
+    "cvs5": "cvs5",  # User context
     "cvs60": "cvs60",  # Object type (trace/trace.span)
     "cvs61": "cvs61",  # Source (span_start/span_end)
     "cvs62": "cvs62",  # Handoffs
@@ -89,7 +90,8 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "otel_end_time": "span end time",
         "cvn2": "end time (numeric)",
         "otel_exception_message": "error message",
-        "cvs3": "user context",
+        "cvs3": "error",
+        "cvs5": "user context",
         "cvs60": "object type",
         "cvs61": "source",
         "otel_name": "span name",
@@ -109,9 +111,8 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "cvn1": _to_timestamp(data.get("started_at")),
         "otel_end_time": to_str_or_none(data.get("ended_at")),
         "cvn2": _to_timestamp(data.get("ended_at")),
-        "otel_exception_message": to_str_or_none(data.get("error")),
-        
-        "cvs3": to_str_or_none(user_context),
+        "cvs3": to_str_or_none(data.get("error")),
+        "cvs5": to_str_or_none(user_context),
         "cvs60": to_str_or_none(data.get("object")),
         "cvs61": to_str_or_none(source),
         "cvs80": to_str_or_none(data.get("workflow_name")),
