@@ -14,7 +14,7 @@ export async function resolveApiKey(apiKey = null, timeout = 30000) {
   }
   try {
     const res = await axios.get(`${API_KEY_RESOLVER_URL}?apikey=${key}`, { timeout });
-    return res.data?.url ?? DEFAULT_API_URL;
+    return res.data?.apiUrl ?? DEFAULT_API_URL;
   } catch (e) {
     log.error('Failed to resolve API key:', e.message);
     return DEFAULT_API_URL;
