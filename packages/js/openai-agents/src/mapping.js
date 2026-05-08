@@ -25,21 +25,21 @@ export const BASE_KEY_MAPPING = {
   'gen_ai.response.finish_reasons': 'gen_ai_response_finish_reasons',
   'gen_ai.usage.input_tokens': 'gen_ai_usage_input_tokens',
   'gen_ai.usage.output_tokens': 'gen_ai_usage_output_tokens',
-  'gen_ai.usage.total_tokens': 'cvs71',
+  'gen_ai.usage.total_tokens': 'cvn3',
   'gen_ai.output.type': 'cvs64',
-  'gen_ai.input.messages': 'gen_ai_input_messages', 'gen_ai.output.messages': 'gen_ai_output_messages',
-  'gen_ai.system_instructions': 'cvs1', 'gen_ai.tool.definitions': 'cvs63',
+  'gen_ai.input.messages': 'cvs1', 'gen_ai.output.messages': 'cvs2',
+  'gen_ai.system_instructions': 'gen_ai_system_instructions', 'gen_ai.tool.definitions': 'cvs63',
   'gen_ai.agent.id': 'gen_ai_agent_id', 'gen_ai.agent.name': 'gen_ai_agent_name',
   'gen_ai.agent.description': 'gen_ai_agent_description', 'gen_ai.conversation.id': 'gen_ai_conversation_id',
   'gen_ai.data_source.id': 'gen_ai_data_source_id',
   'gen_ai.embeddings.dimension.count': 'gen_ai_embeddings_dimension_count',
-  llm_tools: 'cvs63', llm_system: 'cvs1', llm_input: 'cvs1',
+  llm_tools: 'cvs63', llm_system: 'llm_system', llm_input: 'cvs1',
   llm_output: 'cvs2', llm_model: 'cvs69', llm_model_name: 'cvs69',
-  llm_invocation_parameters: 'cvs70', llm_token_count: 'cvs71',
+  llm_invocation_parameters: 'cvs70', llm_token_count: 'cvn3',
   llm_input_messages: 'cvs1', llm_output_messages: 'cvs2',
   input: 'cvs1', output: 'cvs2', error: 'cvs3', caller: 'cvs4',
-  user_context: 'cvs5', error_type: 'cvs10', error_message: 'cvs11', 
-  error_stack: 'cvs12', raw: 'cvs199', from_source: 'cvs200', 
+  user_context: 'cvs5', error_type: 'cvs10', error_message: 'cvs11',
+  error_stack: 'cvs12', raw: 'cvs199', from_source: 'cvs200',
   source: 'cvs200', is_streaming: 'cvb2',
 };
 
@@ -49,7 +49,7 @@ export const AGENTS_KEY_MAPPING = {
   g1: 'g1', cvs3: 'cvs3', cvs60: 'cvs60', cvs61: 'cvs61',
   cvs62: 'cvs62', cvs63: 'cvs63', cvs64: 'cvs64', cvs65: 'cvs65',
   cvs66: 'cvs66', cvs67: 'cvs67', cvs68: 'cvs68', cvs69: 'cvs69',
-  cvs70: 'cvs70', cvs71: 'cvs71', cvs72: 'cvs72', cvs73: 'cvs73',
+  cvs70: 'cvs70', cvn3: 'cvn3', cvs72: 'cvs72', cvs73: 'cvs73',
   cvs74: 'cvs74', cvs75: 'cvs75', cvs76: 'cvs76', cvs77: 'cvs77',
   cvs78: 'cvs78', cvs79: 'cvs79', cvs80: 'cvs80', cvs81: 'cvs81',
 };
@@ -96,12 +96,29 @@ export function reassign(data, keyToCvs = AGENTS_KEY_MAPPING, startingIndices = 
 
   for (const [key, rawValue] of Object.entries(source)) {
     if (rawValue === null || rawValue === undefined) continue;
-    const value = (typeof rawValue === 'object') ? toStr(rawValue) : rawValue;
-    if (value === null) continue;
-    if (keyToCvs[key]) { result[keyToCvs[key]] = value; continue; }
-    const typeKey = getTypeKey(rawValue);
-    const [prefix, indexKey] = getPrefixAndIndexKey(typeKey);
-    result[`${prefix}${indices[indexKey]++}`] = value;
+
+    const cvsVar = keyToCvs[key] || (() => {
+      const typeKey = getTypeKey(rawValue);
+      const [prefix, indexKey] = getPrefixAndIndexKey(typeKey);
+      const idx = indices[indexKey]++;
+      return `${prefix}${idx}`;
+    })();
+
+    // Coerce value based on CVS prefix
+    if (cvsVar.startsWith('cvs')) {
+      if (typeof rawValue === 'object') {
+        result[cvsVar] = JSON.stringify(rawValue);
+      } else {
+        result[cvsVar] = String(rawValue);
+      }
+    } else if (cvsVar.startsWith('cvn')) {
+      const asNum = Number(rawValue);
+      result[cvsVar] = isNaN(asNum) ? 0 : asNum;
+    } else if (cvsVar.startsWith('cvb')) {
+      result[cvsVar] = Boolean(rawValue);
+    } else {
+      result[cvsVar] = (typeof rawValue === 'object') ? toStr(rawValue) : rawValue;
+    }
   }
   return result;
 }
@@ -169,7 +186,7 @@ export function span2json(span) {
     function: () => ({ otel_name: toStr(spanData.name), cvs1: toStr(spanData.input), cvs65: toStr(spanData.input), cvs2: toStr(spanData.output), cvs66: toStr(spanData.output), cvs67: toStr(spanData.mcp_data) }),
     mcp_tools: () => ({ otel_name: toStr(spanData.name), cvs1: toStr(spanData.input), cvs65: toStr(spanData.input), cvs2: toStr(spanData.output), cvs66: toStr(spanData.output), cvs67: toStr(spanData.mcp_data) }),
     guardrail: () => ({ otel_name: toStr(spanData.name), cvs68: toStr(spanData.triggered) }),
-    generation: () => ({ cvs1: toStr(spanData.input), cvs65: toStr(spanData.input), cvs2: toStr(spanData.output), cvs66: toStr(spanData.output), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config), cvs71: toStr(spanData.usage) }),
+    generation: () => ({ cvs1: toStr(spanData.input), cvs65: toStr(spanData.input), cvs2: toStr(spanData.output), cvs66: toStr(spanData.output), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config), cvn3: spanData.usage }),
     custom: () => ({ otel_name: toStr(spanData.name), cvs72: toStr(spanData.data) }),
     transcription: () => ({ cvs72: toStr(spanData.input?.data), cvs73: toStr(spanData.input?.format), cvs2: toStr(spanData.output), cvs66: toStr(spanData.output), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config) }),
     speech: () => ({ cvs1: toStr(spanData.input), cvs65: toStr(spanData.input), cvs72: toStr(spanData.output?.data), cvs73: toStr(spanData.output?.format), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config), cvs74: toStr(spanData.first_content_at) }),
@@ -192,9 +209,12 @@ export function span2json(span) {
   // use the final underscore column names here.
   const usage = spanData.usage ?? spanData.data?.usage;
   if (usage) {
-    if (usage.input_tokens)  result['gen_ai_usage_input_tokens']  = usage.input_tokens;
+    if (usage.input_tokens) result['gen_ai_usage_input_tokens'] = usage.input_tokens;
     if (usage.output_tokens) result['gen_ai_usage_output_tokens'] = usage.output_tokens;
-    if (usage.total_tokens)  result['gen_ai_usage_total_tokens']  = usage.total_tokens;
+    if (usage.total_tokens) result['gen_ai_usage_total_tokens'] = usage.total_tokens;
+    else if (usage.input_tokens && usage.output_tokens) {
+      result['gen_ai_usage_total_tokens'] = usage.input_tokens + usage.output_tokens;
+    }
   }
 
   // Remove nulls
@@ -251,7 +271,7 @@ export function extractOtelSpanInfo(span) {
   // 2. Trace Context: handle function or plain object
   const ctx = (typeof span.spanContext === 'function' ? span.spanContext() : null) ?? span.context ?? {};
   assign(variables, 'trace_id', ctx.traceId ?? ctx.trace_id);
-  assign(variables, 'span_id',  ctx.spanId  ?? ctx.span_id);
+  assign(variables, 'span_id', ctx.spanId ?? ctx.span_id);
 
   // 3. Parent ID
   const parentId = span.parentSpanId ?? span.parent_id;
@@ -264,19 +284,22 @@ export function extractOtelSpanInfo(span) {
   // 4. Attributes: handle attributes or attributes_json
   const rawAttrs = span.attributes_json ?? span.attributes ?? {};
   const attrs = deserializeAttributes(Object.fromEntries(Object.entries(rawAttrs)));
-  
+
   assign(variables, 'gen_ai.system', toStr(attrs.gen_ai?.system ?? 'openai'));
   assign(variables, 'gen_ai.request.model', toStr(attrs.gen_ai?.request?.model ?? attrs.llm?.model_name));
   assign(variables, 'kind', String(span.kind ?? '').replace('SpanKind.', '').toUpperCase());
-  
+
   if (span.resource?.attributes) {
     assign(variables, 'otel_resource', JSON.stringify(Object.fromEntries(Object.entries(span.resource.attributes))));
   }
-  
+
   const userCtx = span.user_context ?? span.userContext;
   if (userCtx) assign(variables, 'user_context', userCtx);
-  
+
   assign(variables, 'from_source', 'openAI_Agents_Telemetry');
+
+  // Raw data capture - ALWAYS mandatory
+  assign(variables, 'raw', JSON.stringify(span));
 
   return reassign(variables, keyToCvs, { ...AGENTS_STARTING_INDICES });
 }

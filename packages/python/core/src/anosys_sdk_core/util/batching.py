@@ -156,12 +156,22 @@ def reassign(
         
         cvs_var = key_to_cvs[key]
         
-        # Convert value to appropriate format
-        if isinstance(value, (dict, list)):
-            cvs_vars[cvs_var] = json.dumps(value)
-        elif isinstance(value, (bool, int, float)):
-            cvs_vars[cvs_var] = value
-        else:
+        # Convert value to appropriate format based on CVS prefix
+        if cvs_var.startswith("cvs"):
             cvs_vars[cvs_var] = str(value)
+        elif cvs_var.startswith("cvn"):
+            try:
+                if isinstance(value, str) and '.' in value:
+                    cvs_vars[cvs_var] = float(value)
+                else:
+                    cvs_vars[cvs_var] = int(value)
+            except (ValueError, TypeError):
+                cvs_vars[cvs_var] = value
+        elif cvs_var.startswith("cvb"):
+            cvs_vars[cvs_var] = bool(value)
+        elif isinstance(value, (dict, list)):
+            cvs_vars[cvs_var] = json.dumps(value)
+        else:
+            cvs_vars[cvs_var] = value
     
     return cvs_vars

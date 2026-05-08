@@ -50,6 +50,9 @@ async function logPayload(source, args, output, errorInfo, callerInfo) {
     variables.output = toStrOrNull(output);
   }
 
+  // Raw data capture - ALWAYS mandatory
+  variables.raw = JSON.stringify(variables);
+
   try {
     const mapped = reassign(variables, _keyToCvs, { ..._startingIndices });
     await axios.post(_logApiUrl, mapped, { timeout: 5000 });
@@ -81,6 +84,8 @@ export function anosysLogger(source = null) {
 
 export async function anosysRawLogger(data = {}) {
   try {
+    // Raw data capture - ALWAYS mandatory
+    if (!data.raw) data.raw = JSON.stringify(data);
     const mapped = reassign(data, _keyToCvs, { ..._startingIndices });
     await axios.post(_logApiUrl, mapped, { timeout: 5000 });
     log.debug('Raw logger: data logged successfully');

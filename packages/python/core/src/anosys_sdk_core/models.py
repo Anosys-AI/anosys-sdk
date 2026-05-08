@@ -64,13 +64,13 @@ BASE_KEY_MAPPING: Dict[str, str] = {
     "gen_ai.response.finish_reasons": "gen_ai_response_finish_reasons",
     "gen_ai.usage.input_tokens": "gen_ai_usage_input_tokens",
     "gen_ai.usage.output_tokens": "gen_ai_usage_output_tokens",
-    "gen_ai.usage.total_tokens": "cvs71",
+    "gen_ai.usage.total_tokens": "cvn3",
     "gen_ai.output.type": "cvs64",
     
     # Gen AI - Content & Messages
-    "gen_ai.input.messages": "gen_ai_input_messages",
-    "gen_ai.output.messages": "gen_ai_output_messages",
-    "gen_ai.system_instructions": "cvs1",
+    "gen_ai.input.messages": "cvs1",
+    "gen_ai.output.messages": "cvs2",
+    "gen_ai.system_instructions": "gen_ai_system_instructions",
     "gen_ai.tool.definitions": "cvs63",
     
     # Gen AI - Agents & Frameworks
@@ -85,13 +85,13 @@ BASE_KEY_MAPPING: Dict[str, str] = {
     
     # Legacy LLM fields (backward compatibility)
     "llm_tools": "cvs63",
-    "llm_system": "cvs1",
+    "llm_system": "llm_system",
     "llm_input": "cvs1",
     "llm_output": "cvs2",
     "llm_model": "cvs69",
     "llm_model_name": "cvs69",
     "llm_invocation_parameters": "cvs70",
-    "llm_token_count": "cvs71",
+    "llm_token_count": "cvn3",
     "llm_input_messages": "cvs1",
     "llm_output_messages": "cvs2",
     

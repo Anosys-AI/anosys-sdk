@@ -93,6 +93,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     Returns:
         Transformed dictionary ready for AnoSys API
     """
+    print(f"\n>>> ENTERING extract_span_info for span: {span.get('name')}", flush=True)
     # Make a copy and deserialize nested attributes
     span = deserialize_attributes(span.copy())
     
@@ -144,8 +145,8 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         assign(variables, 'user_context', user_context)
     
     # Gen AI - System
-    assign(variables, 'gen_ai.system', to_str_or_none(gen_ai.get('system') or llm_attrs.get('vendor') or gen_ai.get('provider', {}).get('name')))
-    assign(variables, 'gen_ai.provider.name', to_str_or_none(gen_ai.get('provider', {}).get('name')))
+    assign(variables, 'gen_ai.system', to_str_or_none(gen_ai.get('system') or llm_attrs.get('vendor') or gen_ai.get('provider', {}).get('name') or 'openai'))
+    assign(variables, 'gen_ai.provider.name', to_str_or_none(gen_ai.get('provider', {}).get('name') or 'openai'))
     
     # Operation name from span name
     span_name = span.get('name', '')
@@ -173,6 +174,8 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     model_name = req.get('model') or req.get('parameters', {}).get('model') or llm_attrs.get('model_name')
     if model_name:
         assign(variables, 'gen_ai.request.model', to_str_or_none(model_name))
+    if model_name:
+        assign(variables, 'gen_ai.request.tool_choice', to_str_or_none(req.get('tool_choice') or req.get('parameters', {}).get('tool_choice') or invocation_params.get('tool_choice')))
     
     if isinstance(invocation_params, dict):
         temperature = invocation_params.get('temperature')
@@ -278,86 +281,98 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         elif input_tokens is not None and output_tokens is not None:
             assign(variables, 'gen_ai.usage.total_tokens', input_tokens + output_tokens)
     
-    # Input messages
-    input_messages = None
-    input_msg_attr = llm_attrs.get('input_messages', {})
-    if isinstance(input_msg_attr, dict):
-        input_messages = input_msg_attr.get('input_messages')
+    # Extraction for consolidated assignment below
+    input_messages = llm_attrs.get('input_messages', {}).get('input_messages') if isinstance(llm_attrs.get('input_messages'), dict) else None
     if not input_messages and isinstance(invocation_params, dict):
         input_messages = invocation_params.get('messages')
-    if input_messages:
-        assign(variables, 'gen_ai.input.messages', to_str_or_none(input_messages))
     
-    # Output messages
-    output_messages = None
-    output_msg_attr = llm_attrs.get('output_messages', {})
-    if isinstance(output_msg_attr, dict):
-        output_messages = output_msg_attr.get('output_messages')
+    output_messages = llm_attrs.get('output_messages', {}).get('output_messages') if isinstance(llm_attrs.get('output_messages'), dict) else None
     if not output_messages and isinstance(output_value, dict):
         choices = output_value.get('choices', [])
         if choices:
-            messages = [choice.get('message') for choice in choices if choice.get('message')]
-            if messages:
-                output_messages = messages
-    if output_messages:
-        assign(variables, 'gen_ai.output.messages', to_str_or_none(output_messages))
+            output_messages = [choice.get('message') for choice in choices if choice.get('message')]
     
-    # System instructions
     system_content = llm_attrs.get('system')
     if not system_content and input_messages:
-        if isinstance(input_messages, list):
-            for msg in input_messages:
+        msgs_to_check = input_messages
+        if isinstance(msgs_to_check, str):
+            try:
+                msgs_to_check = json.loads(msgs_to_check)
+            except json.JSONDecodeError:
+                msgs_to_check = []
+        if isinstance(msgs_to_check, list):
+            for msg in msgs_to_check:
                 if isinstance(msg, dict) and msg.get('role') == 'system':
                     system_content = msg.get('content')
                     break
-        elif isinstance(input_messages, str):
-            try:
-                parsed_messages = json.loads(input_messages)
-                if isinstance(parsed_messages, list):
-                    for msg in parsed_messages:
-                        if isinstance(msg, dict) and msg.get('role') == 'system':
-                            system_content = msg.get('content')
-                            break
-            except json.JSONDecodeError:
-                pass
-    if system_content:
-        assign(variables, 'gen_ai.system_instructions', to_str_or_none(system_content))
     
-    # Tools
     tools = llm_attrs.get('tools')
     if not tools and isinstance(invocation_params, dict):
         tools = invocation_params.get('tools')
-    if tools:
-        assign(variables, 'gen_ai.tool.definitions', to_str_or_none(tools))
     
+    # Messages and content
+    def flatten_messages(msgs):
+        if not msgs:
+            return None
+        messages = msgs if isinstance(msgs, list) else msgs.get("messages") if isinstance(msgs, dict) else None
+        if isinstance(messages, list):
+            parts = []
+            for m in messages:
+                if not isinstance(m, dict):
+                    continue
+                content = (m.get("message", {}) or {}).get("content") or m.get("content")
+                if content:
+                    parts.append(content)
+                elif (m.get("message", {}) or {}).get("tool_calls"):
+                    parts.append(json.dumps(m["message"]["tool_calls"]))
+            return "\n---\n".join(parts) if parts else None
+        return str(msgs)
+
+    input_msgs = attributes.get('input', {}).get('value') or flatten_messages(gen_ai.get('input', {}).get('messages')) or flatten_messages(input_messages)
+    output_msgs = attributes.get('output', {}).get('value') or flatten_messages(gen_ai.get('output', {}).get('messages')) or flatten_messages(output_messages)
+    
+    assign(variables, 'gen_ai.input.messages', to_str_or_none(input_msgs))
+    assign(variables, 'gen_ai.output.messages', to_str_or_none(output_msgs))
+    assign(variables, 'gen_ai.system_instructions', to_str_or_none(gen_ai.get('system_instructions') or system_content))
+    assign(variables, 'gen_ai.tool.definitions', to_str_or_none(gen_ai.get('tool', {}).get('definitions') or tools))
+
     # Legacy LLM fields
     assign(variables, 'llm_tools', to_str_or_none(llm_attrs.get('tools')))
     assign(variables, 'llm_token_count', to_str_or_none(llm_attrs.get('token_count')))
-    assign(variables, 'llm_output_messages', to_str_or_none(
-        llm_attrs.get('output_messages', {}).get('output_messages')))
-    assign(variables, 'llm_input_messages', to_str_or_none(
-        llm_attrs.get('input_messages', {}).get('input_messages')))
     assign(variables, 'llm_model', to_str_or_none(model_name))
     assign(variables, 'llm_invocation_parameters', to_str_or_none(invocation_params))
     assign(variables, 'llm_system', to_str_or_none(llm_attrs.get('system')))
-    assign(variables, 'llm_input', to_str_or_none(attributes.get('input', {}).get('value')))
     llm_output_val = output_attr.get('value') if isinstance(output_attr, dict) else output_attr
     assign(variables, 'llm_output', to_str_or_none(llm_output_val))
-    assign(variables, 'kind', to_str_or_none(attributes.get('fi', {}).get('span', {}).get('kind')))
+    # Extract kind
+    kind = span.get('kind') or attributes.get('gen_ai', {}).get('span', {}).get('kind') or attributes.get('fi', {}).get('span', {}).get('kind') or 'INTERNAL'
+    assign(variables, 'kind', str(kind).replace('SpanKind.', '').upper())
     
     # Resource
     assign(variables, 'otel_resource', json.dumps(span.get('resource', {}).get('attributes'), default=str))
+    # Source
     assign(variables, 'from_source', "openAI_Python_Telemetry")
     
     # Response ID
     assign(variables, 'resp_id', to_str_or_none(response_id))
     
     # Streaming
-    is_streaming = invocation_params.get('stream', False) if isinstance(invocation_params, dict) else False
-    if is_streaming:
-        assign(variables, 'is_streaming', True)
+    is_streaming = bool(invocation_params.get('stream', False)) if isinstance(invocation_params, dict) else False
+    assign(variables, 'is_streaming', is_streaming)
     
-    # Raw data
+    # Events
+    if span.get('events'):
+        assign(variables, 'events', json.dumps(span['events'], default=str))
+
+    # Raw data capture - ALWAYS mandatory
     assign(variables, "raw", json.dumps(span, default=str))
     
-    return reassign(variables, key_to_cvs, OPENAI_STARTING_INDICES.copy())
+    # Map to CVS variables
+    mapped_vars = reassign(variables, key_to_cvs, OPENAI_STARTING_INDICES.copy())
+    
+    # DEBUG PRINT - Check what is ACTUALLY being sent to AnoSys
+    print(f"\n--- DEBUG MAPPED DATA START: {variables.get('name')} ---", flush=True)
+    print(json.dumps(mapped_vars, indent=2, default=str), flush=True)
+    print(f"--- DEBUG MAPPED DATA END ---\n", flush=True)
+    
+    return mapped_vars

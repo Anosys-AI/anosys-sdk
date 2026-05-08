@@ -58,10 +58,10 @@ export function extractSpanInfo(span) {
   const ctx = span.context ?? span.spanContext ?? {};
   assign(variables, 'trace_id', toStrOrNull(ctx.trace_id ?? ctx.traceId));
   assign(variables, 'span_id',  toStrOrNull(ctx.span_id  ?? ctx.spanId));
+  assign(variables, 'kind', String(span.kind ?? 'INTERNAL').split('.').pop().toUpperCase());
   assign(variables, 'trace_state', toStrOrNull(ctx.trace_state ?? ctx.traceState));
   assign(variables, 'parent_id', toStrOrNull(span.parent_id ?? span.parentSpanId));
   assign(variables, 'name', toStrOrNull(span.name));
-  assign(variables, 'kind', toStrOrNull(span.kind));
 
   // Timestamps
   const startMs = toTimestamp(span.start_time);
@@ -92,12 +92,18 @@ export function extractSpanInfo(span) {
   const resp   = genAi.response ?? {};
   const usage  = genAi.usage ?? {};
 
-  // System / operation
-  assign(variables, 'gen_ai.system',         toStrOrNull(genAi.system ?? llm.vendor ?? genAi.provider?.name));
-  assign(variables, 'gen_ai.operation.name', toStrOrNull(genAi.operation?.name));
-  assign(variables, 'gen_ai.provider.name',  toStrOrNull(genAi.provider?.name));
-  assign(variables, 'server.address',        toStrOrNull(attrs.server?.address));
-  assign(variables, 'server.port',           toStrOrNull(attrs.server?.port));
+  // System / operation / server
+  assign(variables, 'gen_ai.system',         toStrOrNull(genAi.system ?? llm.vendor ?? genAi.provider?.name ?? 'openai'));
+  assign(variables, 'gen_ai.provider.name',  toStrOrNull(genAi.provider?.name ?? 'openai'));
+  
+  if (span.name) {
+    const op = span.name.includes('.') ? span.name.split('.')[0] : span.name;
+    assign(variables, 'gen_ai.operation.name', op);
+  }
+
+  const resAttrs = span.resource?.attributes ?? {};
+  assign(variables, 'server.address', toStrOrNull(attrs.server?.address ?? resAttrs['server.address'] ?? 'api.openai.com'));
+  assign(variables, 'server.port',    toStrOrNull(attrs.server?.port ?? resAttrs['server.port'] ?? 443));
 
   // Request parameters
   assign(variables, 'gen_ai.request.model',              toStrOrNull(req.model ?? req.parameters?.model ?? llm.model_name));
@@ -121,15 +127,16 @@ export function extractSpanInfo(span) {
 
   // Usage / tokens
   const tokenCount = llm.token_count?.total_tokens ?? llm.usage?.total_tokens;
-  assign(variables, 'gen_ai.usage.input_tokens',  toStrOrNull(usage.input_tokens  ?? llm.token_count?.prompt_tokens));
-  assign(variables, 'gen_ai.usage.output_tokens', toStrOrNull(usage.output_tokens ?? llm.token_count?.completion_tokens));
-  assign(variables, 'gen_ai.usage.total_tokens',  toStrOrNull(usage.total_tokens  ?? tokenCount));
+  assign(variables, 'gen_ai.usage.input_tokens',  usage.input_tokens  ?? llm.token_count?.prompt_tokens);
+  assign(variables, 'gen_ai.usage.output_tokens', usage.output_tokens ?? llm.token_count?.completion_tokens);
+  assign(variables, 'gen_ai.usage.total_tokens',  usage.total_tokens  ?? tokenCount);
 
   // Messages and content
   function flattenMessages(msgs) {
     if (!msgs) return null;
-    if (typeof msgs === 'object' && Array.isArray(msgs.messages)) {
-      return msgs.messages.map(m => {
+    const messages = Array.isArray(msgs) ? msgs : (msgs.messages || null);
+    if (Array.isArray(messages)) {
+      return messages.map(m => {
         const content = m.message?.content || m.content;
         if (content) return content;
         if (m.message?.tool_calls) return JSON.stringify(m.message.tool_calls);
@@ -146,14 +153,10 @@ export function extractSpanInfo(span) {
   assign(variables, 'gen_ai.system_instructions', toStrOrNull(genAi.system_instructions ?? llm.system));
   assign(variables, 'gen_ai.tool.definitions',    toStrOrNull(genAi.tool?.definitions ?? llm.tools));
 
-  // Direct input/output columns
-  assign(variables, 'input',  toStrOrNull(inputMsgs));
-  assign(variables, 'output', toStrOrNull(outputMsgs));
-
   // User context and Model Config
   const userCtx = attrs.user_context ?? attrs.anosys?.user_context;
   if (userCtx) assign(variables, 'user_context', userCtx);
-  
+
   const modelConfig = req.parameters ?? llm.invocation_parameters;
   if (modelConfig) assign(variables, 'llm_invocation_parameters', modelConfig);
 
@@ -171,7 +174,10 @@ export function extractSpanInfo(span) {
   
   // Backwards compatibility for old names
   assign(variables, 'llm_model_name', toStrOrNull(req.model ?? llm.model_name));
-  assign(variables, 'llm_token_count', toStrOrNull(usage.total_tokens ?? tokenCount));
+  assign(variables, 'llm_token_count', usage.total_tokens ?? tokenCount);
+
+  // Raw data capture - ALWAYS mandatory
+  assign(variables, 'raw', JSON.stringify(span));
 
   return reassign(variables, keyToCvs, { ...OPENAI_STARTING_INDICES });
 }

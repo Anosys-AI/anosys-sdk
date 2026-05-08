@@ -33,7 +33,7 @@ AGENTS_KEY_MAPPING = {
     "cvs68": "cvs68",  # Triggered
     "cvs69": "cvs69",  # Model
     "cvs70": "cvs70",  # Model config
-    "cvs71": "cvs71",  # Usage
+    "cvn3": "cvn3",  # Usage
     "cvs72": "cvs72",  # Data
     "cvs73": "cvs73",  # Format
     "cvs74": "cvs74",  # First content at
@@ -45,6 +45,14 @@ AGENTS_KEY_MAPPING = {
 }
 
 AGENTS_STARTING_INDICES = DEFAULT_STARTING_INDICES.copy()
+
+
+def to_str_or_none(val: Any) -> Optional[str]:
+    if val is None:
+        return None
+    if isinstance(val, (dict, list)):
+        return json.dumps(val, default=str)
+    return str(val)
 
 
 def _to_timestamp(dt_str) -> Optional[int]:
@@ -111,6 +119,7 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "cvn1": _to_timestamp(data.get("started_at")),
         "otel_end_time": to_str_or_none(data.get("ended_at")),
         "cvn2": _to_timestamp(data.get("ended_at")),
+        "otel_exception_message": to_str_or_none(data.get("error")),
         "cvs3": to_str_or_none(data.get("error")),
         "cvs5": to_str_or_none(user_context),
         "cvs60": to_str_or_none(data.get("object")),
@@ -139,13 +148,17 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         },
         "function": lambda: {
             "otel_name": to_str_or_none(span_data.get("name")),
+            "cvs1": to_str_or_none(span_data.get("input")),
             "cvs65": to_str_or_none(span_data.get("input")),
+            "cvs2": to_str_or_none(span_data.get("output")),
             "cvs66": to_str_or_none(span_data.get("output")),
             "cvs67": to_str_or_none(span_data.get("mcp_data")),
         },
         "mcp_tools": lambda: {
             "otel_name": to_str_or_none(span_data.get("name")),
+            "cvs1": to_str_or_none(span_data.get("input")),
             "cvs65": to_str_or_none(span_data.get("input")),
+            "cvs2": to_str_or_none(span_data.get("output")),
             "cvs66": to_str_or_none(span_data.get("output")),
             "cvs67": to_str_or_none(span_data.get("mcp_data")),
         },
@@ -154,25 +167,33 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
             "cvs68": to_str_or_none(span_data.get("triggered")),
         },
         "generation": lambda: {
+            "cvs1": to_str_or_none(span_data.get("input")),
             "cvs65": to_str_or_none(span_data.get("input")),
+            "cvs2": to_str_or_none(span_data.get("output")),
             "cvs66": to_str_or_none(span_data.get("output")),
             "cvs69": to_str_or_none(span_data.get("model")),
             "cvs70": to_str_or_none(span_data.get("model_config")),
-            "cvs71": to_str_or_none(span_data.get("usage")),
+            "cvn3": span_data.get("usage"),
         },
         "custom": lambda: {
             "otel_name": to_str_or_none(span_data.get("name")),
             "cvs72": to_str_or_none(span_data.get("data")),
         },
         "transcription": lambda: {
+            "cvs1": to_str_or_none(span_data.get("input", {}).get("data")),
+            "cvs65": to_str_or_none(span_data.get("input", {}).get("data")),
             "cvs72": to_str_or_none(span_data.get("input", {}).get("data")),
             "cvs73": to_str_or_none(span_data.get("input", {}).get("format")),
+            "cvs2": to_str_or_none(span_data.get("output")),
             "cvs66": to_str_or_none(span_data.get("output")),
             "cvs69": to_str_or_none(span_data.get("model")),
             "cvs70": to_str_or_none(span_data.get("model_config")),
         },
         "speech": lambda: {
+            "cvs1": to_str_or_none(span_data.get("input")),
             "cvs65": to_str_or_none(span_data.get("input")),
+            "cvs2": to_str_or_none(span_data.get("output", {}).get("data")),
+            "cvs66": to_str_or_none(span_data.get("output", {}).get("data")),
             "cvs72": to_str_or_none(span_data.get("output", {}).get("data")),
             "cvs73": to_str_or_none(span_data.get("output", {}).get("format")),
             "cvs69": to_str_or_none(span_data.get("model")),
@@ -180,6 +201,7 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
             "cvs74": to_str_or_none(span_data.get("first_content_at")),
         },
         "speechgroup": lambda: {
+            "cvs1": to_str_or_none(span_data.get("input")),
             "cvs65": to_str_or_none(span_data.get("input")),
         },
         "MCPListTools": lambda: {
@@ -204,6 +226,18 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
     
     if type_ in extended:
         result.update(extended[type_]())
+    
+    # Extract usage tokens into standard columns if present
+    usage = span_data.get("usage") or span_data.get("data", {}).get("usage")
+    if isinstance(usage, dict):
+        if usage.get("input_tokens") is not None:
+            result["gen_ai_usage_input_tokens"] = usage["input_tokens"]
+        if usage.get("output_tokens") is not None:
+            result["gen_ai_usage_output_tokens"] = usage["output_tokens"]
+        if usage.get("total_tokens") is not None:
+            result["gen_ai_usage_total_tokens"] = usage["total_tokens"]
+        elif "input_tokens" in usage and "output_tokens" in usage:
+            result["gen_ai_usage_total_tokens"] = usage["input_tokens"] + usage["output_tokens"]
     
     return clean_dict(result)
 
@@ -307,5 +341,8 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
         assign(variables, 'user_context', user_context)
         
     assign(variables, 'from_source', "openAI_Agents_Telemetry")
+    
+    # Raw data capture - ALWAYS mandatory
+    assign(variables, "raw", json.dumps(span, default=str))
     
     return reassign(variables, key_to_cvs, AGENTS_STARTING_INDICES.copy())

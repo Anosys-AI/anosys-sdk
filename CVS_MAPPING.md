@@ -35,7 +35,7 @@ Used primarily by `anosys-sdk-openai-agents` and specialized tool traces.
 | **`cvs68`** | **Triggered** | Boolean/String indicating if a guardrail was triggered. |
 | **`cvs69`** | **Model** | Specific model name used (e.g., `gpt-4o-mini`). |
 | **`cvs70`** | **Model Config** | JSON string of temperature, top_p, and other parameters. |
-| **`cvs71`** | **Usage Info** | Summary of token usage for a specific generation. |
+| **`cvn3`** | **Usage Info** | Summary of token usage for a specific generation. |
 | **`cvs72`** | **Custom Data** | Raw data for custom spans or transcription inputs. |
 | **`cvs73`** | **Format** | Media/Data format (e.g., `wav`, `mp3`, `markdown`). |
 | **`cvs74`** | **Latency Marker**| Time to first content/token (TTS/STT specific). |
