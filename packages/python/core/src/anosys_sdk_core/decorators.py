@@ -64,6 +64,7 @@ def _get_caller_info() -> Dict[str, Any]:
 def _log_payload(
     source: Optional[str],
     args: tuple,
+    kwargs: dict,
     output: Any,
     error_info: Optional[Dict[str, Any]],
     caller_info: Dict[str, Any]
@@ -86,6 +87,8 @@ def _log_payload(
     
     # Prepare payload
     input_array = [to_str_or_none(arg) for arg in args]
+    if kwargs:
+        input_array.append({"kwargs": kwargs})
     assign(variables, "source", to_str_or_none(source))
     assign(variables, 'custom_mapping', json.dumps(_key_to_cvs, indent=4))
     assign(variables, "input", input_array)
@@ -134,7 +137,7 @@ def _handle_logging_sync(func: Callable, args: tuple, kwargs: dict, source: Opti
         printed_output = sys.stdout.getvalue()
         sys.stdout = old_stdout
         output = text if text else printed_output.strip()
-        _log_payload(source, args, output, error_info, caller_info)
+        _log_payload(source, args, kwargs, output, error_info, caller_info)
     
     return text
 
@@ -156,7 +159,7 @@ async def _handle_logging_async(func: Callable, args: tuple, kwargs: dict, sourc
         }
         raise
     finally:
-        _log_payload(source, args, text, error_info, caller_info)
+        _log_payload(source, args, kwargs, text, error_info, caller_info)
     
     return text
 
@@ -186,7 +189,7 @@ async def _handle_logging_async_gen(func: Callable, args: tuple, kwargs: dict, s
         else:
             output = aggregated_output
         
-        _log_payload(source, args, output, error_info, caller_info)
+        _log_payload(source, args, kwargs, output, error_info, caller_info)
 
 
 def anosys_logger(source: Optional[str] = None) -> Callable:
