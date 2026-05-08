@@ -108,6 +108,8 @@ BASE_KEY_MAPPING: Dict[str, str] = {
     "from_source": "cvs200",
     "source": "cvs200",
     "is_streaming": "cvb2",
+    "events": "cvs13",
+    "gen_ai.request.tool_choice": "gen_ai_request_tool_choice",
 }
 
 # Default starting indices for dynamic CVS variable allocation

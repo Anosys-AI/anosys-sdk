@@ -100,6 +100,10 @@ export const BASE_KEY_MAPPING = {
   from_source: 'cvs200',
   source:      'cvs200',
   is_streaming:'cvb2',
+  events:      'cvs13',
+  user_context:'cvs5',
+  llm_model_name: 'llm_model_name',
+  'gen_ai.request.tool_choice': 'gen_ai_request_tool_choice',
 };
 
 export const OPENAI_KEY_MAPPING = { ...BASE_KEY_MAPPING };
@@ -141,10 +145,14 @@ export function assign(variables, key, value) {
     return;
   }
   if (typeof value === 'string') {
-    const asNum = Number(value);
-    if (!isNaN(asNum) && value.trim() !== '') {
-      variables[key] = asNum;
-      return;
+    // Strict number check: only convert if it's purely a decimal number string.
+    // This prevents partial parsing of hex IDs (e.g. "3222869c...") as integers.
+    if (/^-?\d+(\.\d+)?$/.test(value.trim())) {
+      const asNum = Number(value);
+      if (!isNaN(asNum)) {
+        variables[key] = asNum;
+        return;
+      }
     }
     variables[key] = value;
     return;
@@ -161,18 +169,28 @@ export function reassign(data, keyToCvs = OPENAI_KEY_MAPPING, startingIndices = 
   for (const [key, rawValue] of Object.entries(source)) {
     if (rawValue === null || rawValue === undefined) continue;
 
-    const value = stringifyIfNeeded(rawValue);
-    if (value === null) continue;
+    const cvsVar = keyToCvs[key] || (() => {
+      const typeKey = getTypeKey(rawValue);
+      const [prefix, indexKey] = getPrefixAndIndexKey(typeKey);
+      const idx = indices[indexKey]++;
+      return `${prefix}${idx}`;
+    })();
 
-    if (keyToCvs[key]) {
-      result[keyToCvs[key]] = value;
-      continue;
+    // Coerce value based on CVS prefix
+    if (cvsVar.startsWith('cvs')) {
+      if (typeof rawValue === 'object') {
+        result[cvsVar] = JSON.stringify(rawValue);
+      } else {
+        result[cvsVar] = String(rawValue);
+      }
+    } else if (cvsVar.startsWith('cvn')) {
+      const asNum = Number(rawValue);
+      result[cvsVar] = isNaN(asNum) ? 0 : asNum;
+    } else if (cvsVar.startsWith('cvb')) {
+      result[cvsVar] = Boolean(rawValue);
+    } else {
+      result[cvsVar] = stringifyIfNeeded(rawValue);
     }
-
-    const typeKey = getTypeKey(rawValue);
-    const [prefix, indexKey] = getPrefixAndIndexKey(typeKey);
-    const idx = indices[indexKey]++;
-    result[`${prefix}${idx}`] = value;
   }
 
   return result;

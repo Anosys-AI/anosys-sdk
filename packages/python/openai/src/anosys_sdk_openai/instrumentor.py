@@ -167,9 +167,6 @@ class AnosysOpenAILogger:
         """
         global _tracing_initialized
         
-        # Reset flag for fresh initialization
-        _tracing_initialized = False
-        
         # Resolve API URL
         self.log_api_url = resolve_api_key()
         

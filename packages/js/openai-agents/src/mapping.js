@@ -160,14 +160,14 @@ export function span2json(span) {
 
   const extended = {
     agent:        () => ({ otel_name: toStr(spanData.name), cvs62: toStr((spanData.handoffs ?? []).join(', ')), cvs63: toStr((spanData.tools ?? []).join(', ')), cvs64: toStr(spanData.output_type) }),
-    function:     () => ({ otel_name: toStr(spanData.name), cvs65: toStr(spanData.input), cvs66: toStr(spanData.output), cvs67: toStr(spanData.mcp_data) }),
-    mcp_tools:    () => ({ otel_name: toStr(spanData.name), cvs65: toStr(spanData.input), cvs66: toStr(spanData.output), cvs67: toStr(spanData.mcp_data) }),
+    function:     () => ({ otel_name: toStr(spanData.name), cvs1: toStr(spanData.input), cvs2: toStr(spanData.output), cvs67: toStr(spanData.mcp_data) }),
+    mcp_tools:    () => ({ otel_name: toStr(spanData.name), cvs1: toStr(spanData.input), cvs2: toStr(spanData.output), cvs67: toStr(spanData.mcp_data) }),
     guardrail:    () => ({ otel_name: toStr(spanData.name), cvs68: toStr(spanData.triggered) }),
-    generation:   () => ({ cvs65: toStr(spanData.input), cvs66: toStr(spanData.output), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config), cvs71: toStr(spanData.usage) }),
+    generation:   () => ({ cvs1: toStr(spanData.input), cvs2: toStr(spanData.output), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config), cvs71: toStr(spanData.usage) }),
     custom:       () => ({ otel_name: toStr(spanData.name), cvs72: toStr(spanData.data) }),
-    transcription:() => ({ cvs72: toStr(spanData.input?.data), cvs73: toStr(spanData.input?.format), cvs66: toStr(spanData.output), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config) }),
-    speech:       () => ({ cvs65: toStr(spanData.input), cvs72: toStr(spanData.output?.data), cvs73: toStr(spanData.output?.format), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config), cvs74: toStr(spanData.first_content_at) }),
-    speechgroup:  () => ({ cvs65: toStr(spanData.input) }),
+    transcription:() => ({ cvs72: toStr(spanData.input?.data), cvs73: toStr(spanData.input?.format), cvs2: toStr(spanData.output), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config) }),
+    speech:       () => ({ cvs1: toStr(spanData.input), cvs72: toStr(spanData.output?.data), cvs73: toStr(spanData.output?.format), cvs69: toStr(spanData.model), cvs70: toStr(spanData.model_config), cvs74: toStr(spanData.first_content_at) }),
+    speechgroup:  () => ({ cvs1: toStr(spanData.input) }),
     MCPListTools: () => ({ cvs75: toStr(spanData.server), cvs76: toStr(spanData.result) }),
     response:     () => ({ cvs77: toStr(spanData.response_id) }),
     handoff:      () => ({ cvs78: toStr(spanData.from_agent), cvs79: toStr(spanData.to_agent) }),
@@ -180,6 +180,17 @@ export function span2json(span) {
     cvs200:     'openAI_Agents_Traces',
     ...(extended[type]?.() ?? {}),
   };
+
+  // Extract usage tokens into standard columns if present
+  const usage = spanData.usage ?? spanData.data?.usage;
+  if (usage) {
+    if (usage.input_tokens) result['gen_ai_usage_input_tokens'] = usage.input_tokens;
+    if (usage.output_tokens) result['gen_ai_usage_output_tokens'] = usage.output_tokens;
+    if (usage.total_tokens) result['gen_ai_usage_total_tokens'] = usage.total_tokens;
+    else if (usage.input_tokens && usage.output_tokens) {
+      result['gen_ai_usage_total_tokens'] = usage.input_tokens + usage.output_tokens;
+    }
+  }
 
   // Remove nulls
   return Object.fromEntries(Object.entries(result).filter(([, v]) => v != null));
@@ -210,33 +221,60 @@ function deserializeAttributes(attrs) {
 
 export function extractOtelSpanInfo(span) {
   const variables = {};
-  const keyToCvs  = { ...AGENTS_KEY_MAPPING };
+  const keyToCvs = { ...AGENTS_KEY_MAPPING };
 
-  const startMs = span.startTime ? Math.floor(Number(span.startTime[0]) * 1e3 + Number(span.startTime[1]) / 1e6) : null;
-  const endMs   = span.endTime   ? Math.floor(Number(span.endTime[0])   * 1e3 + Number(span.endTime[1])   / 1e6) : null;
+  // 1. Timestamps: handle array [s, ns] or unix_nano number
+  let startMs = null;
+  if (span.startTime) {
+    startMs = Math.floor(Number(span.startTime[0]) * 1e3 + Number(span.startTime[1]) / 1e6);
+  } else if (span.start_time_unix_nano) {
+    startMs = Math.floor(Number(span.start_time_unix_nano) / 1e6);
+  }
+
+  let endMs = null;
+  if (span.endTime) {
+    endMs = Math.floor(Number(span.endTime[0]) * 1e3 + Number(span.endTime[1]) / 1e6);
+  } else if (span.end_time_unix_nano) {
+    endMs = Math.floor(Number(span.end_time_unix_nano) / 1e6);
+  }
 
   assign(variables, 'otel_record_type', 'AnoSys Trace');
   assign(variables, 'custom_mapping', JSON.stringify(keyToCvs));
   assign(variables, 'otel_observed_timestamp', new Date().toISOString());
   assign(variables, 'name', span.name);
 
-  const ctx = span.spanContext?.();
-  if (ctx) {
-    assign(variables, 'trace_id', ctx.traceId);
-    assign(variables, 'span_id',  ctx.spanId);
-  }
-  if (span.parentSpanId) assign(variables, 'parent_id', span.parentSpanId);
+  // 2. Trace Context: handle function or plain object
+  const ctx = (typeof span.spanContext === 'function' ? span.spanContext() : null) ?? span.context ?? {};
+  assign(variables, 'trace_id', ctx.traceId ?? ctx.trace_id);
+  assign(variables, 'span_id', ctx.spanId ?? ctx.span_id);
+
+  // 3. Parent ID
+  const parentId = span.parentSpanId ?? span.parent_id;
+  if (parentId) assign(variables, 'parent_id', parentId);
 
   if (startMs != null) { variables.start_time = new Date(startMs).toISOString(); assign(variables, 'cvn1', startMs); }
-  if (endMs   != null) { variables.end_time   = new Date(endMs).toISOString();   assign(variables, 'cvn2', endMs); }
+  if (endMs != null) { variables.end_time = new Date(endMs).toISOString(); assign(variables, 'cvn2', endMs); }
   if (startMs != null && endMs != null) assign(variables, 'otel_duration_ms', endMs - startMs);
 
-  const attrs = deserializeAttributes(Object.fromEntries(Object.entries(span.attributes ?? {})));
-  assign(variables, 'gen_ai.system',        toStr(attrs.gen_ai?.system ?? 'openai'));
+  // 4. Attributes: handle attributes or attributes_json
+  const rawAttrs = span.attributes_json ?? span.attributes ?? {};
+  const attrs = deserializeAttributes(Object.fromEntries(Object.entries(rawAttrs)));
+
+  assign(variables, 'gen_ai.system', toStr(attrs.gen_ai?.system ?? 'openai'));
   assign(variables, 'gen_ai.request.model', toStr(attrs.gen_ai?.request?.model ?? attrs.llm?.model_name));
   assign(variables, 'kind', String(span.kind ?? '').replace('SpanKind.', '').toUpperCase());
-  if (span.resource?.attributes) assign(variables, 'otel_resource', JSON.stringify(Object.fromEntries(Object.entries(span.resource.attributes))));
+
+  if (span.resource?.attributes) {
+    assign(variables, 'otel_resource', JSON.stringify(Object.fromEntries(Object.entries(span.resource.attributes))));
+  }
+
+  const userCtx = span.user_context ?? span.userContext;
+  if (userCtx) assign(variables, 'user_context', userCtx);
+
   assign(variables, 'from_source', 'openAI_Agents_Telemetry');
+
+  // Raw data capture - ALWAYS mandatory
+  assign(variables, 'raw', JSON.stringify(span));
 
   return reassign(variables, keyToCvs, { ...AGENTS_STARTING_INDICES });
 }

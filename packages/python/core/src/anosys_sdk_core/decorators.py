@@ -104,6 +104,9 @@ def _log_payload(
     
     assign(variables, "caller", caller_info)
     
+    # Raw data capture - ALWAYS mandatory
+    assign(variables, "raw", json.dumps(variables, default=to_json_fallback))
+    
     # Send log
     try:
         mapped_data = reassign(variables, _key_to_cvs, _starting_indices)
@@ -253,6 +256,9 @@ def anosys_raw_logger(data: Optional[Dict[str, Any]] = None) -> Optional[request
         data = {}
     
     try:
+        # Raw data capture - ALWAYS mandatory
+        if "raw" not in data:
+            data["raw"] = json.dumps(data, default=to_json_fallback)
         mapped_data = reassign(data, _key_to_cvs, _starting_indices)
         response = requests.post(_log_api_url, json=mapped_data, timeout=5)
         response.raise_for_status()

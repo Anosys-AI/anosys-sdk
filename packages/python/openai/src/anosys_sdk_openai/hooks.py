@@ -14,6 +14,36 @@ from anosys_sdk_core.util.batching import assign, reassign
 from anosys_sdk_openai.mapping import OPENAI_KEY_MAPPING, OPENAI_STARTING_INDICES
 
 
+def flatten_messages(msgs):
+    """
+    Flatten message arrays into readable newline-separated strings.
+    
+    Extracts message content from various message formats (dicts with 'content',
+    nested 'message' dicts, tool_calls) and joins them with '\\n---\\n'.
+    
+    Args:
+        msgs: List of message dicts, dict with 'messages' key, or string
+        
+    Returns:
+        Flattened string or None if no content found
+    """
+    if not msgs:
+        return None
+    messages = msgs if isinstance(msgs, list) else msgs.get("messages") if isinstance(msgs, dict) else None
+    if isinstance(messages, list):
+        parts = []
+        for m in messages:
+            if not isinstance(m, dict):
+                continue
+            content = (m.get("message", {}) or {}).get("content") or m.get("content")
+            if content:
+                parts.append(content)
+            elif (m.get("message", {}) or {}).get("tool_calls"):
+                parts.append(json.dumps(m["message"]["tool_calls"]))
+        return "\n---\n".join(parts) if parts else None
+    return str(msgs)
+
+
 def _to_timestamp(dt_str: Optional[str]) -> Optional[int]:
     """Convert ISO datetime string to milliseconds timestamp."""
     if not dt_str:
@@ -192,6 +222,11 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
             assign(variables, 'gen_ai.request.seed', seed)
         if n is not None:
             assign(variables, 'gen_ai.request.choice.count', n)
+        
+        # Tool choice
+        tool_choice = invocation_params.get('tool_choice')
+        if tool_choice is not None:
+            assign(variables, 'gen_ai.request.tool_choice', to_str_or_none(tool_choice))
     
     # Extract output information
     output_attr = attributes.get('output', {})
@@ -245,7 +280,15 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     if output_type:
         assign(variables, 'gen_ai.output.type', output_type)
     
-    # Token usage
+    # Token usage - check both gen_ai.usage.* attributes and legacy llm.token_count
+    gen_ai = attributes.get('gen_ai', {})
+    usage_attr = gen_ai.get('usage', {})
+    if isinstance(usage_attr, str):
+        try:
+            usage_attr = json.loads(usage_attr)
+        except json.JSONDecodeError:
+            usage_attr = {}
+    
     token_count = llm_attrs.get('token_count', {})
     if isinstance(token_count, str):
         try:
@@ -253,10 +296,15 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         except json.JSONDecodeError:
             token_count = {}
     
-    if isinstance(token_count, dict):
-        input_tokens = token_count.get('prompt_tokens') or token_count.get('input_tokens')
-        output_tokens = token_count.get('completion_tokens') or token_count.get('output_tokens')
-        total_tokens = token_count.get('total_tokens')
+    if isinstance(token_count, dict) or isinstance(usage_attr, dict):
+        if not isinstance(token_count, dict):
+            token_count = {}
+        if not isinstance(usage_attr, dict):
+            usage_attr = {}
+        
+        input_tokens = usage_attr.get('input_tokens') or token_count.get('prompt_tokens') or token_count.get('input_tokens')
+        output_tokens = usage_attr.get('output_tokens') or token_count.get('completion_tokens') or token_count.get('output_tokens')
+        total_tokens = usage_attr.get('total_tokens') or token_count.get('total_tokens')
         
         if input_tokens is not None:
             assign(variables, 'gen_ai.usage.input_tokens', input_tokens)
@@ -345,6 +393,10 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     is_streaming = invocation_params.get('stream', False) if isinstance(invocation_params, dict) else False
     if is_streaming:
         assign(variables, 'is_streaming', True)
+    
+    # Events
+    if span.get('events'):
+        assign(variables, 'events', json.dumps(span['events'], default=str))
     
     # Raw data
     assign(variables, "raw", json.dumps(span, default=str))
