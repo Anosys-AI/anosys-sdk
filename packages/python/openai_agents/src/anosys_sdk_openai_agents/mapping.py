@@ -241,9 +241,70 @@ def deserialize_attributes(attributes: Dict) -> Dict:
     return new_attrs
 
 
+def span_to_dict(span: ReadableSpan) -> Dict[str, Any]:
+    """
+    Convert a ReadableSpan to a clean dictionary for raw dump (cvs199).
+    
+    Extracts the full span structure including events, links,
+    and instrumentation scope.
+    
+    Args:
+        span: OpenTelemetry ReadableSpan object
+        
+    Returns:
+        Dictionary representation of the span
+    """
+    return {
+        "name": span.name,
+        "context": {
+            "trace_id": format(span.context.trace_id, "032x"),
+            "span_id": format(span.context.span_id, "016x"),
+            "trace_flags": int(span.context.trace_flags),
+        },
+        "parent_id": (
+            format(span.parent.span_id, "016x")
+            if span.parent else None
+        ),
+        "kind": span.kind.name,
+        "start_time_unix_nano": span.start_time,
+        "end_time_unix_nano": span.end_time,
+        "status": {
+            "status_code": span.status.status_code.name,
+            "description": span.status.description,
+        },
+        "attributes_json": deserialize_attributes(dict(span.attributes)) if span.attributes else {},
+        "events": [
+            {
+                "name": event.name,
+                "timestamp": event.timestamp,
+                "attributes": dict(event.attributes),
+            }
+            for event in span.events
+        ],
+        "links": [
+            {
+                "context": {
+                    "trace_id": format(link.context.trace_id, "032x"),
+                    "span_id": format(link.context.span_id, "016x"),
+                },
+                "attributes": dict(link.attributes),
+            }
+            for link in span.links
+        ],
+        "resource": dict(span.resource.attributes),
+        "instrumentation_scope": {
+            "name": span.instrumentation_scope.name,
+            "version": span.instrumentation_scope.version,
+        },
+    }
+
+
 def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     """
     Extract span info directly from OpenTelemetry ReadableSpan.
+    
+    Includes all Gen AI semantic conventions, legacy LLM fields,
+    and raw span dump for cvs199.
     
     Args:
         span: OpenTelemetry ReadableSpan object
@@ -258,6 +319,7 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     start_ts_ms = span.start_time // 1_000_000 if span.start_time else None
     end_ts_ms = span.end_time // 1_000_000 if span.end_time else None
     
+    # Top-level metadata
     assign(variables, 'otel_record_type', 'AnoSys Trace')
     assign(variables, 'custom_mapping', json.dumps(key_to_cvs, indent=4))
     
@@ -276,28 +338,144 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     # Timestamps
     if start_ts_ms:
         variables['start_time'] = datetime.utcfromtimestamp(start_ts_ms / 1000.0).isoformat() + "Z"
+    else:
+        variables['start_time'] = None
     assign(variables, 'cvn1', start_ts_ms)
     
     if end_ts_ms:
         variables['end_time'] = datetime.utcfromtimestamp(end_ts_ms / 1000.0).isoformat() + "Z"
+    else:
+        variables['end_time'] = None
     assign(variables, 'cvn2', end_ts_ms)
     
-    if start_ts_ms and end_ts_ms:
+    # Duration
+    if start_ts_ms is not None and end_ts_ms is not None:
         assign(variables, 'otel_duration_ms', end_ts_ms - start_ts_ms)
+    else:
+        assign(variables, 'otel_duration_ms', None)
     
-    # Attributes
+    # Deserialize flattened OTel attributes into nested structure
     attributes_json = deserialize_attributes(dict(span.attributes) if span.attributes else {})
     
-    # Gen AI fields
-    assign(variables, 'gen_ai.system', to_str_or_none(attributes_json.get('gen_ai', {}).get('system') or "openai"))
-    assign(variables, 'gen_ai.request.model', to_str_or_none(
-        attributes_json.get('gen_ai', {}).get('request', {}).get('model') or 
-        attributes_json.get('llm', {}).get('model_name')
-    ))
+    # --- Legacy / Backward Compatibility ---
+    assign(variables, 'llm_tools', to_str_or_none(attributes_json.get('llm', {}).get('tools')))
+    assign(variables, 'llm_token_count', to_str_or_none(attributes_json.get('llm', {}).get('token_count')))
+    assign(variables, 'llm_output_messages', to_str_or_none(
+        attributes_json.get('llm', {}).get('output_messages', {}).get('output_messages')))
+    assign(variables, 'llm_input_messages', to_str_or_none(
+        attributes_json.get('llm', {}).get('input_messages', {}).get('input_messages')))
+    assign(variables, 'llm_model', to_str_or_none(attributes_json.get('llm', {}).get('model_name')))
+    assign(variables, 'llm_invocation_parameters', to_str_or_none(
+        attributes_json.get('llm', {}).get('invocation_parameters')))
+    assign(variables, 'llm_system', to_str_or_none(attributes_json.get('llm', {}).get('system')))
+    assign(variables, 'llm_input', to_str_or_none(attributes_json.get('input', {}).get('value')))
+    assign(variables, 'llm_output', to_str_or_none(attributes_json.get('output', {}).get('value')))
     
-    # Kind and resource
+    # Kind
     assign(variables, 'kind', str(span.kind).replace('SpanKind.', '').upper())
+    
+    # Resource
     assign(variables, 'otel_resource', json.dumps(dict(span.resource.attributes), default=str))
     assign(variables, 'from_source', "openAI_Agents_Telemetry")
+    
+    # --- Gen AI Semantic Conventions ---
+    
+    # General & System
+    assign(variables, 'gen_ai.system', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('system') or "openai"))
+    assign(variables, 'gen_ai.provider.name', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('provider', {}).get('name')))
+    assign(variables, 'gen_ai.operation.name', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('operation', {}).get('name')))
+    assign(variables, 'server.address', to_str_or_none(
+        attributes_json.get('server', {}).get('address')))
+    assign(variables, 'server.port', attributes_json.get('server', {}).get('port'))
+    assign(variables, 'error.type', to_str_or_none(
+        attributes_json.get('error', {}).get('type')))
+    
+    # Request Configuration
+    assign(variables, 'gen_ai.request.model', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('request', {}).get('model') or
+        attributes_json.get('llm', {}).get('model_name')))
+    assign(variables, 'gen_ai.request.temperature',
+        attributes_json.get('gen_ai', {}).get('request', {}).get('temperature'))
+    assign(variables, 'gen_ai.request.top_p',
+        attributes_json.get('gen_ai', {}).get('request', {}).get('top_p'))
+    assign(variables, 'gen_ai.request.top_k',
+        attributes_json.get('gen_ai', {}).get('request', {}).get('top_k'))
+    assign(variables, 'gen_ai.request.max_tokens',
+        attributes_json.get('gen_ai', {}).get('request', {}).get('max_tokens'))
+    assign(variables, 'gen_ai.request.frequency_penalty',
+        attributes_json.get('gen_ai', {}).get('request', {}).get('frequency_penalty'))
+    assign(variables, 'gen_ai.request.presence_penalty',
+        attributes_json.get('gen_ai', {}).get('request', {}).get('presence_penalty'))
+    assign(variables, 'gen_ai.request.stop_sequences', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('request', {}).get('stop_sequences')))
+    assign(variables, 'gen_ai.request.seed',
+        attributes_json.get('gen_ai', {}).get('request', {}).get('seed'))
+    assign(variables, 'gen_ai.request.choice.count',
+        attributes_json.get('gen_ai', {}).get('request', {}).get('choice', {}).get('count'))
+    assign(variables, 'gen_ai.request.encoding_formats', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('request', {}).get('encoding_formats')))
+    
+    # Response & Usage
+    assign(variables, 'gen_ai.response.model', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('response', {}).get('model')))
+    assign(variables, 'gen_ai.response.id', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('response', {}).get('id')))
+    assign(variables, 'gen_ai.response.finish_reasons', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('response', {}).get('finish_reasons')))
+    assign(variables, 'gen_ai.usage.input_tokens',
+        attributes_json.get('gen_ai', {}).get('usage', {}).get('input_tokens'))
+    assign(variables, 'gen_ai.usage.output_tokens',
+        attributes_json.get('gen_ai', {}).get('usage', {}).get('output_tokens'))
+    assign(variables, 'gen_ai.usage.total_tokens',
+        attributes_json.get('gen_ai', {}).get('usage', {}).get('total_tokens'))
+    assign(variables, 'gen_ai.output.type', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('output', {}).get('type')))
+    
+    # Content & Messages
+    assign(variables, 'gen_ai.input.messages', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('input', {}).get('messages')))
+    assign(variables, 'gen_ai.output.messages', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('output', {}).get('messages')))
+    assign(variables, 'gen_ai.system_instructions', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('system_instructions')))
+    assign(variables, 'gen_ai.tool.definitions', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('tool', {}).get('definitions')))
+    
+    # Agents & Frameworks
+    assign(variables, 'gen_ai.agent.id', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('agent', {}).get('id')))
+    assign(variables, 'gen_ai.agent.name', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('agent', {}).get('name')))
+    assign(variables, 'gen_ai.agent.description', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('agent', {}).get('description')))
+    assign(variables, 'gen_ai.conversation.id', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('conversation', {}).get('id')))
+    assign(variables, 'gen_ai.data_source.id', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('data_source', {}).get('id')))
+    
+    # Embeddings
+    assign(variables, 'gen_ai.embeddings.dimension.count',
+        attributes_json.get('gen_ai', {}).get('embeddings', {}).get('dimension', {}).get('count'))
+    
+    # Response ID extraction for linking with agent traces
+    response_id = None
+    output_value_val = attributes_json.get('output', {}).get('value')
+    if not output_value_val:
+        output_value_val = attributes_json.get('raw', {}).get('output')
+    
+    if isinstance(output_value_val, dict):
+        response_id = output_value_val.get('id')
+    elif isinstance(output_value_val, list) and output_value_val:
+        first_item = output_value_val[0]
+        if isinstance(first_item, dict):
+            response_id = first_item.get('id')
+    
+    assign(variables, 'resp_id', to_str_or_none(response_id))
+    
+    # Raw span dump (cvs199)
+    variables['raw'] = json.dumps(span_to_dict(span), default=str)
     
     return reassign(variables, key_to_cvs, AGENTS_STARTING_INDICES.copy())

@@ -28,7 +28,7 @@ from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.context import clean_contextvars
 from anosys_sdk_openai_agents.mapping import span2json, extract_otel_span_info
-from anosys_sdk_openai_agents.utils import safe_serialize
+from anosys_sdk_openai_agents.utils import safe_serialize, clean_nulls
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -54,8 +54,8 @@ class AnosysHttpExporter(SpanExporter):
                 span_name = data.get("otel_name") or data.get("name") or "unknown_name"
                 logger.debug(f"[ANOSYS]📡 Exporting span from: {span_source} | Name: {span_name}")
                 
-                # Remove null values
-                cleaned_data = {k: v for k, v in data.items() if v is not None}
+                # Remove null values and empty containers
+                cleaned_data = clean_nulls(data)
                 
                 response = requests.post(_log_api_url, json=cleaned_data, timeout=5)
                 response.raise_for_status()
@@ -63,8 +63,16 @@ class AnosysHttpExporter(SpanExporter):
                 
             except requests.exceptions.HTTPError as e:
                 logger.error(f"[ANOSYS]❌ HTTP Export failed ({e.response.status_code}): {e}")
+                try:
+                    logger.error(f"[ANOSYS]❌ Response: {e.response.text[:500]}")
+                except Exception:
+                    pass
+                try:
+                    logger.error(f"[ANOSYS]❌ Data: {json.dumps(data, indent=2)}")
+                except Exception:
+                    pass
             except Exception as e:
-                logger.error(f"[ANOSYS]❌ Export failed: {e}")
+                logger.error(f"[ANOSYS]❌ Export failed (Unexpected): {e}")
         
         return SpanExportResult.SUCCESS
     
