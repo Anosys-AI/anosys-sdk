@@ -7,7 +7,12 @@ Provides functions to transform data into the CVS format expected by the AnoSys 
 import json
 from typing import Any, Dict, Optional, Union
 
-from anosys_sdk_core.models import DEFAULT_STARTING_INDICES
+from anosys_sdk_core.models import (
+    DEFAULT_STARTING_INDICES, 
+    CORE_VALID_TYPES,
+    OTEL_AI_VALID_TYPES,
+    CLAUDE_VALID_TYPES
+)
 
 
 def _get_type_key(value: Any) -> str:
@@ -95,19 +100,10 @@ def assign(variables: Dict[str, Any], variable: str, var_value: Any) -> None:
             except json.JSONDecodeError:
                 pass
         
-        # Try to interpret as number
-        try:
-            if '.' in var_value:
-                variables[variable] = float(var_value)
-            else:
-                variables[variable] = int(var_value)
-            return
-        except ValueError:
-            pass
-        
         # Store as plain string
         variables[variable] = var_value
         return
+
     
     # Fallback
     variables[variable] = var_value
@@ -116,7 +112,8 @@ def assign(variables: Dict[str, Any], variable: str, var_value: Any) -> None:
 def reassign(
     data: Union[Dict[str, Any], str],
     key_to_cvs: Dict[str, str],
-    starting_indices: Optional[Dict[str, int]] = None
+    starting_indices: Optional[Dict[str, int]] = None,
+    valid_types: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """
     Map dictionary keys to CVS variable names.
@@ -139,6 +136,14 @@ def reassign(
     
     if not isinstance(data, dict):
         raise ValueError("Input must be a dict or JSON string representing a dict")
+
+    # Detect source and use appropriate valid types if not provided
+    if valid_types is None:
+        source = data.get("from_source") or data.get("source") or data.get("cvs200")
+        if source == "ClaudeCodeHook":
+            valid_types = CLAUDE_VALID_TYPES
+        else:
+            valid_types = OTEL_AI_VALID_TYPES
     
     indices = (starting_indices or DEFAULT_STARTING_INDICES).copy()
     
@@ -156,12 +161,57 @@ def reassign(
         
         cvs_var = key_to_cvs[key]
         
-        # Convert value to appropriate format
-        if isinstance(value, (dict, list)):
-            cvs_vars[cvs_var] = json.dumps(value)
-        elif isinstance(value, (bool, int, float)):
-            cvs_vars[cvs_var] = value
-        else:
+        # Enforce type based on the detected validation table
+        expected_type = valid_types.get(cvs_var) or valid_types.get(key)
+        
+        if expected_type == "double":
+            try:
+                # Handle numeric conversion
+                if value is None or (isinstance(value, str) and value.strip() == ""):
+                    cvs_vars[cvs_var] = 0.0
+                else:
+                    cvs_vars[cvs_var] = float(value)
+            except (ValueError, TypeError):
+                cvs_vars[cvs_var] = 0.0
+        elif expected_type == "boolean":
+            if isinstance(value, str):
+                cvs_vars[cvs_var] = value.lower() in ("true", "1", "yes")
+            else:
+                cvs_vars[cvs_var] = bool(value)
+        elif expected_type == "json" or expected_type == "array<double>":
+            if isinstance(value, (dict, list)):
+                cvs_vars[cvs_var] = json.dumps(value)
+            else:
+                cvs_vars[cvs_var] = str(value)
+        elif expected_type == "timestamp":
             cvs_vars[cvs_var] = str(value)
+        elif cvs_var.startswith("cvs"):
+            # Fallback for CVS prefix (String)
+            if isinstance(value, (dict, list)):
+                cvs_vars[cvs_var] = json.dumps(value)
+            else:
+                cvs_vars[cvs_var] = str(value)
+        elif cvs_var.startswith("cvn") or (cvs_var.startswith("g") and cvs_var[1:].isdigit()):
+            # Fallback for CVN/G prefix (Number)
+            try:
+                if value is None or (isinstance(value, str) and value.strip() == ""):
+                    cvs_vars[cvs_var] = 0
+                else:
+                    f_val = float(str(value))
+                    cvs_vars[cvs_var] = int(f_val) if f_val == int(f_val) else f_val
+            except (ValueError, TypeError):
+                cvs_vars[cvs_var] = 0
+        elif cvs_var.startswith("cvb"):
+            # Fallback for CVB prefix (Boolean)
+            if isinstance(value, str):
+                cvs_vars[cvs_var] = value.lower() in ("true", "1", "yes")
+            else:
+                cvs_vars[cvs_var] = bool(value)
+        else:
+            # Final fallback: Treat as string if it doesn't match any special rule
+            if isinstance(value, (dict, list)):
+                cvs_vars[cvs_var] = json.dumps(value)
+            else:
+                cvs_vars[cvs_var] = str(value)
     
     return cvs_vars
