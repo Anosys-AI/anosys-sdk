@@ -50,6 +50,9 @@ class AnosysHttpExporter(SpanExporter):
         for span in spans:
             try:
                 data = extract_otel_span_info(span)
+                # # Print for debugging
+                # print(f"\n🔍 [DEBUG] Exported span")
+                # print(json.dumps(data, indent=2))
                 
                 span_source = data.get("from_source") or "unknown_source"
                 span_name = data.get("otel_name") or data.get("name") or "unknown_name"
@@ -243,7 +246,8 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             
             # Transform and send
             transformed = span2json(payload)
-            response = requests.post(self.log_api_url, json=transformed, timeout=5)
+            cleaned_transformed = clean_nulls(transformed)
+            response = requests.post(self.log_api_url, json=cleaned_transformed, timeout=5)
             response.raise_for_status()
             
         except Exception as e:

@@ -5,7 +5,33 @@ Provides safe JSON serialization and conversion utilities.
 """
 
 import json
+from datetime import datetime
 from typing import Any, Optional
+
+
+def format_timestamp(val: Any) -> Optional[str]:
+    """
+    Format a value as a UTC ISO timestamp ending in 'Z'.
+    
+    Handles datetime objects and strings. Ensures +00:00 is replaced by Z.
+    """
+    if val is None:
+        return None
+    
+    if isinstance(val, datetime):
+        iso = val.isoformat()
+    else:
+        iso = str(val)
+    
+    # Handle the common Python isoformat() output
+    if "+00:00" in iso:
+        return iso.replace("+00:00", "Z")
+    
+    # If it's a timestamp-like string but missing Z
+    if "T" in iso and not iso.endswith("Z") and "+" not in iso:
+        return iso + "Z"
+        
+    return iso
 
 
 def to_json_fallback(resp: Any) -> Any:

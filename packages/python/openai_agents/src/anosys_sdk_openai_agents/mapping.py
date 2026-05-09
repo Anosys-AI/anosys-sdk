@@ -12,7 +12,7 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan
 
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
-from anosys_sdk_core.util.json import to_str_or_none
+from anosys_sdk_core.util.json import to_str_or_none, format_timestamp
 from anosys_sdk_core.util.batching import assign, reassign
 
 # Agents-specific key mapping
@@ -114,15 +114,15 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
     base = {
         "otel_record_type": "AnoSys Agentic Trace",
         "otel_schema_url": json.dumps(mapping, default=str),
-        "otel_observed_timestamp": to_str_or_none(timestamp),
+        "otel_observed_timestamp": format_timestamp(timestamp),
         "g1": _to_timestamp(timestamp),
         
         "otel_span_id": to_str_or_none(data.get("id")),
         "otel_trace_id": to_str_or_none(data.get("trace_id")) or to_str_or_none(data.get("id")),
         "otel_parent_span_id": to_str_or_none(data.get("parent_id")),
-        "otel_start_time": to_str_or_none(data.get("started_at")),
+        "otel_start_time": format_timestamp(data.get("started_at")),
         "cvn1": _to_timestamp(data.get("started_at")),
-        "otel_end_time": to_str_or_none(data.get("ended_at")),
+        "otel_end_time": format_timestamp(data.get("ended_at")),
         "cvn2": _to_timestamp(data.get("ended_at")),
         "otel_exception_message": to_str_or_none(data.get("error")),
         
@@ -158,7 +158,7 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "agent": lambda: {
             "otel_name": to_str_or_none(span_data.get("name")),
             "cvs62": to_str_or_none(", ".join(span_data.get("handoffs") or [])),
-            "llm_tools": to_str_or_none(", ".join(span_data.get("tools") or [])),
+            "llm_tools": to_str_or_none(span_data.get("tools") or []),
             "cvs64": to_str_or_none(span_data.get("output_type")),
         },
         "function": lambda: {
@@ -232,7 +232,11 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
     
     if type_ in extended:
         result.update(extended[type_]())
-    
+
+    # Print for debugging
+    # print(f"\n🔍 [DEBUG] span2json openai logs")
+    # print(json.dumps(result, indent=2))    
+
     return clean_dict(result)
 
 
@@ -360,7 +364,7 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     span_id_hex = trace.format_span_id(span.context.span_id) if span.context.span_id else None
     parent_id_hex = trace.format_span_id(span.parent.span_id) if span.parent else None
     
-    assign(variables, 'otel_observed_timestamp', datetime.utcnow().isoformat() + "Z")
+    assign(variables, 'otel_observed_timestamp', format_timestamp(datetime.utcnow()))
     assign(variables, 'name', span.name)
     assign(variables, 'trace_id', trace_id_hex)
     assign(variables, 'span_id', span_id_hex)
@@ -369,13 +373,13 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     
     # Timestamps
     if start_ts_ms:
-        variables['start_time'] = datetime.utcfromtimestamp(start_ts_ms / 1000.0).isoformat() + "Z"
+        variables['start_time'] = format_timestamp(datetime.utcfromtimestamp(start_ts_ms / 1000.0))
     else:
         variables['start_time'] = None
     assign(variables, 'cvn1', start_ts_ms)
     
     if end_ts_ms:
-        variables['end_time'] = datetime.utcfromtimestamp(end_ts_ms / 1000.0).isoformat() + "Z"
+        variables['end_time'] = format_timestamp(datetime.utcfromtimestamp(end_ts_ms / 1000.0))
     else:
         variables['end_time'] = None
     assign(variables, 'cvn2', end_ts_ms)

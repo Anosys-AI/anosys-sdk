@@ -112,6 +112,18 @@ function toStr(value) {
   return String(value);
 }
 
+function formatTimestamp(val) {
+  if (!val) return null;
+  let iso;
+  if (val instanceof Date) {
+    iso = val.toISOString();
+  } else {
+    iso = String(val);
+  }
+  // Replace +00:00 with Z if present, and ensure it ends with Z if it's a timestamp
+  return iso.replace(/\+00:00$/, 'Z').replace(/([^Z])$/, (m, p) => (iso.includes('T') && !iso.includes('+') ? p + 'Z' : p));
+}
+
 export function assign(variables, key, value) {
   if (value === null || value === undefined) return;
   if (typeof value === 'number' && Number.isFinite(value)) { variables[key] = value; return; }
@@ -208,14 +220,14 @@ export function span2json(span) {
   const base = {
     otel_record_type:         'AnoSys Agentic Trace',
     otel_schema_url:          JSON.stringify(mapping),
-    otel_observed_timestamp:  toStr(timestamp),
+    otel_observed_timestamp:  formatTimestamp(timestamp),
     g1:                       toTimestamp(timestamp),
     otel_span_id:             toStr(data.id),
     otel_trace_id:            toStr(data.trace_id ?? data.id),
     otel_parent_span_id:      toStr(data.parent_id),
-    otel_start_time:          toStr(data.started_at),
+    otel_start_time:          formatTimestamp(data.started_at),
     cvn1:                     startTs,
-    otel_end_time:            toStr(data.ended_at),
+    otel_end_time:            formatTimestamp(data.ended_at),
     cvn2:                     endTs,
     otel_duration_ms:         (startTs != null && endTs != null) ? endTs - startTs : null,
     otel_exception_message:   toStr(data.error),
@@ -239,7 +251,7 @@ export function span2json(span) {
   }
 
   const extended = {
-    agent:        () => ({ otel_name: toStr(spanData.name), cvs62: toStr((spanData.handoffs ?? []).join(', ')), llm_tools: toStr((spanData.tools ?? []).join(', ')), cvs64: toStr(spanData.output_type) }),
+    agent:        () => ({ otel_name: toStr(spanData.name), cvs62: toStr((spanData.handoffs ?? []).join(', ')), llm_tools: toStr(spanData.tools ?? []), cvs64: toStr(spanData.output_type) }),
     function:     () => ({ otel_name: toStr(spanData.name), llm_input: toStr(spanData.input), llm_output: toStr(spanData.output), cvs67: toStr(spanData.mcp_data) }),
     mcp_tools:    () => ({ otel_name: toStr(spanData.name), llm_input: toStr(spanData.input), llm_output: toStr(spanData.output), cvs67: toStr(spanData.mcp_data) }),
     guardrail:    () => ({ otel_name: toStr(spanData.name), cvs68: toStr(spanData.triggered) }),
@@ -321,7 +333,7 @@ export function extractOtelSpanInfo(span) {
 
   assign(variables, 'otel_record_type', 'AnoSys Trace');
   assign(variables, 'custom_mapping', JSON.stringify(keyToCvs));
-  assign(variables, 'otel_observed_timestamp', new Date().toISOString());
+  assign(variables, 'otel_observed_timestamp', formatTimestamp(new Date()));
   assign(variables, 'name', span.name);
 
   // 2. Trace Context: handle function or plain object
@@ -333,8 +345,8 @@ export function extractOtelSpanInfo(span) {
   const parentId = span.parentSpanId ?? span.parent_id;
   if (parentId) assign(variables, 'parent_id', parentId);
 
-  if (startMs != null) { variables.start_time = new Date(startMs).toISOString(); assign(variables, 'cvn1', startMs); }
-  if (endMs != null) { variables.end_time = new Date(endMs).toISOString(); assign(variables, 'cvn2', endMs); }
+  if (startMs != null) { variables.start_time = formatTimestamp(new Date(startMs)); assign(variables, 'cvn1', startMs); }
+  if (endMs != null) { variables.end_time = formatTimestamp(new Date(endMs)); assign(variables, 'cvn2', endMs); }
   if (startMs != null && endMs != null) assign(variables, 'otel_duration_ms', endMs - startMs);
 
   // 4. Attributes: handle attributes or attributes_json
