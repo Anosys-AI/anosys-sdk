@@ -428,6 +428,11 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
         attributes_json.get('gen_ai', {}).get('system_instructions') or
         attributes_json.get('llm', {}).get('system')
     )
+    # Fallback to input.value for system instructions if not found elsewhere
+    if not system_instr:
+        input_val_attr = attributes_json.get('input', {}).get('value')
+        if input_val_attr and isinstance(input_val_attr, str):
+            system_instr = input_val_attr
     
     input_parts = []
     if system_instr:

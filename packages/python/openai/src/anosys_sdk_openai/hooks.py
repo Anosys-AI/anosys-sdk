@@ -398,6 +398,8 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     
     # System instructions
     system_content = llm_attrs.get('system')
+    
+    # Try to find system role in input messages
     if not system_content and input_messages:
         if isinstance(input_messages, list):
             for msg in input_messages:
@@ -414,6 +416,13 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
                             break
             except json.JSONDecodeError:
                 pass
+    
+    # Fallback to general input value if system content is still missing
+    # (Often used for instructions in agentic contexts)
+    if not system_content:
+        input_val_attr = attributes.get('input', {}).get('value')
+        if input_val_attr and isinstance(input_val_attr, str):
+            system_content = input_val_attr
     if system_content:
         assign(variables, 'gen_ai.system_instructions', to_str_or_none(system_content))
     
