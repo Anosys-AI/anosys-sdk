@@ -7,6 +7,11 @@ on:
       - "openai-py-v*"
       - "openai-agents-py-v*"
       - "claude-code-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. core-v1.0.9)"
+        required: true
 
 permissions:
   contents: read
@@ -21,7 +26,7 @@ jobs:
       - name: Resolve package directory from tag
         id: pkg
         run: |
-          tag="${GITHUB_REF##*/}"
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
           case "$tag" in
             core-v*)              dir="packages/python/core" ;;
             openai-py-v*)         dir="packages/python/openai" ;;
