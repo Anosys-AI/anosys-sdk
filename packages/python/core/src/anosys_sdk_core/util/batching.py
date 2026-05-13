@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional, Union
 
 from anosys_sdk_core.models import (
     DEFAULT_STARTING_INDICES, 
-    CORE_VALID_TYPES,
     OTEL_AI_VALID_TYPES,
     CLAUDE_VALID_TYPES
 )

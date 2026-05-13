@@ -1,6 +1,6 @@
 {
   "name": "anosys-sdk-openai-agents",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "AnoSys SDK for OpenAI Agents — automatic instrumentation and logging for OpenAI Agents SDK",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",

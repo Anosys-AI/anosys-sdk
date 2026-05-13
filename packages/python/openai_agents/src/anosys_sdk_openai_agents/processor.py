@@ -50,9 +50,6 @@ class AnosysHttpExporter(SpanExporter):
         for span in spans:
             try:
                 data = extract_otel_span_info(span)
-                # # Print for debugging
-                # print(f"\n🔍 [DEBUG] Exported span")
-                # print(json.dumps(data, indent=2))
                 
                 span_source = data.get("from_source") or "unknown_source"
                 span_name = data.get("otel_name") or data.get("name") or "unknown_name"
