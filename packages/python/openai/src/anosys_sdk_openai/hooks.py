@@ -160,6 +160,8 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     
     # Attributes
     attributes = span.get('attributes', {})
+    gen_ai = attributes.get('gen_ai', {})
+    request_attrs = gen_ai.get('request', {})
     
     # Gen AI - System
     assign(variables, 'gen_ai.system', 'openai')
@@ -190,6 +192,11 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     
     # Request configuration
     model_name = llm_attrs.get('model_name')
+    if not model_name:
+        model_name = request_attrs.get('model')
+    if not model_name:
+        model_name = request_attrs.get('parameters', {}).get('model')
+    
     if model_name:
         assign(variables, 'gen_ai.request.model', to_str_or_none(model_name))
     
@@ -281,7 +288,6 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         assign(variables, 'gen_ai.output.type', output_type)
     
     # Token usage - check both gen_ai.usage.* attributes and legacy llm.token_count
-    gen_ai = attributes.get('gen_ai', {})
     usage_attr = gen_ai.get('usage', {})
     if isinstance(usage_attr, str):
         try:
@@ -320,8 +326,16 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     input_msg_attr = llm_attrs.get('input_messages', {})
     if isinstance(input_msg_attr, dict):
         input_messages = input_msg_attr.get('input_messages')
+    
+    # Fallback to gen_ai structure
+    if not input_messages:
+        input_messages = gen_ai.get('input', {}).get('messages')
+        if isinstance(input_messages, dict):
+            input_messages = input_messages.get('messages')
+            
     if not input_messages and isinstance(invocation_params, dict):
         input_messages = invocation_params.get('messages')
+        
     if input_messages:
         assign(variables, 'gen_ai.input.messages', to_str_or_none(input_messages))
     
@@ -330,12 +344,20 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     output_msg_attr = llm_attrs.get('output_messages', {})
     if isinstance(output_msg_attr, dict):
         output_messages = output_msg_attr.get('output_messages')
+    
+    # Fallback to gen_ai structure
+    if not output_messages:
+        output_messages = gen_ai.get('output', {}).get('messages')
+        if isinstance(output_messages, dict):
+            output_messages = output_messages.get('messages')
+            
     if not output_messages and isinstance(output_value, dict):
         choices = output_value.get('choices', [])
         if choices:
             messages = [choice.get('message') for choice in choices if choice.get('message')]
             if messages:
                 output_messages = messages
+                
     if output_messages:
         assign(variables, 'gen_ai.output.messages', to_str_or_none(output_messages))
     
@@ -362,6 +384,9 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     
     # Tools
     tools = llm_attrs.get('tools')
+    if not tools:
+        tools = gen_ai.get('tool', {}).get('definitions')
+        
     if not tools and isinstance(invocation_params, dict):
         tools = invocation_params.get('tools')
     if tools:
