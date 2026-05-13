@@ -1,6 +1,6 @@
 {
   "name": "anosys-sdk-openai",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "AnoSys SDK for OpenAI — automatic instrumentation and logging for OpenAI API calls",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
