@@ -448,7 +448,14 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     assign(variables, 'llm_input', to_str_or_none(input_val))
     assign(variables, 'llm_output', to_str_or_none(output_val))
     
-    assign(variables, 'kind', to_str_or_none(attributes.get('fi', {}).get('span', {}).get('kind')))
+    # Kind information
+    kind_val = (
+        gen_ai.get('span', {}).get('kind') or 
+        attributes.get('fi', {}).get('span', {}).get('kind') or 
+        attributes.get('span', {}).get('kind')
+    )
+    assign(variables, 'gen_ai.span.kind', to_str_or_none(kind_val))
+    assign(variables, 'kind', to_str_or_none(kind_val))
     
     # Resource
     assign(variables, 'otel_resource', json.dumps(span.get('resource', {}).get('attributes'), default=str))

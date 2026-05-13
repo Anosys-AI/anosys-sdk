@@ -522,6 +522,9 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     assign(variables, 'gen_ai.output.type', to_str_or_none(
         attributes_json.get('gen_ai', {}).get('output', {}).get('type')))
     
+    assign(variables, 'gen_ai.span.kind', to_str_or_none(
+        attributes_json.get('gen_ai', {}).get('span', {}).get('kind')))
+    
     # Content & Messages
     assign(variables, 'gen_ai.input.messages', to_str_or_none(
         attributes_json.get('gen_ai', {}).get('input', {}).get('messages')))

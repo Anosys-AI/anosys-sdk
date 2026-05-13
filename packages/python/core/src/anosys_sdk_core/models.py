@@ -47,6 +47,7 @@ BASE_KEY_MAPPING: Dict[str, str] = {
     "llm_model_name": "cvs16",
     "service.name": "cvs17",
     "attributes": "cvs18",
+    "gen_ai.span.kind": "cvs19",
     
     # Gen AI - Request Configuration
     "gen_ai.request.model": "gen_ai_request_model",
