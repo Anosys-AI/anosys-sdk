@@ -12,27 +12,19 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan
 
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
-from anosys_sdk_core.util.json import to_str_or_none
+from anosys_sdk_core.util.json import to_str_or_none, format_timestamp
 from anosys_sdk_core.util.batching import assign, reassign
 
 # Agents-specific key mapping
 AGENTS_KEY_MAPPING = {
     **BASE_KEY_MAPPING,
-    # Agents-specific fields
-    "g1": "g1",  # Creation timestamp numeric
-    "cvs3": "cvs3",  # User context
+    # Metadata and Status
     "cvs60": "cvs60",  # Object type (trace/trace.span)
     "cvs61": "cvs61",  # Source (span_start/span_end)
     "cvs62": "cvs62",  # Handoffs
     "cvs63": "cvs63",  # Tools
     "cvs64": "cvs64",  # Output type
-    "cvs65": "cvs65",  # Input
-    "cvs66": "cvs66",  # Output
     "cvs67": "cvs67",  # MCP data
-    "cvs68": "cvs68",  # Triggered
-    "cvs69": "cvs69",  # Model
-    "cvs70": "cvs70",  # Model config
-    "cvs71": "cvs71",  # Usage
     "cvs72": "cvs72",  # Data
     "cvs73": "cvs73",  # Format
     "cvs74": "cvs74",  # First content at
@@ -54,6 +46,29 @@ def _to_timestamp(dt_str) -> Optional[int]:
         return int(datetime.fromisoformat(str(dt_str)).timestamp() * 1000)
     except ValueError:
         return None
+
+
+def _to_int_safe(val: Any) -> Optional[int]:
+    """Safely convert a value to an integer, handling nested objects."""
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return int(val)
+    if isinstance(val, str):
+        try:
+            return int(float(val))
+        except (ValueError, TypeError):
+            pass
+    if isinstance(val, dict):
+        # Look for common count keys in the details object
+        for key in ["total", "count", "tokens", "value", "cached_tokens", "reasoning_tokens"]:
+            if key in val:
+                result = _to_int_safe(val[key])
+                if result is not None:
+                    return result
+        # Fallback: if it's an object with only detail keys, it might be 0 or a sum
+        return 0
+    return None
 
 
 def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
@@ -99,15 +114,15 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
     base = {
         "otel_record_type": "AnoSys Agentic Trace",
         "otel_schema_url": json.dumps(mapping, default=str),
-        "otel_observed_timestamp": to_str_or_none(timestamp),
+        "otel_observed_timestamp": format_timestamp(timestamp),
         "g1": _to_timestamp(timestamp),
         
         "otel_span_id": to_str_or_none(data.get("id")),
         "otel_trace_id": to_str_or_none(data.get("trace_id")) or to_str_or_none(data.get("id")),
         "otel_parent_span_id": to_str_or_none(data.get("parent_id")),
-        "otel_start_time": to_str_or_none(data.get("started_at")),
+        "otel_start_time": format_timestamp(data.get("started_at")),
         "cvn1": _to_timestamp(data.get("started_at")),
-        "otel_end_time": to_str_or_none(data.get("ended_at")),
+        "otel_end_time": format_timestamp(data.get("ended_at")),
         "cvn2": _to_timestamp(data.get("ended_at")),
         "otel_exception_message": to_str_or_none(data.get("error")),
         
@@ -126,24 +141,36 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
     
     type_ = span_data.get("type")
     
+    def _extract_id_from_config(config) -> Dict[str, Any]:
+        if isinstance(config, dict) and "id" in config:
+            return {"cvs77": to_str_or_none(config.get("id"))}
+        if isinstance(config, str):
+            try:
+                parsed = json.loads(config)
+                if isinstance(parsed, dict) and "id" in parsed:
+                    return {"cvs77": to_str_or_none(parsed.get("id"))}
+            except Exception:
+                pass
+        return {}
+
     # Type-specific field handlers
     extended = {
         "agent": lambda: {
             "otel_name": to_str_or_none(span_data.get("name")),
             "cvs62": to_str_or_none(", ".join(span_data.get("handoffs") or [])),
-            "cvs63": to_str_or_none(", ".join(span_data.get("tools") or [])),
+            "llm_tools": to_str_or_none(span_data.get("tools") or []),
             "cvs64": to_str_or_none(span_data.get("output_type")),
         },
         "function": lambda: {
             "otel_name": to_str_or_none(span_data.get("name")),
-            "cvs65": to_str_or_none(span_data.get("input")),
-            "cvs66": to_str_or_none(span_data.get("output")),
+            "llm_input": to_str_or_none(span_data.get("input")),
+            "llm_output": to_str_or_none(span_data.get("output")),
             "cvs67": to_str_or_none(span_data.get("mcp_data")),
         },
         "mcp_tools": lambda: {
             "otel_name": to_str_or_none(span_data.get("name")),
-            "cvs65": to_str_or_none(span_data.get("input")),
-            "cvs66": to_str_or_none(span_data.get("output")),
+            "llm_input": to_str_or_none(span_data.get("input")),
+            "llm_output": to_str_or_none(span_data.get("output")),
             "cvs67": to_str_or_none(span_data.get("mcp_data")),
         },
         "guardrail": lambda: {
@@ -151,11 +178,12 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
             "cvs68": to_str_or_none(span_data.get("triggered")),
         },
         "generation": lambda: {
-            "cvs65": to_str_or_none(span_data.get("input")),
-            "cvs66": to_str_or_none(span_data.get("output")),
+            "llm_input": to_str_or_none(span_data.get("input")),
+            "llm_output": to_str_or_none(span_data.get("output")),
             "cvs69": to_str_or_none(span_data.get("model")),
-            "cvs70": to_str_or_none(span_data.get("model_config")),
-            "cvs71": to_str_or_none(span_data.get("usage")),
+            "llm_invocation_parameters": to_str_or_none(span_data.get("model_config")),
+            "llm_token_count": to_str_or_none(span_data.get("usage")),
+            **_extract_id_from_config(span_data.get("model_config"))
         },
         "custom": lambda: {
             "otel_name": to_str_or_none(span_data.get("name")),
@@ -167,14 +195,16 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
             "cvs66": to_str_or_none(span_data.get("output")),
             "cvs69": to_str_or_none(span_data.get("model")),
             "cvs70": to_str_or_none(span_data.get("model_config")),
+            **_extract_id_from_config(span_data.get("model_config"))
         },
         "speech": lambda: {
-            "cvs65": to_str_or_none(span_data.get("input")),
+            "llm_input": to_str_or_none(span_data.get("input")),
             "cvs72": to_str_or_none(span_data.get("output", {}).get("data")),
             "cvs73": to_str_or_none(span_data.get("output", {}).get("format")),
             "cvs69": to_str_or_none(span_data.get("model")),
-            "cvs70": to_str_or_none(span_data.get("model_config")),
+            "llm_invocation_parameters": to_str_or_none(span_data.get("model_config")),
             "cvs74": to_str_or_none(span_data.get("first_content_at")),
+            **_extract_id_from_config(span_data.get("model_config"))
         },
         "speechgroup": lambda: {
             "cvs65": to_str_or_none(span_data.get("input")),
@@ -195,13 +225,18 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
     result = {
         **base,
         "otel_kind": to_str_or_none(type_),
+        "cvb1": True,
         "cvs199": json.dumps(span, default=str),
         "cvs200": "openAI_Agents_Traces"
     }
     
     if type_ in extended:
         result.update(extended[type_]())
-    
+
+    # Print for debugging
+    # print(f"\n🔍 [DEBUG] span2json openai logs")
+    # print(json.dumps(result, indent=2))    
+
     return clean_dict(result)
 
 
@@ -238,6 +273,7 @@ def deserialize_attributes(attributes: Dict) -> Dict:
     new_attrs = {}
     for key, value in attributes.items():
         set_nested(new_attrs, key, value)
+
     return new_attrs
 
 
@@ -328,7 +364,7 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     span_id_hex = trace.format_span_id(span.context.span_id) if span.context.span_id else None
     parent_id_hex = trace.format_span_id(span.parent.span_id) if span.parent else None
     
-    assign(variables, 'otel_observed_timestamp', datetime.utcnow().isoformat() + "Z")
+    assign(variables, 'otel_observed_timestamp', format_timestamp(datetime.utcnow()))
     assign(variables, 'name', span.name)
     assign(variables, 'trace_id', trace_id_hex)
     assign(variables, 'span_id', span_id_hex)
@@ -337,13 +373,13 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     
     # Timestamps
     if start_ts_ms:
-        variables['start_time'] = datetime.utcfromtimestamp(start_ts_ms / 1000.0).isoformat() + "Z"
+        variables['start_time'] = format_timestamp(datetime.utcfromtimestamp(start_ts_ms / 1000.0))
     else:
         variables['start_time'] = None
     assign(variables, 'cvn1', start_ts_ms)
     
     if end_ts_ms:
-        variables['end_time'] = datetime.utcfromtimestamp(end_ts_ms / 1000.0).isoformat() + "Z"
+        variables['end_time'] = format_timestamp(datetime.utcfromtimestamp(end_ts_ms / 1000.0))
     else:
         variables['end_time'] = None
     assign(variables, 'cvn2', end_ts_ms)
@@ -357,19 +393,58 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     # Deserialize flattened OTel attributes into nested structure
     attributes_json = deserialize_attributes(dict(span.attributes) if span.attributes else {})
     
-    # --- Legacy / Backward Compatibility ---
-    assign(variables, 'llm_tools', to_str_or_none(attributes_json.get('llm', {}).get('tools')))
-    assign(variables, 'llm_token_count', to_str_or_none(attributes_json.get('llm', {}).get('token_count')))
-    assign(variables, 'llm_output_messages', to_str_or_none(
-        attributes_json.get('llm', {}).get('output_messages', {}).get('output_messages')))
-    assign(variables, 'llm_input_messages', to_str_or_none(
-        attributes_json.get('llm', {}).get('input_messages', {}).get('input_messages')))
-    assign(variables, 'llm_model', to_str_or_none(attributes_json.get('llm', {}).get('model_name')))
-    assign(variables, 'llm_invocation_parameters', to_str_or_none(
-        attributes_json.get('llm', {}).get('invocation_parameters')))
-    assign(variables, 'llm_system', to_str_or_none(attributes_json.get('llm', {}).get('system')))
-    assign(variables, 'llm_input', to_str_or_none(attributes_json.get('input', {}).get('value')))
-    assign(variables, 'llm_output', to_str_or_none(attributes_json.get('output', {}).get('value')))
+    # --- Legacy / Backward Compatibility & Unified Extraction ---
+    # Model
+    model = (
+        attributes_json.get('gen_ai', {}).get('request', {}).get('model') or 
+        attributes_json.get('llm', {}).get('model_name')
+    )
+    assign(variables, 'llm_model', to_str_or_none(model))
+
+    # Input / Output Values
+    input_val = (
+        attributes_json.get('input', {}).get('value') or 
+        attributes_json.get('gen_ai', {}).get('input', {}).get('messages') or
+        attributes_json.get('llm', {}).get('input_messages', {}).get('input_messages')
+    )
+    output_val = (
+        attributes_json.get('output', {}).get('value') or 
+        attributes_json.get('gen_ai', {}).get('output', {}).get('messages') or
+        attributes_json.get('llm', {}).get('output_messages', {}).get('output_messages')
+    )
+    assign(variables, 'llm_input', to_str_or_none(input_val))
+    assign(variables, 'llm_output', to_str_or_none(output_val))
+
+    # Tokens
+    tokens = (
+        attributes_json.get('gen_ai', {}).get('usage') or 
+        attributes_json.get('llm', {}).get('token_count')
+    )
+    # llm_token_count is 'json' type in schema, so we send the whole dict
+    assign(variables, 'llm_token_count', tokens)
+
+    # Parameters & System
+    params = (
+        attributes_json.get('gen_ai', {}).get('request', {}).get('parameters') or 
+        attributes_json.get('llm', {}).get('invocation_parameters')
+    )
+    assign(variables, 'llm_invocation_parameters', to_str_or_none(params))
+    
+    if isinstance(params, dict) and 'id' in params:
+        assign(variables, 'cvs77', to_str_or_none(params.get('id')))
+    elif isinstance(params, str):
+        try:
+            parsed_params = json.loads(params)
+            if isinstance(parsed_params, dict) and 'id' in parsed_params:
+                assign(variables, 'cvs77', to_str_or_none(parsed_params.get('id')))
+        except Exception:
+            pass
+    
+    system = (
+        attributes_json.get('gen_ai', {}).get('system_instructions') or 
+        attributes_json.get('llm', {}).get('system')
+    )
+    assign(variables, 'llm_system', to_str_or_none(system))
     
     # Kind
     assign(variables, 'kind', str(span.kind).replace('SpanKind.', '').upper())
@@ -425,12 +500,15 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
         attributes_json.get('gen_ai', {}).get('response', {}).get('id')))
     assign(variables, 'gen_ai.response.finish_reasons', to_str_or_none(
         attributes_json.get('gen_ai', {}).get('response', {}).get('finish_reasons')))
-    assign(variables, 'gen_ai.usage.input_tokens',
-        attributes_json.get('gen_ai', {}).get('usage', {}).get('input_tokens'))
-    assign(variables, 'gen_ai.usage.output_tokens',
-        attributes_json.get('gen_ai', {}).get('usage', {}).get('output_tokens'))
-    assign(variables, 'gen_ai.usage.total_tokens',
-        attributes_json.get('gen_ai', {}).get('usage', {}).get('total_tokens'))
+    
+    # Ensure tokens are numbers
+    assign(variables, 'gen_ai.usage.input_tokens', _to_int_safe(
+        attributes_json.get('gen_ai', {}).get('usage', {}).get('input_tokens')))
+    assign(variables, 'gen_ai.usage.output_tokens', _to_int_safe(
+        attributes_json.get('gen_ai', {}).get('usage', {}).get('output_tokens')))
+    assign(variables, 'gen_ai.usage.total_tokens', _to_int_safe(
+        attributes_json.get('gen_ai', {}).get('usage', {}).get('total_tokens')))
+    
     assign(variables, 'gen_ai.output.type', to_str_or_none(
         attributes_json.get('gen_ai', {}).get('output', {}).get('type')))
     
@@ -475,7 +553,7 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     
     assign(variables, 'resp_id', to_str_or_none(response_id))
     
-    # Raw span dump (cvs199)
-    variables['raw'] = json.dumps(span_to_dict(span), default=str)
+    # Raw attributes dump (cvs199)
+    variables['raw'] = json.dumps(attributes_json, default=str)
     
     return reassign(variables, key_to_cvs, AGENTS_STARTING_INDICES.copy())

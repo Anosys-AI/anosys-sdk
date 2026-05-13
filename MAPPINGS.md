@@ -1,6 +1,6 @@
 # CVS Variable Mappings — Full Reference
 
-> Auto-generated from source code scan on 2026-05-08.
+> Auto-generated from source code scan on 2026-05-09.
 > Covers all Python and JS packages.
 
 ---
@@ -35,9 +35,9 @@
 | `gen_ai.system` | `gen_ai_system` | Gen AI General | e.g. "openai" |
 | `gen_ai.provider.name` | `gen_ai_provider_name` | Gen AI General | Provider name |
 | `gen_ai.operation.name` | `gen_ai_operation_name` | Gen AI General | Operation name |
-| `server.address` | `server_address` | Gen AI General | Server hostname |
-| `server.port` | `server_port` | Gen AI General | Server port |
-| `error.type` | `error_type` | Gen AI General | Error type string |
+| `server.address` | `cvs14` | Gen AI General | Server hostname (reassigned) |
+| `server.port` | `cvn3` | Gen AI General | Server port (reassigned) |
+| `error.type` | `cvs10` | Gen AI General | Error type string (reassigned) |
 | `gen_ai.request.model` | `gen_ai_request_model` | Gen AI Request | Model name |
 | `gen_ai.request.temperature` | `gen_ai_request_temperature` | Gen AI Request | Temperature |
 | `gen_ai.request.top_p` | `gen_ai_request_top_p` | Gen AI Request | Top-p sampling |
@@ -49,7 +49,7 @@
 | `gen_ai.request.seed` | `gen_ai_request_seed` | Gen AI Request | Deterministic seed |
 | `gen_ai.request.choice.count` | `gen_ai_request_choice_count` | Gen AI Request | Number of choices (n) |
 | `gen_ai.request.encoding_formats` | `gen_ai_request_encoding_formats` | Gen AI Request | Encoding formats |
-| `gen_ai.request.tool_choice` | `gen_ai_request_tool_choice` | Gen AI Request | Tool choice setting |
+| `gen_ai.request.tool_choice` | `cvs15` | Gen AI Request | Tool choice setting (reassigned) |
 | `gen_ai.response.model` | `gen_ai_response_model` | Gen AI Response | Response model |
 | `gen_ai.response.id` | `gen_ai_response_id` | Gen AI Response | Response ID |
 | `gen_ai.response.finish_reasons` | `gen_ai_response_finish_reasons` | Gen AI Response | Finish reasons |
@@ -74,10 +74,10 @@
 | `llm_model` | `llm_model` | Legacy LLM | Model name (legacy) |
 | `llm_invocation_parameters` | `llm_invocation_parameters` | Legacy LLM | Invocation params (legacy) |
 | `llm_token_count` | `llm_token_count` | Legacy LLM | Token count (legacy) |
-| `llm_input_messages` | `cvs1` | Legacy LLM | Input messages → cvs1 |
-| `llm_output_messages` | `cvs2` | Legacy LLM | Output messages → cvs2 |
-| `input` | `cvs1` | Decorator | Decorator input |
-| `output` | `cvs2` | Decorator | Decorator output |
+| `llm_input_messages` | `gen_ai_input_messages` | Legacy LLM | Input messages |
+| `llm_output_messages` | `gen_ai_output_messages` | Legacy LLM | Output messages |
+| `input` | `llm_input` | Decorator | Decorator input |
+| `output` | `llm_output` | Decorator | Decorator output |
 | `error` | `cvs3` | Decorator | Error flag |
 | `caller` | `cvs4` | Decorator | Caller info |
 | `error_type` | `cvs10` | Decorator | Error type |
@@ -87,17 +87,10 @@
 | `from_source` | `cvs200` | Source | Source identifier |
 | `source` | `cvs200` | Source | Source (alias) |
 | `is_streaming` | `cvb2` | Source | Streaming flag |
-| `events` | `cvs13` | Source | Span events JSON |
-
-### Keys present ONLY in JS OpenAI mapping (not in Python core)
-
-| Internal Key | CVS Variable | Notes |
-|---|---|---|
-| `user_context` | `cvs5` | User context from attrs |
-| `llm_model_name` | `llm_model_name` | Backward compat alias |
-
-> [!WARNING]
-> `user_context` → `cvs5` and `llm_model_name` → `llm_model_name` are only defined in the JS OpenAI `BASE_KEY_MAPPING`. They are **missing** from Python `BASE_KEY_MAPPING` in `models.py`. See [Findings](#findings) below.
+| `events` | `otel_events` | Source | Span events JSON |
+| `user_context` | `cvs5` | Source | User context JSON |
+| `llm_model_name` | `cvs16` | Source | LLM model name alias |
+| `is_agent` | `cvb1` | Source | Is agent flag |
 
 ---
 
@@ -135,27 +128,25 @@ Extends `BASE_KEY_MAPPING` with agents-specific fixed CVS slots:
 | CVS Variable | Purpose | Used by span types |
 |---|---|---|
 | `g1` | Creation timestamp (numeric) | All (span2json base) |
-| `cvs1` | Input (consolidated) | function, mcp_tools, generation, speech, speechgroup (**JS only**) |
-| `cvs2` | Output (consolidated) | function, mcp_tools, generation, transcription (**JS only**) |
+| `llm_input` | Input (consolidated) | function, mcp_tools, generation, speech, speechgroup |
+| `llm_output` | Output (consolidated) | function, mcp_tools, generation, transcription |
 | `cvs3` | User context | All (span2json base) |
 | `cvs60` | Object type (trace/trace.span) | All (span2json base) |
 | `cvs61` | Source (span_start/span_end) | All (span2json base) |
 | `cvs62` | Handoffs | agent |
-| `cvs63` | Tools list | agent |
+| `llm_tools` | Tools list | agent |
 | `cvs64` | Output type | agent |
-| `cvs65` | Input (function-specific) | function, mcp_tools, generation, speech, speechgroup (**Python only**) |
-| `cvs66` | Output (function-specific) | function, mcp_tools, generation, transcription (**Python only**) |
 | `cvs67` | MCP data | function, mcp_tools |
 | `cvs68` | Triggered flag | guardrail |
-| `cvs69` | Model | generation, transcription, speech |
-| `cvs70` | Model config | generation, transcription, speech |
-| `cvs71` | Usage JSON | generation |
+| `gen_ai_request_model` | Model | generation, transcription, speech |
+| `llm_invocation_parameters` | Model config | generation, transcription, speech |
+| `llm_token_count` | Usage JSON | generation |
 | `cvs72` | Data / input.data | custom, transcription, speech |
 | `cvs73` | Format | transcription, speech |
 | `cvs74` | First content at | speech |
 | `cvs75` | MCP server | MCPListTools |
 | `cvs76` | MCP result | MCPListTools |
-| `cvs77` | Response ID | response |
+| `cvs77` | Response ID / Config ID | response, generation, transcription, speech |
 | `cvs78` | From agent | handoff |
 | `cvs79` | To agent | handoff |
 | `cvs199` | Raw span JSON | All (base) |
@@ -389,44 +380,39 @@ When a key is **not found** in the mapping, the `reassign()` function allocates 
 
 ---
 
+## 7. Source-Specific Validation
+
+The SDK performs strict type coercion (Double, Boolean, JSON) before sending data, using a validation table that matches the target Protobuf schema.
+
+| Source (`cvs200`) | Validation Table | Target Schema |
+|---|---|---|
+| `ClaudeCodeHook` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
+| (Everything else) | `OTEL_AI_VALID_TYPES` | `schemaOtelAI.proto` |
+
+### Coercion Rules:
+- **Double**: Strictly cast to float (defaults to `0.0` on failure).
+- **Boolean**: Handles strings like `"true"`, `"1"`, `"yes"`.
+- **JSON**: Objects/lists are automatically stringified.
+- **CVS Prefixes**: If a key is not in the validation table, it is coerced based on its prefix (`cvn` -> number, `cvb` -> bool, `cvs` -> string).
+
+---
+
 ## Findings
-
-### 🐛 Bugs
-
-1. **Python Agents `span2json()` still uses `cvs65`/`cvs66`** for input/output while **JS Agents `span2json()` now uses `cvs1`/`cvs2`**. This means the same span type (e.g. `function`, `generation`) writes input/output to **different columns** depending on whether it comes from Python or JS.
-
-2. **JS Agents `assign()` still uses the old lenient number parsing** (`Number(value)`) while JS OpenAI `assign()` was fixed to use strict regex. Hex trace IDs can still be misinterpreted as numbers in the agents package.
-
-3. **JS Agents `reassign()` still uses the old stringify logic** (no prefix-based coercion) while JS OpenAI `reassign()` was upgraded to coerce based on CVS prefix. This means the agents package may send wrong types to CVS columns.
-
-### ⚠️ Inconsistencies
-
-4. **`user_context` → `cvs5`** is defined in JS OpenAI `BASE_KEY_MAPPING` but is **missing** from Python `BASE_KEY_MAPPING` in `models.py`. The JS agents also populate it in `extractOtelSpanInfo()` but without a mapping entry.
-
-5. **`llm_model_name` → `llm_model_name`** is defined in JS OpenAI `BASE_KEY_MAPPING` but is **missing** from Python `BASE_KEY_MAPPING`.
-
-6. **`events` → `cvs13`** is defined in Python `BASE_KEY_MAPPING` and JS OpenAI `BASE_KEY_MAPPING`, but is **missing** from JS Agents `BASE_KEY_MAPPING` (which has its own inline copy).
-
-7. **`gen_ai.request.tool_choice` → `gen_ai_request_tool_choice`** is defined in Python and JS OpenAI `BASE_KEY_MAPPING`, but is **missing** from JS Agents `BASE_KEY_MAPPING`.
-
-8. **`error.type`** has conflicting mappings:
-   - Python `BASE_KEY_MAPPING`: `"error.type"` → `"error_type"` (named)
-   - Python `BASE_KEY_MAPPING` (decorator section): `"error_type"` → `"cvs10"` (fixed)
-   - The result: `error.type` → `error_type` → (not remapped further since `error_type` is not a CVS var). Meanwhile `error_type` from decorators → `cvs10`. These are two **different destination columns** for conceptually the same thing.
 
 ### ✅ Aligned across Python & JS
 
 - All `otel_*` fields ✅
 - All `gen_ai.*` semantic convention keys ✅
-- `cvs1`–`cvs4`, `cvs10`–`cvs12` (decorator fields) ✅
-- `cvs199` (raw), `cvs200` (source), `cvb2` (streaming) ✅
+- Agents input/output mappings aligned to `llm_input`/`llm_output` ✅
+- Agents usage/tools/config aligned to `llm_*` columns ✅
 - Dynamic allocation starting indices (`cvs100`, `cvn3`, `cvb1`) ✅
+- `user_context` and `llm_model_name` aligned ✅
+- Source-specific validation tables implemented in both languages ✅
 
 ### 📝 Duplicate CVS Slots (Multiple keys → same column)
 
 | CVS Variable | Mapped by keys | Risk |
 |---|---|---|
-| `cvs1` | `llm_input_messages`, `input` | Low — both are "input" semantically |
-| `cvs2` | `llm_output_messages`, `output` | Low — both are "output" semantically |
 | `cvs200` | `from_source`, `source` | Low — intentional alias |
 | `otel_name` | `name` (base), also hardcoded in span2json | No risk — same data |
+

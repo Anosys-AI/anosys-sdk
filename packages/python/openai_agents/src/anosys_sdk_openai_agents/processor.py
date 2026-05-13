@@ -6,6 +6,7 @@ interface to capture agent traces and send them to AnoSys.
 """
 
 import json
+import os
 import threading
 import logging
 from datetime import datetime
@@ -19,7 +20,7 @@ from opentelemetry.sdk.trace.export import (
     SpanExporter,
     SpanExportResult,
 )
-from traceai_openai_agents import OpenAIAgentsInstrumentor
+from traceai_openai_agents import OpenAIAgentsInstrumentor, TraceConfig
 import requests
 
 from agents import TracingProcessor
@@ -49,6 +50,9 @@ class AnosysHttpExporter(SpanExporter):
         for span in spans:
             try:
                 data = extract_otel_span_info(span)
+                # # Print for debugging
+                # print(f"\n🔍 [DEBUG] Exported span")
+                # print(json.dumps(data, indent=2))
                 
                 span_source = data.get("from_source") or "unknown_source"
                 span_name = data.get("otel_name") or data.get("name") or "unknown_name"
@@ -81,13 +85,18 @@ class AnosysHttpExporter(SpanExporter):
         pass
 
 
-def setup_tracing(api_url: str, use_batch_processor: bool = False) -> None:
+def setup_tracing(
+    api_url: str, 
+    use_batch_processor: bool = False, 
+    config: Optional[TraceConfig] = None
+) -> None:
     """
     Initialize OpenTelemetry tracing for OpenAI Agents.
     
     Args:
         api_url: URL to post telemetry data
         use_batch_processor: If True, use BatchSpanProcessor
+        config: Optional TraceConfig for capture settings
     """
     global _log_api_url
     _log_api_url = api_url
@@ -132,7 +141,7 @@ def setup_tracing(api_url: str, use_batch_processor: bool = False) -> None:
         except Exception as e:
             logger.warning(f"[ANOSYS]⚠️ Uninstrument warning: {e}")
         
-        instrumentor.instrument(tracer_provider=trace_provider)
+        instrumentor.instrument(tracer_provider=trace_provider, config=config)
         logger.info("[ANOSYS]✅ AnoSys Instrumented OpenAI Agents and all OpenTelemetry traces")
 
 
@@ -150,22 +159,51 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
         set_tracing_processor(AnosysOpenAIAgentsLogger())
     """
     
-    def __init__(self, get_user_context: Optional[Callable] = None):
+    def __init__(
+        self, 
+        get_user_context: Optional[Callable] = None,
+        capture_inputs: bool = True,
+        capture_outputs: bool = True,
+        capture_parameters: bool = True,
+        pii_redaction: bool = False,
+        use_batch_processor: bool = False
+    ):
         """
         Initialize the AnoSys OpenAI Agents Logger.
         
         Args:
             get_user_context: Optional function that returns user context dict
+            capture_inputs: If True, capture input values (default: True)
+            capture_outputs: If True, capture output values (default: True)
+            capture_parameters: If True, capture invocation parameters (default: True)
+            pii_redaction: If True, redact PII from captured values (default: False)
+            use_batch_processor: If True, use BatchSpanProcessor
         """
         global _tracing_initialized
         
         # Resolve API URL
         self.log_api_url = resolve_api_key()
         
+        # Ensure underlying SDK logging is enabled if capture is requested
+        if capture_inputs or capture_outputs:
+            if os.getenv("OPENAI_AGENTS_DONT_LOG_MODEL_DATA") is None:
+                os.environ["OPENAI_AGENTS_DONT_LOG_MODEL_DATA"] = "False"
+            if os.getenv("OPENAI_AGENTS_DONT_LOG_TOOL_DATA") is None:
+                os.environ["OPENAI_AGENTS_DONT_LOG_TOOL_DATA"] = "False"
+        
         # Initialize tracing
         if not _tracing_initialized:
             setup_api(self.log_api_url)
-            setup_tracing(self.log_api_url)
+            
+            # Create capture config
+            config = TraceConfig(
+                hide_inputs=not capture_inputs,
+                hide_outputs=not capture_outputs,
+                hide_llm_invocation_parameters=not capture_parameters,
+                pii_redaction=pii_redaction
+            )
+            
+            setup_tracing(self.log_api_url, use_batch_processor=use_batch_processor, config=config)
             _tracing_initialized = True
         
         # Optional user context function
@@ -208,7 +246,8 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             
             # Transform and send
             transformed = span2json(payload)
-            response = requests.post(self.log_api_url, json=transformed, timeout=5)
+            cleaned_transformed = clean_nulls(transformed)
+            response = requests.post(self.log_api_url, json=cleaned_transformed, timeout=5)
             response.raise_for_status()
             
         except Exception as e:
