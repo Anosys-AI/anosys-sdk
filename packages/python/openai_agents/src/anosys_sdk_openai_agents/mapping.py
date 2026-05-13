@@ -38,6 +38,28 @@ AGENTS_KEY_MAPPING = {
 AGENTS_STARTING_INDICES = DEFAULT_STARTING_INDICES.copy()
 
 
+def flatten_messages(msgs):
+    """Flatten message arrays into readable strings."""
+    if not msgs:
+        return None
+    messages = msgs if isinstance(msgs, list) else msgs.get("messages") if isinstance(msgs, dict) else None
+    if isinstance(messages, list):
+        parts = []
+        for m in messages:
+            if not isinstance(m, dict):
+                continue
+            role = (m.get("message", {}) or {}).get("role") or m.get("role")
+            content = (m.get("message", {}) or {}).get("content") or m.get("content")
+            if content:
+                label = f"{role.capitalize()}: " if role else ""
+                parts.append(f"{label}{content}")
+            elif (m.get("message", {}) or {}).get("tool_calls"):
+                label = f"{role.capitalize()}: " if role else "Assistant: "
+                parts.append(f"{label}[Tool Calls]")
+        return "\n\n".join(parts) if parts else None
+    return str(msgs)
+
+
 def _to_timestamp(dt_str) -> Optional[int]:
     """Convert ISO datetime string to milliseconds timestamp."""
     if not dt_str:
@@ -402,17 +424,31 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     assign(variables, 'llm_model', to_str_or_none(model))
 
     # Input / Output Values
-    input_val = (
+    system_instr = (
+        attributes_json.get('gen_ai', {}).get('system_instructions') or
+        attributes_json.get('llm', {}).get('system')
+    )
+    
+    input_parts = []
+    if system_instr:
+        input_parts.append(f"System: {system_instr}")
+    
+    flattened_input = (
+        flatten_messages(attributes_json.get('gen_ai', {}).get('input', {}).get('messages')) or
+        flatten_messages(attributes_json.get('llm', {}).get('input_messages', {}).get('input_messages'))
+    )
+    if flattened_input:
+        input_parts.append(flattened_input)
+        
+    input_val = "\n\n".join(input_parts) if input_parts else (
         attributes_json.get('input', {}).get('value') or 
-        attributes_json.get('raw', {}).get('input') or
-        attributes_json.get('gen_ai', {}).get('input', {}).get('messages') or
-        attributes_json.get('llm', {}).get('input_messages', {}).get('input_messages')
+        attributes_json.get('raw', {}).get('input')
     )
     output_val = (
+        flatten_messages(attributes_json.get('gen_ai', {}).get('output', {}).get('messages')) or
+        flatten_messages(attributes_json.get('llm', {}).get('output_messages', {}).get('output_messages')) or
         attributes_json.get('output', {}).get('value') or 
-        attributes_json.get('raw', {}).get('output') or
-        attributes_json.get('gen_ai', {}).get('output', {}).get('messages') or
-        attributes_json.get('llm', {}).get('output_messages', {}).get('output_messages')
+        attributes_json.get('raw', {}).get('output')
     )
     assign(variables, 'llm_input', to_str_or_none(input_val))
     assign(variables, 'llm_output', to_str_or_none(output_val))

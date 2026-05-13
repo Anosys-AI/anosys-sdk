@@ -35,12 +35,15 @@ def flatten_messages(msgs):
         for m in messages:
             if not isinstance(m, dict):
                 continue
+            role = (m.get("message", {}) or {}).get("role") or m.get("role")
             content = (m.get("message", {}) or {}).get("content") or m.get("content")
             if content:
-                parts.append(content)
+                label = f"{role.capitalize()}: " if role else ""
+                parts.append(f"{label}{content}")
             elif (m.get("message", {}) or {}).get("tool_calls"):
-                parts.append(json.dumps(m["message"]["tool_calls"]))
-        return "\n---\n".join(parts) if parts else None
+                label = f"{role.capitalize()}: " if role else "Assistant: "
+                parts.append(f"{label}[Tool Calls]")
+        return "\n\n".join(parts) if parts else None
     return str(msgs)
 
 
@@ -435,12 +438,25 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     assign(variables, 'llm_invocation_parameters', to_str_or_none(invocation_params))
     assign(variables, 'llm_system', to_str_or_none(llm_attrs.get('system')))
     
-    # Input/Output with fallbacks from attributes.raw
-    input_val = (
+    # Input/Output with fallbacks
+    # Prioritize flattened messages for llm_input to catch the actual user query
+    # If we have both system instructions and messages, combine them nicely
+    input_parts = []
+    if system_content:
+        input_parts.append(f"System: {system_content}")
+    
+    flattened_input = flatten_messages(input_messages)
+    if flattened_input:
+        input_parts.append(flattened_input)
+        
+    input_val = "\n\n".join(input_parts) if input_parts else (
         attributes.get('input', {}).get('value') or 
         attributes.get('raw', {}).get('input')
     )
+    
+    # Prioritize flattened messages for llm_output
     output_val = (
+        flatten_messages(output_messages) or 
         output_attr.get('value') or 
         attributes.get('raw', {}).get('output')
     )
