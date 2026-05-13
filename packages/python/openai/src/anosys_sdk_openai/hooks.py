@@ -175,14 +175,29 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     
     # Server address
     resource_attrs = span.get('resource', {}).get('attributes', {})
-    server_addr = resource_attrs.get('server.address') or 'api.openai.com'
-    server_port = resource_attrs.get('server.port') or 443
+    server_addr = (
+        resource_attrs.get('server.address') or 
+        attributes.get('server.address') or 
+        attributes.get('net.peer.name') or 
+        'api.openai.com'
+    )
+    server_port = (
+        resource_attrs.get('server.port') or 
+        attributes.get('server.port') or 
+        attributes.get('net.peer.port') or 
+        443
+    )
     assign(variables, 'server.address', server_addr)
     assign(variables, 'server.port', server_port)
+    assign(variables, 'service.name', resource_attrs.get('service.name') or 'unknown_service')
+    assign(variables, 'attributes', attributes)
     
-    # Extract model information
+    # Extract model and parameters
     llm_attrs = attributes.get('llm', {})
-    invocation_params = llm_attrs.get('invocation_parameters', {})
+    invocation_params = llm_attrs.get('invocation_parameters')
+    
+    if not invocation_params:
+        invocation_params = request_attrs.get('parameters')
     
     if isinstance(invocation_params, str):
         try:
@@ -230,6 +245,12 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         if n is not None:
             assign(variables, 'gen_ai.request.choice.count', n)
         
+        # Fallback for other gen_ai parameters if not already assigned
+        for key, val in invocation_params.items():
+            if key in ['temperature', 'top_p', 'top_k', 'max_tokens', 'presence_penalty', 'frequency_penalty', 'seed']:
+                if variables.get(f'gen_ai.request.{key}') is None:
+                    assign(variables, f'gen_ai.request.{key}', val)
+        
         # Tool choice
         tool_choice = invocation_params.get('tool_choice')
         if tool_choice is not None:
@@ -276,6 +297,17 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
                         finish_reason = choice.get('finish_reason')
                         if finish_reason:
                             finish_reasons.append(finish_reason)
+                            
+    # Fallback to gen_ai structure for response info
+    gen_ai_resp = gen_ai.get('response', {})
+    if not response_id:
+        response_id = gen_ai_resp.get('id')
+    if not response_model:
+        response_model = gen_ai_resp.get('model')
+    if not finish_reasons:
+        finish_reasons = gen_ai_resp.get('finish_reasons')
+    if not output_type:
+        output_type = gen_ai.get('output', {}).get('type')
     
     # Response & Usage
     if response_model:
@@ -402,9 +434,20 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     assign(variables, 'llm_model', to_str_or_none(model_name))
     assign(variables, 'llm_invocation_parameters', to_str_or_none(invocation_params))
     assign(variables, 'llm_system', to_str_or_none(llm_attrs.get('system')))
-    assign(variables, 'llm_input', to_str_or_none(attributes.get('input', {}).get('value')))
-    llm_output_val = output_attr.get('value') if isinstance(output_attr, dict) else output_attr
-    assign(variables, 'llm_output', to_str_or_none(llm_output_val))
+    
+    # Input/Output with fallbacks from attributes.raw
+    input_val = (
+        attributes.get('input', {}).get('value') or 
+        attributes.get('raw', {}).get('input')
+    )
+    output_val = (
+        output_attr.get('value') or 
+        attributes.get('raw', {}).get('output')
+    )
+    
+    assign(variables, 'llm_input', to_str_or_none(input_val))
+    assign(variables, 'llm_output', to_str_or_none(output_val))
+    
     assign(variables, 'kind', to_str_or_none(attributes.get('fi', {}).get('span', {}).get('kind')))
     
     # Resource

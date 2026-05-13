@@ -45,6 +45,8 @@ BASE_KEY_MAPPING: Dict[str, str] = {
     "server.port": "cvn3",
     "error.type": "cvs10",
     "llm_model_name": "cvs16",
+    "service.name": "cvs17",
+    "attributes": "cvs18",
     
     # Gen AI - Request Configuration
     "gen_ai.request.model": "gen_ai_request_model",

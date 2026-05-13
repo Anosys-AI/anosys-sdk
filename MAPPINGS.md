@@ -1,6 +1,6 @@
 # CVS Variable Mappings — Full Reference
 
-> Auto-generated from source code scan on 2026-05-09.
+> Auto-generated from source code scan on 2026-05-13.
 > Covers all Python and JS packages.
 
 ---
@@ -38,6 +38,8 @@
 | `server.address` | `cvs14` | Gen AI General | Server hostname (reassigned) |
 | `server.port` | `cvn3` | Gen AI General | Server port (reassigned) |
 | `error.type` | `cvs10` | Gen AI General | Error type string (reassigned) |
+| `service.name` | `cvs17` | Gen AI General | Service/Agent identity |
+| `attributes` | `cvs18` | Gen AI General | Full attributes JSON blob |
 | `gen_ai.request.model` | `gen_ai_request_model` | Gen AI Request | Model name |
 | `gen_ai.request.temperature` | `gen_ai_request_temperature` | Gen AI Request | Temperature |
 | `gen_ai.request.top_p` | `gen_ai_request_top_p` | Gen AI Request | Top-p sampling |

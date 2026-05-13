@@ -404,11 +404,13 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     # Input / Output Values
     input_val = (
         attributes_json.get('input', {}).get('value') or 
+        attributes_json.get('raw', {}).get('input') or
         attributes_json.get('gen_ai', {}).get('input', {}).get('messages') or
         attributes_json.get('llm', {}).get('input_messages', {}).get('input_messages')
     )
     output_val = (
         attributes_json.get('output', {}).get('value') or 
+        attributes_json.get('raw', {}).get('output') or
         attributes_json.get('gen_ai', {}).get('output', {}).get('messages') or
         attributes_json.get('llm', {}).get('output_messages', {}).get('output_messages')
     )
@@ -463,8 +465,14 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     assign(variables, 'gen_ai.operation.name', to_str_or_none(
         attributes_json.get('gen_ai', {}).get('operation', {}).get('name')))
     assign(variables, 'server.address', to_str_or_none(
-        attributes_json.get('server', {}).get('address')))
-    assign(variables, 'server.port', attributes_json.get('server', {}).get('port'))
+        attributes_json.get('server', {}).get('address') or
+        attributes_json.get('net', {}).get('peer', {}).get('name')))
+    assign(variables, 'server.port', 
+        attributes_json.get('server', {}).get('port') or
+        attributes_json.get('net', {}).get('peer', {}).get('port'))
+    assign(variables, 'service.name', 
+        dict(span.resource.attributes).get('service.name') or 'unknown_service')
+    assign(variables, 'attributes', attributes_json)
     assign(variables, 'error.type', to_str_or_none(
         attributes_json.get('error', {}).get('type')))
     
@@ -487,9 +495,11 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     assign(variables, 'gen_ai.request.stop_sequences', to_str_or_none(
         attributes_json.get('gen_ai', {}).get('request', {}).get('stop_sequences')))
     assign(variables, 'gen_ai.request.seed',
-        attributes_json.get('gen_ai', {}).get('request', {}).get('seed'))
+        attributes_json.get('gen_ai', {}).get('request', {}).get('seed') or
+        attributes_json.get('gen_ai', {}).get('request', {}).get('parameters', {}).get('seed'))
     assign(variables, 'gen_ai.request.choice.count',
-        attributes_json.get('gen_ai', {}).get('request', {}).get('choice', {}).get('count'))
+        attributes_json.get('gen_ai', {}).get('request', {}).get('choice', {}).get('count') or
+        attributes_json.get('gen_ai', {}).get('request', {}).get('parameters', {}).get('n'))
     assign(variables, 'gen_ai.request.encoding_formats', to_str_or_none(
         attributes_json.get('gen_ai', {}).get('request', {}).get('encoding_formats')))
     
@@ -554,6 +564,6 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
     assign(variables, 'resp_id', to_str_or_none(response_id))
     
     # Raw attributes dump (cvs199)
-    variables['raw'] = json.dumps(attributes_json, default=str)
+    variables['raw'] = json.dumps(span_to_dict(span), default=str)
     
     return reassign(variables, key_to_cvs, AGENTS_STARTING_INDICES.copy())
