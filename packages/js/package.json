@@ -2,6 +2,7 @@
   "name": "anosys-sdk-js",
   "private": true,
   "workspaces": [
+    "claude-code",
     "openai",
     "openai-agents"
   ],

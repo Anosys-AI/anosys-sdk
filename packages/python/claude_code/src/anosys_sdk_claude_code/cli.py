@@ -43,43 +43,129 @@ def cmd_install(args: argparse.Namespace) -> None:
     print("\nAnoSys Claude Code Hook Installer")
     print("=" * 40)
 
-    api_key = args.api_key
-    if not api_key:
-        api_key = _prompt(
-            "AnoSys API key (leave blank to skip, can set ANOSYS_HOOK_API_KEY later): "
-        )
-
-    endpoint = args.endpoint or _prompt(
-        f"AnoSys endpoint URL [{DEFAULT_ENDPOINT}]: ", DEFAULT_ENDPOINT
-    )
+    import requests
 
     redaction = args.redaction
     if not redaction and not args.no_redaction:
         choice = _prompt("Enable content redaction? (y/N): ", "n").lower()
         redaction = choice == 'y'
 
+    api_key = args.api_key
+    if not api_key:
+        api_key = _prompt("AnoSys API key (leave blank to skip): ")
+
+    endpoint = args.endpoint
+    claude_pixel = "false"
+
+    if api_key:
+        print("Resolving API endpoint...")
+        try:
+            resp = requests.get(f"https://console.anosys.ai/api/resolveapikeys?apikey={api_key}", timeout=5)
+            if resp.ok:
+                data = resp.json()
+                endpoint = data.get("apiUrl") or DEFAULT_ENDPOINT
+                print(f"  Resolved endpoint: {endpoint}")
+            else:
+                print(f"  Failed to resolve endpoint (HTTP {resp.status_code}). Using default.")
+                endpoint = DEFAULT_ENDPOINT
+        except Exception as e:
+            print(f"  Error resolving endpoint: {e}. Using default.")
+            endpoint = DEFAULT_ENDPOINT
+    elif not endpoint:
+        endpoint = _prompt(f"AnoSys endpoint URL [{DEFAULT_ENDPOINT}]: ", DEFAULT_ENDPOINT)
+
+    if "/cc/" in endpoint:
+        claude_pixel = "true"
+
+    # OTEL setup
+    otel_api_key = args.otel_key
+    if otel_api_key is None:
+        otel_api_key = _prompt("Enter your AnoSys API Key (OTEL type, leave blank to skip OTEL): ")
+    enable_otel = False
+    otel_endpoint_url = "https://www.anosys.ai"
+
+    if otel_api_key:
+        print("Resolving OTEL endpoint...")
+        try:
+            resp = requests.get(f"https://console.anosys.ai/api/resolveapikeys?type=otel&apikey={otel_api_key}", timeout=5)
+            if resp.ok:
+                data = resp.json()
+                otel_endpoint_url = data.get("apiUrl") or "https://www.anosys.ai"
+                
+                if "/t/" in otel_endpoint_url:
+                    enable_otel = True
+                    print("  OTEL endpoint successfully resolved.")
+                else:
+                    print("  Warning: Resolved OTEL endpoint is invalid (Invalid API Key or incorrect type). Skipping OTEL setup.")
+            else:
+                print(f"  Failed to resolve OTEL endpoint (HTTP {resp.status_code}). Skipping OTEL.")
+        except Exception as e:
+            print(f"  Error resolving OTEL endpoint: {e}. Skipping OTEL.")
+
+    auto_update = args.auto_update
+    if auto_update is None:
+        choice = _prompt("Would you like to automatically update ~/.claude/settings.json? (Y/n): ", "y").lower()
+        auto_update = choice != 'n'
+
     new_env: dict = {
         "ANOSYS_HOOK_ENDPOINT_URL": endpoint,
+        "ANOSYS_CLAUDE_PIXEL": claude_pixel,
+        "ANOSYS_HOOK_DRY_RUN": "false",
     }
-    if api_key:
-        new_env["ANOSYS_HOOK_API_KEY"] = api_key
     if redaction:
         new_env["REDACTION"] = "true"
+    if enable_otel:
+        new_env["CLAUDE_CODE_ENABLE_TELEMETRY"] = "1"
+        new_env["OTEL_SERVICE_NAME"] = "claude-code"
+        new_env["OTEL_TRACES_EXPORTER"] = "otlp"
+        new_env["OTEL_METRICS_EXPORTER"] = "otlp"
+        new_env["OTEL_LOGS_EXPORTER"] = "otlp"
+        new_env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf"
+        new_env["OTEL_EXPORTER_OTLP_ENDPOINT"] = otel_endpoint_url
 
-    print(f"\nUpdating {SETTINGS_PATH} ...")
-    settings = load_settings()
-    backup()
-    settings = update_env(settings, new_env)
-    settings = update_stop_hooks(settings, HOOK_COMMAND)
-    write_atomic(SETTINGS_PATH, settings)
+    if auto_update:
+        print(f"\nUpdating {SETTINGS_PATH} ...")
+        settings = load_settings()
+        backup()
+        settings = update_env(settings, new_env)
+        settings = update_stop_hooks(settings, HOOK_COMMAND)
+        write_atomic(SETTINGS_PATH, settings)
 
-    print(f"  Backed up original settings -> {BACKUP_PATH}")
-    print(f"  Hook command registered: {HOOK_COMMAND}")
-    print(f"  Endpoint: {endpoint}")
-    if api_key:
-        print(f"  API key: {'*' * (len(api_key) - 4)}{api_key[-4:]}")
-    print(f"  Redaction: {'enabled' if redaction else 'disabled'}")
-    print("\nDone. The hook will fire automatically after each Claude Code session.")
+        print(f"  Backed up original settings -> {BACKUP_PATH}")
+        print(f"  Hook command registered: {HOOK_COMMAND}")
+        print(f"  Endpoint: {endpoint}")
+        if api_key:
+            print(f"  API key used for resolution: {'*' * (len(api_key) - 4)}{api_key[-4:]}")
+        print(f"  Redaction: {'enabled' if redaction else 'disabled'}")
+        if enable_otel:
+            print(f"  OTEL: enabled ({otel_endpoint_url})")
+        print("\nDone. The hook will fire automatically after each Claude Code session.")
+    else:
+        print("\n================================================================")
+        print("Add the following to your ~/.claude/settings.json file options:")
+        print("")
+        
+        manual_config = {
+            "env": new_env,
+            "hooks": {
+                "Stop": [
+                    {
+                        "owner": "anosys",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": HOOK_COMMAND,
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        
+        import json
+        print(json.dumps(manual_config, indent=2))
+        print("")
+        print("================================================================")
 
 
 def cmd_uninstall(args: argparse.Namespace) -> None:
@@ -132,6 +218,9 @@ def main() -> None:
     p_install.add_argument("--endpoint", metavar="URL", help=f"Endpoint URL (default: {DEFAULT_ENDPOINT})")
     p_install.add_argument("--redaction", action="store_true", help="Enable content redaction")
     p_install.add_argument("--no-redaction", action="store_true", help="Skip redaction prompt")
+    p_install.add_argument("--otel-key", metavar="KEY", help="AnoSys OTEL API key")
+    p_install.add_argument("--auto-update", action="store_true", default=None, help="Automatically update settings.json")
+    p_install.add_argument("--no-auto-update", action="store_false", dest="auto_update", help="Do not automatically update settings.json")
     p_install.set_defaults(func=cmd_install)
 
     p_uninstall = sub.add_parser("uninstall", help="Remove the AnoSys Stop hook")

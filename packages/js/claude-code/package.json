@@ -1,0 +1,12 @@
+{
+  "name": "@anosys/claude-code",
+  "version": "0.2.0",
+  "description": "AnoSys observability hook for Claude Code",
+  "main": "src/hookRunner.js",
+  "bin": {
+    "anosys-claude-code": "src/cli.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
