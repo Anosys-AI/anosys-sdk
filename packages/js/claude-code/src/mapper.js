@@ -340,7 +340,7 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
   const url = record.url;
   const priority = record.priority;
   const hookLabel = record.hookLabel;
-  const stopReasonTop = record.stopReason; // top-level stopReason
+  const stopReasonTop = record.stopReason || undefined; // top-level stopReason
 
   // Research field
   const _researchRaw = record.research;
@@ -688,7 +688,7 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
   } else {
     // Fallback for completely unknown top-level record types
     logUnhandled(record);
-    userPrompt = `[Unhandled Record Type: ${msgType}]`;
+    userPrompt = `[Unmapped Content for Type: ${msgType}]`;
     assistantText = `Raw Data: ${JSON.stringify(record)}`;
   }
 
@@ -964,7 +964,7 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
   const incInput = (incrementalTokens ? (incrementalTokens.input != null ? incrementalTokens.input : inputTokens) : inputTokens);
   const incOutput = (incrementalTokens ? (incrementalTokens.output != null ? incrementalTokens.output : outputTokens) : outputTokens);
   const incTotal = (incrementalTokens ? (incrementalTokens.total != null ? incrementalTokens.total : totalTokens) : totalTokens);
-  const incCost = (incrementalTokens ? (incrementalTokens.cost != null ? incrementalTokens.cost : (costEstimate || 0.0)) : (costEstimate || 0.0));
+  const incCost = (incrementalTokens ? (incrementalTokens.cost || (costEstimate || 0.0)) : (costEstimate || 0.0));
   const incCacheRead = (incrementalTokens ? (incrementalTokens.cache_read != null ? incrementalTokens.cache_read : cacheRead) : cacheRead);
   const incCacheCreation = (incrementalTokens ? (incrementalTokens.cache_creation != null ? incrementalTokens.cache_creation : cacheCreation) : cacheCreation);
 
