@@ -54,29 +54,46 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
   const exporter = new AnosysHttpExporter(getUserContext);
   let provider;
 
-  // Reuse existing global provider if it's a real TracerProvider
+  // Reuse existing global provider if it's a legacy TracerProvider
   const active = trace.getTracerProvider();
-  if (active && typeof active.addSpanProcessor === 'function') {
+  const hasLegacyAddSpan = active && typeof active.addSpanProcessor === 'function';
+
+  if (hasLegacyAddSpan) {
     provider = active;
     log.info('Attaching to existing global TracerProvider');
+
+    if (useBatchProcessor) {
+      provider.addSpanProcessor(new BatchSpanProcessor(exporter, {
+        scheduledDelayMillis: 1000,
+        maxQueueSize: 2048,
+        maxExportBatchSize: 512,
+      }));
+      log.info('Using BatchSpanProcessor');
+    } else {
+      provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+      log.info('Using SimpleSpanProcessor');
+    }
   } else {
-    provider = new NodeTracerProvider();
+    const spanProcessors = [];
+    if (useBatchProcessor) {
+      spanProcessors.push(new BatchSpanProcessor(exporter, {
+        scheduledDelayMillis: 1000,
+        maxQueueSize: 2048,
+        maxExportBatchSize: 512,
+      }));
+      log.info('Using BatchSpanProcessor');
+    } else {
+      spanProcessors.push(new SimpleSpanProcessor(exporter));
+      log.info('Using SimpleSpanProcessor');
+    }
+
+    provider = new NodeTracerProvider({
+      spanProcessors: spanProcessors,
+    });
     log.info('Creating new global TracerProvider');
   }
 
-  if (useBatchProcessor) {
-    provider.addSpanProcessor(new BatchSpanProcessor(exporter, {
-      scheduledDelayMillis: 1000,
-      maxQueueSize: 2048,
-      maxExportBatchSize: 512,
-    }));
-    log.info('Using BatchSpanProcessor');
-  } else {
-    provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
-    log.info('Using SimpleSpanProcessor');
-  }
-
-  if (!active || typeof active.addSpanProcessor !== 'function') {
+  if (!hasLegacyAddSpan) {
     provider.register();
   }
 

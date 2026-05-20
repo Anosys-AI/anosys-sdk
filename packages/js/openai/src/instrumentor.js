@@ -58,20 +58,24 @@ export class AnosysHttpExporter {
 export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext = null) {
   _logApiUrl = apiUrl;
 
-  const provider = new NodeTracerProvider();
   const exporter = new AnosysHttpExporter(getUserContext);
+  const spanProcessors = [];
 
   if (useBatchProcessor) {
-    provider.addSpanProcessor(new BatchSpanProcessor(exporter, {
+    spanProcessors.push(new BatchSpanProcessor(exporter, {
       scheduledDelayMillis: 1000,
       maxQueueSize: 2048,
       maxExportBatchSize: 512,
     }));
     log.info('Using BatchSpanProcessor');
   } else {
-    provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+    spanProcessors.push(new SimpleSpanProcessor(exporter));
     log.info('Using SimpleSpanProcessor');
   }
+
+  const provider = new NodeTracerProvider({
+    spanProcessors: spanProcessors,
+  });
 
   provider.register();
 
