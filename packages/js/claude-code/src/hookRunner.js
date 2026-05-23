@@ -28,8 +28,8 @@ const { transformRecord } = require('./mapper');
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const ENDPOINT_URL = process.env.ANOSYS_HOOK_ENDPOINT_URL || 'https://api.anosys.ai';
-const API_KEY = process.env.ANOSYS_HOOK_API_KEY || '';
+const INGESTION_URL = 'https://api.anosys.ai/ingestion';
+const API_KEY = process.env.ANOSYS_HOOK_APIKEY || '';
 const DRY_RUN = (process.env.ANOSYS_HOOK_DRY_RUN || 'false').toLowerCase() === 'true';
 const EXPLICIT_TRANSCRIPT = process.env.ANOSYS_HOOK_TRANSCRIPT || '';
 
@@ -281,7 +281,7 @@ async function postRecordsBatch(payloads) {
 
   const headers = { 'Content-Type': 'application/json' };
   if (API_KEY) {
-    headers['Authorization'] = `Bearer ${API_KEY}`;
+    headers['anosys-apikey'] = API_KEY;
   }
 
   const failedRecords = [];
@@ -296,7 +296,7 @@ async function postRecordsBatch(payloads) {
     }
 
     try {
-      await _httpPost(ENDPOINT_URL, chunk, headers);
+      await _httpPost(INGESTION_URL, chunk, headers);
       log.info('Batch POST success — sent %s records', chunk.length);
     } catch (e) {
       log.error('Batch POST failed — trying to send %s records: %s', chunk.length, e);

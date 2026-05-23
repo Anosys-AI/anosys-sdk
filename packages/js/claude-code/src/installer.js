@@ -13,6 +13,7 @@ const path = require('path');
 const ANOSYS_ENV_KEYS = new Set([
   'ANOSYS_HOOK_ENDPOINT_URL',
   'ANOSYS_HOOK_API_KEY',
+  'ANOSYS_HOOK_APIKEY',
   'ANOSYS_CLAUDE_PIXEL',
   'ANOSYS_HOOK_DRY_RUN',
   'CLAUDE_CODE_ENABLE_TELEMETRY',
@@ -22,6 +23,7 @@ const ANOSYS_ENV_KEYS = new Set([
   'OTEL_LOGS_EXPORTER',
   'OTEL_EXPORTER_OTLP_PROTOCOL',
   'OTEL_EXPORTER_OTLP_ENDPOINT',
+  'OTEL_EXPORTER_OTLP_ANOSYS_APIKEY',
 ]);
 
 const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');
@@ -41,8 +43,12 @@ function loadSettings(filePath = SETTINGS_PATH) {
 
 function backup(filePath = SETTINGS_PATH) {
   if (fs.existsSync(filePath)) {
-    fs.copyFileSync(filePath, BACKUP_PATH);
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    const backupPath = `${filePath}.${timestamp}.bak`;
+    fs.copyFileSync(filePath, backupPath);
+    return backupPath;
   }
+  return null;
 }
 
 function writeAtomic(filePath, data) {

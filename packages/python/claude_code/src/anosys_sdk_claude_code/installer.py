@@ -15,6 +15,7 @@ from typing import Optional
 ANOSYS_ENV_KEYS = {
     "ANOSYS_HOOK_ENDPOINT_URL",
     "ANOSYS_HOOK_API_KEY",
+    "ANOSYS_HOOK_APIKEY",
     "ANOSYS_CLAUDE_PIXEL",
     "ANOSYS_HOOK_DRY_RUN",
     "CLAUDE_CODE_ENABLE_TELEMETRY",
@@ -24,6 +25,7 @@ ANOSYS_ENV_KEYS = {
     "OTEL_LOGS_EXPORTER",
     "OTEL_EXPORTER_OTLP_PROTOCOL",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_ANOSYS_APIKEY",
 }
 
 SETTINGS_PATH = os.path.expanduser("~/.claude/settings.json")
@@ -45,9 +47,14 @@ def load_settings(path: str = SETTINGS_PATH) -> dict:
         )
 
 
-def backup(path: str = SETTINGS_PATH) -> None:
+def backup(path: str = SETTINGS_PATH) -> Optional[str]:
     if os.path.exists(path):
-        shutil.copy2(path, BACKUP_PATH)
+        import time
+        timestamp = time.strftime('%Y%m%d%H%M%S', time.gmtime())
+        backup_path = f"{path}.{timestamp}.bak"
+        shutil.copy2(path, backup_path)
+        return backup_path
+    return None
 
 
 def write_atomic(path: str, data: dict) -> None:

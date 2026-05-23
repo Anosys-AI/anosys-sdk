@@ -23,8 +23,8 @@ from typing import Any, Dict, List, Optional
 
 from anosys_sdk_claude_code.mapper import transform_record
 
-ENDPOINT_URL = os.environ.get('ANOSYS_HOOK_ENDPOINT_URL', 'https://www.anosys.ai')
-API_KEY = os.environ.get('ANOSYS_HOOK_API_KEY', '')
+INGESTION_URL = "https://api.anosys.ai/ingestion"
+API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "")
 DRY_RUN = os.environ.get('ANOSYS_HOOK_DRY_RUN', 'false').lower() == 'true'
 EXPLICIT_TRANSCRIPT = os.environ.get('ANOSYS_HOOK_TRANSCRIPT', '')
 
@@ -184,9 +184,9 @@ async def post_records_batch(payloads: List[dict]) -> List[dict]:
     if not payloads:
         return []
 
-    headers = {'Content-Type': 'application/json'}
+    headers = {"Content-Type": "application/json"}
     if API_KEY:
-        headers['Authorization'] = f"Bearer {API_KEY}"
+        headers["anosys-apikey"] = API_KEY
 
     failed_records = []
     batch_size = 100
@@ -197,7 +197,7 @@ async def post_records_batch(payloads: List[dict]) -> List[dict]:
             log.info("[DRY RUN] Would POST chunk of %d records", len(chunk))
             continue
         try:
-            resp = requests.post(ENDPOINT_URL, json=chunk, headers=headers, timeout=15)
+            resp = requests.post(INGESTION_URL, json=chunk, headers=headers, timeout=15)
             resp.raise_for_status()
             log.info("Batch POST success — sent %d records", len(chunk))
         except Exception as e:

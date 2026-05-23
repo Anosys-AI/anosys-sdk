@@ -27,7 +27,7 @@ const {
 } = require('./installer');
 
 const HOOK_COMMAND = 'npx @anosys/claude-code run';
-const DEFAULT_ENDPOINT = 'https://www.anosys.ai';
+const INGESTION_URL = 'https://api.anosys.ai/ingestion';
 
 function prompt(query, defaultVal = '') {
   const rl = readline.createInterface({
@@ -55,34 +55,7 @@ async function cmdInstall(args) {
 
   let apiKey = args.apiKey;
   if (!apiKey) {
-    apiKey = await prompt('AnoSys API key (leave blank to skip): ');
-  }
-
-  let endpoint = args.endpoint;
-  let claudePixel = 'false';
-
-  if (apiKey) {
-    console.log('Resolving API endpoint...');
-    try {
-      const resp = await fetch(`https://console.anosys.ai/api/resolveapikeys?apikey=${apiKey}`);
-      if (resp.ok) {
-        const data = await resp.json();
-        endpoint = data.apiUrl || DEFAULT_ENDPOINT;
-        console.log(`  Resolved endpoint: ${endpoint}`);
-      } else {
-        console.log(`  Failed to resolve endpoint (HTTP ${resp.status}). Using default.`);
-        endpoint = DEFAULT_ENDPOINT;
-      }
-    } catch (e) {
-      console.log(`  Error resolving endpoint: ${e.message}. Using default.`);
-      endpoint = DEFAULT_ENDPOINT;
-    }
-  } else if (!endpoint) {
-    endpoint = await prompt(`AnoSys endpoint URL [${DEFAULT_ENDPOINT}]: `, DEFAULT_ENDPOINT);
-  }
-
-  if (endpoint.includes('/cc/')) {
-    claudePixel = 'true';
+    apiKey = await prompt('AnoSys API key for logs (leave blank to skip): ');
   }
 
   // OTEL setup
@@ -90,30 +63,7 @@ async function cmdInstall(args) {
   if (otelApiKey === null) {
     otelApiKey = await prompt('Enter your AnoSys API Key (OTEL type, leave blank to skip OTEL): ');
   }
-  let enableOtel = false;
-  let otelEndpointUrl = 'https://www.anosys.ai';
-
-  if (otelApiKey) {
-    console.log('Resolving OTEL endpoint...');
-    try {
-      const resp = await fetch(`https://console.anosys.ai/api/resolveapikeys?type=otel&apikey=${otelApiKey}`);
-      if (resp.ok) {
-        const data = await resp.json();
-        otelEndpointUrl = data.apiUrl || 'https://www.anosys.ai';
-        
-        if (otelEndpointUrl.includes('/t/')) {
-          enableOtel = true;
-          console.log('  OTEL endpoint successfully resolved.');
-        } else {
-          console.log('  Warning: Resolved OTEL endpoint is invalid (Invalid API Key or incorrect type). Skipping OTEL setup.');
-        }
-      } else {
-        console.log(`  Failed to resolve OTEL endpoint (HTTP ${resp.status}). Skipping OTEL.`);
-      }
-    } catch (e) {
-      console.log(`  Error resolving OTEL endpoint: ${e.message}. Skipping OTEL.`);
-    }
-  }
+  const enableOtel = Boolean(otelApiKey);
 
   let autoUpdate = args.autoUpdate;
   if (autoUpdate === null) {
@@ -122,10 +72,11 @@ async function cmdInstall(args) {
   }
 
   const newEnv = {
-    ANOSYS_HOOK_ENDPOINT_URL: endpoint,
-    ANOSYS_CLAUDE_PIXEL: claudePixel,
     ANOSYS_HOOK_DRY_RUN: 'false',
   };
+  if (apiKey) {
+    newEnv.ANOSYS_HOOK_APIKEY = apiKey;
+  }
   if (redaction) {
     newEnv.REDACTION = 'true';
   }
@@ -136,26 +87,28 @@ async function cmdInstall(args) {
     newEnv.OTEL_METRICS_EXPORTER = 'otlp';
     newEnv.OTEL_LOGS_EXPORTER = 'otlp';
     newEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf';
-    newEnv.OTEL_EXPORTER_OTLP_ENDPOINT = otelEndpointUrl;
+    newEnv.OTEL_EXPORTER_OTLP_ANOSYS_APIKEY = otelApiKey;
   }
 
   if (autoUpdate) {
     console.log(`\nUpdating ${SETTINGS_PATH} ...`);
     let settings = loadSettings();
-    backup();
+    const backupPath = backup();
     settings = updateEnv(settings, newEnv);
     settings = updateStopHooks(settings, HOOK_COMMAND);
     writeAtomic(SETTINGS_PATH, settings);
 
-    console.log(`  Backed up original settings -> ${BACKUP_PATH}`);
+    if (backupPath) {
+      console.log(`  Backed up original settings -> ${backupPath}`);
+    }
     console.log(`  Hook command registered: ${HOOK_COMMAND}`);
-    console.log(`  Endpoint: ${endpoint}`);
+    console.log(`  Ingestion URL: ${INGESTION_URL}`);
     if (apiKey) {
-      console.log(`  API key used for resolution: ${'*'.repeat(Math.max(0, apiKey.length - 4))}${apiKey.slice(-4)}`);
+      console.log(`  Logs API key: ${'*'.repeat(Math.max(0, apiKey.length - 4))}${apiKey.slice(-4)}`);
     }
     console.log(`  Redaction: ${redaction ? 'enabled' : 'disabled'}`);
     if (enableOtel) {
-      console.log(`  OTEL: enabled (${otelEndpointUrl})`);
+      console.log(`  OTEL: enabled (API key set, ingestion URL: ${INGESTION_URL})`);
     }
     console.log('\nDone. The hook will fire automatically after each Claude Code session.');
   } else {
@@ -193,11 +146,13 @@ function cmdUninstall() {
     console.log('  No AnoSys hook found — nothing to remove.');
     return;
   }
-  backup();
+  const backupPath = backup();
   settings = removeStopHooks(settings);
   settings = removeEnv(settings);
   writeAtomic(SETTINGS_PATH, settings);
-  console.log(`  Backed up original settings -> ${BACKUP_PATH}`);
+  if (backupPath) {
+    console.log(`  Backed up original settings -> ${backupPath}`);
+  }
   console.log('  AnoSys hook removed successfully.');
 }
 
@@ -208,11 +163,12 @@ function cmdStatus() {
     console.log('AnoSys hook is INSTALLED');
     console.log(`  Command: ${cmd}`);
     const env = settings.env || {};
-    const endpoint = env.ANOSYS_HOOK_ENDPOINT_URL || '(not set)';
-    const hasKey = 'ANOSYS_HOOK_API_KEY' in env;
+    const hasLogsKey = 'ANOSYS_HOOK_APIKEY' in env;
+    const hasOtelKey = 'OTEL_EXPORTER_OTLP_ANOSYS_APIKEY' in env;
     const redaction = env.REDACTION || 'false';
-    console.log(`  Endpoint: ${endpoint}`);
-    console.log(`  API key: ${hasKey ? 'set' : 'not set'}`);
+    console.log(`  Ingestion URL: ${INGESTION_URL}`);
+    console.log(`  Logs API key: ${hasLogsKey ? 'set' : 'not set'}`);
+    console.log(`  OTEL API key: ${hasOtelKey ? 'set' : 'not set'}`);
     console.log(`  Redaction: ${redaction}`);
   } else {
     console.log('AnoSys hook is NOT installed.');
@@ -241,7 +197,6 @@ async function main() {
 
   const args = {
     apiKey: null,
-    endpoint: null,
     redaction: false,
     noRedaction: false,
     otelKey: null,
@@ -252,8 +207,6 @@ async function main() {
     const arg = argv[i];
     if (arg === '--api-key' && argv[i + 1]) {
       args.apiKey = argv[++i];
-    } else if (arg === '--endpoint' && argv[i + 1]) {
-      args.endpoint = argv[++i];
     } else if (arg === '--redaction') {
       args.redaction = true;
     } else if (arg === '--no-redaction') {

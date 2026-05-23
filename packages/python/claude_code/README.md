@@ -1,4 +1,4 @@
-# @anosys/claude-code
+# anosys-sdk-claude-code
 
 AnoSys observability and analytics hook for Anthropic's Claude Code.
 
@@ -6,10 +6,16 @@ This package automatically captures Claude Code's telemetry, session turns, cont
 
 ## Installation
 
-You can run the installer interactively using `npx`:
+You can install the package via `pip` or your favorite Python package manager:
 
 ```bash
-npx @anosys/claude-code install
+pip install anosys-sdk-claude-code
+```
+
+After installing the package, run the setup wizard to configure the hook:
+
+```bash
+anosys-claude-code install
 ```
 
 The installer will prompt you for:
@@ -22,7 +28,7 @@ The installer will prompt you for:
 If you prefer to install without interactive prompts, you can pass the configuration via flags:
 
 ```bash
-npx @anosys/claude-code install \
+anosys-claude-code install \
   --api-key "your_logs_api_key" \
   --otel-key "your_otel_api_key" \
   --redaction
@@ -35,25 +41,25 @@ The package provides a unified CLI to manage your hook installation safely. It m
 ### `status`
 Check the current installation status of the AnoSys hook:
 ```bash
-npx @anosys/claude-code status
+anosys-claude-code status
 ```
 
 ### `install`
 Installs or updates the hook in your Claude Code settings:
 ```bash
-npx @anosys/claude-code install
+anosys-claude-code install
 ```
 
 ### `uninstall`
 Safely removes the AnoSys hook and related environment variables from your settings:
 ```bash
-npx @anosys/claude-code uninstall
+anosys-claude-code uninstall
 ```
 
 ### `run`
 This command is executed automatically by Claude Code when a session ends. You generally do not need to run this manually:
 ```bash
-npx @anosys/claude-code run
+anosys-claude-code run
 ```
 
 ## How it works
