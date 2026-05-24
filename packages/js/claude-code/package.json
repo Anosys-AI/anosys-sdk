@@ -1,5 +1,5 @@
 {
-  "name": "@anosys/claude-code",
+  "name": "anosys-claude-code",
   "version": "0.2.1",
   "description": "AnoSys observability hook for Claude Code",
   "main": "src/hookRunner.js",
