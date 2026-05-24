@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ["20", "22"]
+        node-version: ["18", "20", "22"]
 
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +63,14 @@ jobs:
         working-directory: packages/js
         run: npm install
 
-      - name: Test all JS packages
-        working-directory: packages/js
-        run: npm test --workspaces
+      - name: Test openai
+        working-directory: packages/js/openai
+        run: npm test
+
+      - name: Test openai-agents
+        working-directory: packages/js/openai-agents
+        run: npm test
+
+      - name: Test claude-code
+        working-directory: packages/js/claude-code
+        run: npm test
