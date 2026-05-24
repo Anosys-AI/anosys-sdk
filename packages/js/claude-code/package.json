@@ -1,14 +1,38 @@
 {
-  "name": "anosys-claude-code",
+  "name": "anosys-sdk-claude-code",
   "version": "0.2.1",
-  "description": "AnoSys observability hook for Claude Code",
-  "main": "src/hookRunner.js",
-  "bin": {
-    "anosys-claude-code": "src/cli.js"
+  "description": "AnoSys observability hook for Claude Code — automatic instrumentation and logging for Claude Code sessions",
+  "author": "AnoSys <support@anosys.ai>",
+  "license": "Apache-2.0",
+  "homepage": "https://anosys.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anosys-ai/anosys-sdk.git"
   },
+  "main": "src/hookRunner.js",
+  "exports": {
+    ".": "./src/hookRunner.js"
+  },
+  "bin": {
+    "anosys-sdk-claude-code": "src/cli.js"
+  },
+  "files": [
+    "src/"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },
+  "keywords": [
+    "anosys",
+    "claude",
+    "claude-code",
+    "observability",
+    "monitoring",
+    "logging",
+    "llm",
+    "anthropic",
+    "hooks"
+  ],
   "scripts": {
     "test": "node --test test/*.test.js"
   }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CLI entry point for @anosys/claude-code.
+ * CLI entry point for anosys-sdk-claude-code.
  *
  * Commands:
  *   install    Register the AnoSys Stop hook in ~/.claude/settings.json
@@ -26,7 +26,7 @@ const {
   validateApiKey,
 } = require('./installer');
 
-const HOOK_COMMAND = 'npx @anosys/claude-code run';
+const HOOK_COMMAND = 'npx anosys-sdk-claude-code run';
 const INGESTION_URL = 'https://api.anosys.ai/ingestion';
 
 function prompt(query, defaultVal = '') {
@@ -191,7 +191,7 @@ function cmdStatus() {
     console.log(`  Redaction: ${redaction}`);
   } else {
     console.log('AnoSys hook is NOT installed.');
-    console.log("  Run 'npx @anosys/claude-code install' to set it up.");
+    console.log("  Run 'npx anosys-sdk-claude-code install' to set it up.");
   }
 }
 
@@ -205,7 +205,7 @@ async function main() {
   const command = argv[0];
 
   if (!command) {
-    console.log('Usage: anosys-claude-code <command> [options]');
+    console.log('Usage: anosys-sdk-claude-code <command> [options]');
     console.log('\nCommands:');
     console.log('  install    Register the AnoSys Stop hook');
     console.log('  uninstall  Remove the AnoSys Stop hook');
