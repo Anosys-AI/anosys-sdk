@@ -14,7 +14,6 @@
 const readline = require('readline');
 const {
   SETTINGS_PATH,
-  BACKUP_PATH,
   loadSettings,
   backup,
   writeAtomic,

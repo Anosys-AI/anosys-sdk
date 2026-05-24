@@ -13,7 +13,6 @@ import asyncio
 import sys
 
 from anosys_sdk_claude_code.installer import (
-    BACKUP_PATH,
     SETTINGS_PATH,
     backup,
     get_anosys_hook_command,
