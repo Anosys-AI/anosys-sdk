@@ -12,8 +12,8 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
-// Version of the Claude Code integration package
-const INTEGRATION_VERSION = '0.2.0';
+// Version of the Claude Code integration package (read from package.json)
+const INTEGRATION_VERSION = require('../package.json').version;
 
 // Current OS Username
 const OS_USER = os.userInfo().username;
