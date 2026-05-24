@@ -23,6 +23,7 @@ const {
   removeStopHooks,
   hasAnosysHook,
   getAnosysHookCommand,
+  validateApiKey,
 } = require('./installer');
 
 const HOOK_COMMAND = 'npx @anosys/claude-code run';
@@ -56,11 +57,29 @@ async function cmdInstall(args) {
   if (!apiKey) {
     apiKey = await prompt('AnoSys API key for logs (leave blank to skip): ');
   }
+  if (apiKey) {
+    console.log('Validating Logs API key...');
+    const isValid = await validateApiKey(apiKey, 'claudecode');
+    if (!isValid) {
+      console.warn('⚠️  Warning: Logs API key validation failed (invalid key or incompatible type).');
+    } else {
+      console.log('✅ Logs API key is valid.');
+    }
+  }
 
   // OTEL setup
   let otelApiKey = args.otelKey;
   if (otelApiKey === null) {
     otelApiKey = await prompt('Enter your AnoSys API Key (OTEL type, leave blank to skip OTEL): ');
+  }
+  if (otelApiKey) {
+    console.log('Validating OTEL API key...');
+    const isValid = await validateApiKey(otelApiKey, 'otel');
+    if (!isValid) {
+      console.warn('⚠️  Warning: OTEL API key validation failed (invalid key or incompatible type).');
+    } else {
+      console.log('✅ OTEL API key is valid.');
+    }
   }
   const enableOtel = Boolean(otelApiKey);
 

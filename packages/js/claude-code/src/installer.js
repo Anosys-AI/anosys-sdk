@@ -159,6 +159,57 @@ function getAnosysHookCommand(settings) {
   return null;
 }
 
+async function validateApiKey(apiKey, type) {
+  if (!apiKey) return false;
+  try {
+    const url = `https://console.anosys.ai/api/resolveapikeys?apikey=${encodeURIComponent(apiKey)}`;
+    const parsed = new URL(url);
+    const https = require('https');
+    const res = await new Promise((resolve, reject) => {
+      const req = https.get(
+        {
+          hostname: parsed.hostname,
+          path: parsed.pathname + parsed.search,
+          timeout: 10000,
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              try {
+                resolve(JSON.parse(data));
+              } catch (e) {
+                reject(e);
+              }
+            } else {
+              reject(new Error(`HTTP ${res.statusCode}`));
+            }
+          });
+        }
+      );
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Timeout'));
+      });
+    });
+
+    const apiUrl = res.apiUrl;
+    if (!apiUrl) return false;
+
+    const lowerType = String(type).toLowerCase();
+    if (lowerType === 'claudecode' || lowerType === 'cc') {
+      return apiUrl.includes('/cc/');
+    } else if (lowerType === 'otel' || lowerType === 't') {
+      return apiUrl.includes('/t/');
+    }
+    return false;
+  } catch (err) {
+    return false;
+  }
+}
+
 module.exports = {
   SETTINGS_PATH,
   BACKUP_PATH,
@@ -171,4 +222,5 @@ module.exports = {
   removeStopHooks,
   hasAnosysHook,
   getAnosysHookCommand,
+  validateApiKey,
 };

@@ -23,6 +23,7 @@ from anosys_sdk_claude_code.installer import (
     update_env,
     update_stop_hooks,
     write_atomic,
+    validate_api_key,
 )
 
 HOOK_COMMAND = "anosys-claude-code run"
@@ -50,11 +51,23 @@ def cmd_install(args: argparse.Namespace) -> None:
     api_key = args.api_key
     if not api_key:
         api_key = _prompt("AnoSys API key for logs (leave blank to skip): ")
+    if api_key:
+        print("Validating Logs API key...")
+        if not validate_api_key(api_key, "claudecode"):
+            print("⚠️  Warning: Logs API key validation failed (invalid key or incompatible type).")
+        else:
+            print("✅ Logs API key is valid.")
 
     # OTEL setup
     otel_api_key = args.otel_key
     if otel_api_key is None:
         otel_api_key = _prompt("Enter your AnoSys API Key (OTEL type, leave blank to skip OTEL): ")
+    if otel_api_key:
+        print("Validating OTEL API key...")
+        if not validate_api_key(otel_api_key, "otel"):
+            print("⚠️  Warning: OTEL API key validation failed (invalid key or incompatible type).")
+        else:
+            print("✅ OTEL API key is valid.")
     enable_otel = bool(otel_api_key)
 
     auto_update = args.auto_update

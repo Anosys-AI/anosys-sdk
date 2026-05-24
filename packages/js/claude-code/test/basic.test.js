@@ -220,3 +220,114 @@ describe('hookRunner exports', () => {
     assert.ok(state !== null && typeof state === 'object' && !Array.isArray(state));
   });
 });
+
+// ---------------------------------------------------------------------------
+// installer.validateApiKey
+// ---------------------------------------------------------------------------
+
+describe('installer.validateApiKey', () => {
+  let originalGet;
+  before(() => {
+    originalGet = require('https').get;
+  });
+  after(() => {
+    require('https').get = originalGet;
+  });
+
+  it('returns true for valid claudecode key containing /cc/', async () => {
+    require('https').get = (options, callback) => {
+      assert.ok(options.path.includes('apikey=test-cc-key'));
+      const res = {
+        statusCode: 200,
+        on: (event, handler) => {
+          if (event === 'data') {
+            handler(Buffer.from(JSON.stringify({ apiUrl: 'https://api.anosys.ai/cc/ingest' })));
+          }
+          if (event === 'end') {
+            handler();
+          }
+        }
+      };
+      callback(res);
+      return { on: () => {} };
+    };
+    const isValid = await installer.validateApiKey('test-cc-key', 'claudecode');
+    assert.equal(isValid, true);
+  });
+
+  it('returns false for invalid claudecode key not containing /cc/', async () => {
+    require('https').get = (options, callback) => {
+      const res = {
+        statusCode: 200,
+        on: (event, handler) => {
+          if (event === 'data') {
+            handler(Buffer.from(JSON.stringify({ apiUrl: 'https://api.anosys.ai/t/ingest' })));
+          }
+          if (event === 'end') {
+            handler();
+          }
+        }
+      };
+      callback(res);
+      return { on: () => {} };
+    };
+    const isValid = await installer.validateApiKey('test-t-key', 'claudecode');
+    assert.equal(isValid, false);
+  });
+
+  it('returns true for valid otel key containing /t/', async () => {
+    require('https').get = (options, callback) => {
+      const res = {
+        statusCode: 200,
+        on: (event, handler) => {
+          if (event === 'data') {
+            handler(Buffer.from(JSON.stringify({ apiUrl: 'https://api.anosys.ai/t/ingest' })));
+          }
+          if (event === 'end') {
+            handler();
+          }
+        }
+      };
+      callback(res);
+      return { on: () => {} };
+    };
+    const isValid = await installer.validateApiKey('test-t-key', 'otel');
+    assert.equal(isValid, true);
+  });
+
+  it('returns false for invalid otel key not containing /t/', async () => {
+    require('https').get = (options, callback) => {
+      const res = {
+        statusCode: 200,
+        on: (event, handler) => {
+          if (event === 'data') {
+            handler(Buffer.from(JSON.stringify({ apiUrl: 'https://api.anosys.ai/cc/ingest' })));
+          }
+          if (event === 'end') {
+            handler();
+          }
+        }
+      };
+      callback(res);
+      return { on: () => {} };
+    };
+    const isValid = await installer.validateApiKey('test-cc-key', 'otel');
+    assert.equal(isValid, false);
+  });
+
+  it('returns false when request fails with error', async () => {
+    require('https').get = (options, callback) => {
+      const req = {
+        on: (event, handler) => {
+          if (event === 'error') {
+            process.nextTick(() => handler(new Error('Network error')));
+          }
+        },
+        destroy: () => {}
+      };
+      return req;
+    };
+    const isValid = await installer.validateApiKey('test-err-key', 'claudecode');
+    assert.equal(isValid, false);
+  });
+});

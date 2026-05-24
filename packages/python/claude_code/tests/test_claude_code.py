@@ -439,3 +439,46 @@ def test_find_all_transcripts_returns_list():
     from anosys_sdk_claude_code.hook_runner import find_all_transcripts
     result = find_all_transcripts()
     assert isinstance(result, list)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# validate_api_key
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_validate_api_key_claudecode_success():
+    from unittest.mock import patch, MagicMock
+    from anosys_sdk_claude_code.installer import validate_api_key
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = b'{"apiUrl": "https://api.anosys.ai/cc/ingest"}'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        assert validate_api_key("valid-cc", "claudecode") is True
+        assert validate_api_key("valid-cc", "cc") is True
+        assert validate_api_key("valid-cc", "otel") is False
+
+
+def test_validate_api_key_otel_success():
+    from unittest.mock import patch, MagicMock
+    from anosys_sdk_claude_code.installer import validate_api_key
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = b'{"apiUrl": "https://api.anosys.ai/t/ingest"}'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        assert validate_api_key("valid-otel", "otel") is True
+        assert validate_api_key("valid-otel", "t") is True
+        assert validate_api_key("valid-otel", "claudecode") is False
+
+
+def test_validate_api_key_failure():
+    from unittest.mock import patch
+    from anosys_sdk_claude_code.installer import validate_api_key
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_urlopen.side_effect = Exception("Network error")
+        assert validate_api_key("any", "claudecode") is False

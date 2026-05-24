@@ -168,3 +168,34 @@ def get_anosys_hook_command(settings: dict) -> Optional[str]:
             if _is_anosys_hook_entry(h):
                 return h.get("command")
     return None
+
+
+def validate_api_key(api_key: str, key_type: str) -> bool:
+    if not api_key:
+        return False
+    try:
+        import urllib.request
+        import urllib.parse
+        import json
+
+        url = f"https://console.anosys.ai/api/resolveapikeys?apikey={urllib.parse.quote(api_key)}"
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "anosys-claude-code-installer"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status < 200 or response.status >= 300:
+                return False
+            data = json.loads(response.read().decode('utf-8'))
+            api_url = data.get("apiUrl")
+            if not api_url:
+                return False
+
+            lower_type = str(key_type).lower()
+            if lower_type in ("claudecode", "cc"):
+                return "/cc/" in api_url
+            elif lower_type in ("otel", "t"):
+                return "/t/" in api_url
+            return False
+    except Exception:
+        return False
