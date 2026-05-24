@@ -7,13 +7,7 @@ Covers:
 - hook_runner: state helpers, pending records (file I/O mocked via tmp dirs)
 """
 
-import json
-import os
-import tempfile
 import time
-from pathlib import Path
-
-import pytest
 
 from anosys_sdk_claude_code.mapper import (
     INTEGRATION_VERSION,

@@ -11,7 +11,6 @@ Covers:
 """
 
 import json
-import pytest
 
 from anosys_sdk_openai_agents.mapping import (
     AGENTS_KEY_MAPPING,

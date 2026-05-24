@@ -10,7 +10,6 @@ Covers:
 """
 
 import json
-import pytest
 
 from anosys_sdk_openai.hooks import (
     deserialize_attributes,
