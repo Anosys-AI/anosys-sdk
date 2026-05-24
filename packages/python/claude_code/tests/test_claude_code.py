@@ -74,16 +74,17 @@ def test_transform_record_filters_sentinel():
 
 def test_update_env_merges():
     settings: dict = {"env": {"EXISTING_KEY": "existing"}}
-    new_env = {"ANOSYS_HOOK_ENDPOINT_URL": "https://example.com"}
+    new_env = {"ANOSYS_HOOK_APIKEY": "my-api-key"}
     result = update_env(settings, new_env)
-    assert result["env"]["ANOSYS_HOOK_ENDPOINT_URL"] == "https://example.com"
+    assert result["env"]["ANOSYS_HOOK_APIKEY"] == "my-api-key"
     assert result["env"]["EXISTING_KEY"] == "existing"
 
 
 def test_update_env_strips_old_anosys_keys():
     settings: dict = {"env": {"ANOSYS_HOOK_ENDPOINT_URL": "old", "ANOSYS_HOOK_API_KEY": "old-key"}}
-    result = update_env(settings, {"ANOSYS_HOOK_ENDPOINT_URL": "new"})
-    assert result["env"]["ANOSYS_HOOK_ENDPOINT_URL"] == "new"
+    result = update_env(settings, {"ANOSYS_HOOK_APIKEY": "new-api-key"})
+    assert result["env"]["ANOSYS_HOOK_APIKEY"] == "new-api-key"
+    assert "ANOSYS_HOOK_ENDPOINT_URL" not in result["env"]
     assert "ANOSYS_HOOK_API_KEY" not in result["env"]
 
 
