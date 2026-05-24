@@ -86,7 +86,8 @@ async function cmdInstall(args) {
     newEnv.OTEL_METRICS_EXPORTER = 'otlp';
     newEnv.OTEL_LOGS_EXPORTER = 'otlp';
     newEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf';
-    newEnv.OTEL_EXPORTER_OTLP_ANOSYS_APIKEY = otelApiKey;
+    newEnv.OTEL_EXPORTER_OTLP_ENDPOINT = INGESTION_URL;
+    newEnv.OTEL_EXPORTER_OTLP_HEADERS = `anosys-apikey=${otelApiKey}`;
   }
 
   if (autoUpdate) {
@@ -163,7 +164,7 @@ function cmdStatus() {
     console.log(`  Command: ${cmd}`);
     const env = settings.env || {};
     const hasLogsKey = 'ANOSYS_HOOK_APIKEY' in env;
-    const hasOtelKey = 'OTEL_EXPORTER_OTLP_ANOSYS_APIKEY' in env;
+    const hasOtelKey = 'OTEL_EXPORTER_OTLP_HEADERS' in env;
     const redaction = env.REDACTION || 'false';
     console.log(`  Ingestion URL: ${INGESTION_URL}`);
     console.log(`  Logs API key: ${hasLogsKey ? 'set' : 'not set'}`);

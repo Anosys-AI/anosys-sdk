@@ -76,7 +76,8 @@ def cmd_install(args: argparse.Namespace) -> None:
         new_env["OTEL_METRICS_EXPORTER"] = "otlp"
         new_env["OTEL_LOGS_EXPORTER"] = "otlp"
         new_env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf"
-        new_env["OTEL_EXPORTER_OTLP_ANOSYS_APIKEY"] = otel_api_key
+        new_env["OTEL_EXPORTER_OTLP_ENDPOINT"] = INGESTION_URL
+        new_env["OTEL_EXPORTER_OTLP_HEADERS"] = f"anosys-apikey={otel_api_key}"
 
     if auto_update:
         print(f"\nUpdating {SETTINGS_PATH} ...")
@@ -147,7 +148,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         print(f"  Command: {cmd}")
         env = settings.get("env", {})
         has_logs_key = "ANOSYS_HOOK_APIKEY" in env
-        has_otel_key = "OTEL_EXPORTER_OTLP_ANOSYS_APIKEY" in env
+        has_otel_key = "OTEL_EXPORTER_OTLP_HEADERS" in env
         redaction = env.get("REDACTION", "false")
         print(f"  Ingestion URL: {INGESTION_URL}")
         print(f"  Logs API key: {'set' if has_logs_key else 'not set'}")

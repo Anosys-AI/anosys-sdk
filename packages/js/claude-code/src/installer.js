@@ -23,7 +23,8 @@ const ANOSYS_ENV_KEYS = new Set([
   'OTEL_LOGS_EXPORTER',
   'OTEL_EXPORTER_OTLP_PROTOCOL',
   'OTEL_EXPORTER_OTLP_ENDPOINT',
-  'OTEL_EXPORTER_OTLP_ANOSYS_APIKEY',
+  'OTEL_EXPORTER_OTLP_HEADERS',
+  'OTEL_EXPORTER_OTLP_ANOSYS_APIKEY', // legacy — kept for clean uninstall
 ]);
 
 const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');
