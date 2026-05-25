@@ -164,8 +164,33 @@ def cmd_status(args: argparse.Namespace) -> None:
         has_otel_key = "OTEL_EXPORTER_OTLP_HEADERS" in env
         redaction = env.get("REDACTION", "false")
         print(f"  Ingestion URL: {INGESTION_URL}")
-        print(f"  Logs API key: {'set' if has_logs_key else 'not set'}")
-        print(f"  OTEL API key: {'set' if has_otel_key else 'not set'}")
+
+        if has_logs_key:
+            api_key = env.get("ANOSYS_HOOK_APIKEY")
+            print("Validating Logs API key...")
+            if not validate_api_key(api_key, "claudecode"):
+                print("⚠️  Warning: Logs API key validation failed (invalid key or incompatible type).")
+            else:
+                print("✅ Logs API key is valid.")
+        else:
+            print("  Logs API key: not set")
+
+        if has_otel_key:
+            otel_headers = env.get("OTEL_EXPORTER_OTLP_HEADERS", "")
+            import re
+            match = re.search(r"anosys-apikey=(.*)", otel_headers)
+            otel_api_key = match.group(1) if match else None
+            if otel_api_key:
+                print("Validating OTEL API key...")
+                if not validate_api_key(otel_api_key, "otel"):
+                    print("⚠️  Warning: OTEL API key validation failed (invalid key or incompatible type).")
+                else:
+                    print("✅ OTEL API key is valid.")
+            else:
+                print("  OTEL API key: set (unable to extract key)")
+        else:
+            print("  OTEL API key: not set")
+
         print(f"  Redaction: {redaction}")
     else:
         print("AnoSys hook is NOT installed.")

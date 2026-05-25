@@ -175,7 +175,7 @@ function cmdUninstall() {
   console.log('  AnoSys hook removed successfully.');
 }
 
-function cmdStatus() {
+async function cmdStatus() {
   const settings = loadSettings();
   if (hasAnosysHook(settings)) {
     const cmd = getAnosysHookCommand(settings);
@@ -186,8 +186,38 @@ function cmdStatus() {
     const hasOtelKey = 'OTEL_EXPORTER_OTLP_HEADERS' in env;
     const redaction = env.REDACTION || 'false';
     console.log(`  Ingestion URL: ${INGESTION_URL}`);
-    console.log(`  Logs API key: ${hasLogsKey ? 'set' : 'not set'}`);
-    console.log(`  OTEL API key: ${hasOtelKey ? 'set' : 'not set'}`);
+
+    if (hasLogsKey) {
+      console.log('Validating Logs API key...');
+      const isValid = await validateApiKey(env.ANOSYS_HOOK_APIKEY, 'claudecode');
+      if (!isValid) {
+        console.warn('⚠️  Warning: Logs API key validation failed (invalid key or incompatible type).');
+      } else {
+        console.log('✅ Logs API key is valid.');
+      }
+    } else {
+      console.log('  Logs API key: not set');
+    }
+
+    if (hasOtelKey) {
+      const otelHeaders = env.OTEL_EXPORTER_OTLP_HEADERS || '';
+      const otelMatch = otelHeaders.match(/anosys-apikey=(.*)/);
+      const otelApiKey = otelMatch ? otelMatch[1] : null;
+      if (otelApiKey) {
+        console.log('Validating OTEL API key...');
+        const isValid = await validateApiKey(otelApiKey, 'otel');
+        if (!isValid) {
+          console.warn('⚠️  Warning: OTEL API key validation failed (invalid key or incompatible type).');
+        } else {
+          console.log('✅ OTEL API key is valid.');
+        }
+      } else {
+        console.log('  OTEL API key: set (unable to extract key)');
+      }
+    } else {
+      console.log('  OTEL API key: not set');
+    }
+
     console.log(`  Redaction: ${redaction}`);
   } else {
     console.log('AnoSys hook is NOT installed.');
@@ -248,7 +278,7 @@ async function main() {
         cmdUninstall();
         break;
       case 'status':
-        cmdStatus();
+        await cmdStatus();
         break;
       case 'run':
         await cmdRun();
