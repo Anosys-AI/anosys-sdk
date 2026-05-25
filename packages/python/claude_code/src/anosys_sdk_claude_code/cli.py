@@ -203,6 +203,15 @@ def cmd_run(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+    try:
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(
         prog="anosys-claude-code",
         description="AnoSys observability hook for Claude Code"
