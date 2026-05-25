@@ -1,0 +1,313 @@
+name: Test Package Install
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-install-js:
+    name: Test JS Install (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        node:
+          - "18"
+          - "20"
+          - "22"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install workspace dependencies
+        working-directory: packages/js
+        run: npm install
+
+      - name: Run unit tests
+        working-directory: packages/js/claude-code
+        run: npm test
+
+      - name: Pack npm package
+        working-directory: packages/js/claude-code
+        run: npm pack
+
+      - name: Install package globally
+        shell: bash
+        run: |
+          FILE=$(ls packages/js/claude-code/*.tgz | head -n 1)
+          npm install -g "$FILE"
+
+      - name: Verify CLI command execution (status)
+        shell: bash
+        run: |
+          anosys-sdk-claude-code status
+
+      - name: Perform non-interactive installation
+        shell: bash
+        run: |
+          anosys-sdk-claude-code install --api-key test-logs-key --otel-key test-otel-key --auto-update --no-redaction
+
+      - name: Validate configuration schema and contents
+        shell: bash
+        run: |
+          node -e '
+          const fs = require("fs");
+          const path = require("path");
+          const os = require("os");
+          const settingsPath = path.join(os.homedir(), ".claude", "settings.json");
+          if (!fs.existsSync(settingsPath)) {
+            console.error("Error: settings.json does not exist");
+            process.exit(1);
+          }
+          const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+
+          // Assert env keys
+          const env = settings.env || {};
+          const expectedEnv = {
+            ANOSYS_HOOK_DRY_RUN: "false",
+            ANOSYS_HOOK_APIKEY: "test-logs-key",
+            CLAUDE_CODE_ENABLE_TELEMETRY: "1",
+            OTEL_SERVICE_NAME: "claude-code",
+            OTEL_TRACES_EXPORTER: "otlp",
+            OTEL_METRICS_EXPORTER: "otlp",
+            OTEL_LOGS_EXPORTER: "otlp",
+            OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
+            OTEL_EXPORTER_OTLP_ENDPOINT: "https://api.anosys.ai/ingestion",
+            OTEL_EXPORTER_OTLP_HEADERS: "anosys-apikey=test-otel-key"
+          };
+          for (const [key, val] of Object.entries(expectedEnv)) {
+            if (env[key] !== val) {
+              console.error(`Mismatch for env.${key}: expected "${val}", got "${env[key]}"`);
+              process.exit(1);
+            }
+          }
+
+          // Assert hooks
+          const stopHooks = (settings.hooks && settings.hooks.Stop) || [];
+          let found = false;
+          for (const group of stopHooks) {
+            if (group && Array.isArray(group.hooks)) {
+              for (const hook of group.hooks) {
+                if (hook.owner === "anosys" && hook.type === "command" && hook.command === "npx anosys-sdk-claude-code run") {
+                  found = true;
+                }
+              }
+            }
+          }
+          if (!found) {
+            console.error("Error: anosys hook command not found in settings.json hooks structure");
+            process.exit(1);
+          }
+          console.log("Validation successful! settings.json matches schema.");
+          '
+
+      - name: Perform non-interactive uninstallation
+        shell: bash
+        run: |
+          anosys-sdk-claude-code uninstall
+
+      - name: Validate clean uninstallation
+        shell: bash
+        run: |
+          node -e '
+          const fs = require("fs");
+          const path = require("path");
+          const os = require("os");
+          const settingsPath = path.join(os.homedir(), ".claude", "settings.json");
+          if (!fs.existsSync(settingsPath)) {
+            console.log("settings.json removed or not present (valid)");
+            process.exit(0);
+          }
+          const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+          const env = settings.env || {};
+          const keys = [
+            "ANOSYS_HOOK_DRY_RUN",
+            "ANOSYS_HOOK_APIKEY",
+            "CLAUDE_CODE_ENABLE_TELEMETRY",
+            "OTEL_SERVICE_NAME",
+            "OTEL_TRACES_EXPORTER",
+            "OTEL_METRICS_EXPORTER",
+            "OTEL_LOGS_EXPORTER",
+            "OTEL_EXPORTER_OTLP_PROTOCOL",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_HEADERS"
+          ];
+          for (const key of keys) {
+            if (key in env) {
+              console.error(`Error: key "${key}" still present in env after uninstall`);
+              process.exit(1);
+            }
+          }
+          const stopHooks = (settings.hooks && settings.hooks.Stop) || [];
+          for (const group of stopHooks) {
+            if (group && Array.isArray(group.hooks)) {
+              for (const hook of group.hooks) {
+                if (hook.owner === "anosys") {
+                  console.error("Error: anosys hook still present after uninstall");
+                  process.exit(1);
+                }
+              }
+            }
+          }
+          console.log("Uninstall validation successful! All anosys entries cleared.");
+          '
+
+  test-install-python:
+    name: Test Python Install (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        python:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install build tool
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build package wheel
+        working-directory: packages/python/claude_code
+        run: python -m build
+
+      - name: Install package
+        shell: bash
+        run: |
+          python -m pip install packages/python/claude_code/dist/*.whl
+
+      - name: Verify CLI command execution (status)
+        shell: bash
+        run: |
+          anosys-claude-code status
+
+      - name: Perform non-interactive installation
+        shell: bash
+        run: |
+          anosys-claude-code install --api-key test-logs-key --otel-key test-otel-key --auto-update --no-redaction
+
+      - name: Validate configuration schema and contents
+        shell: bash
+        run: |
+          python -c '
+          import json
+          import os
+
+          settings_path = os.path.expanduser("~/.claude/settings.json")
+          if not os.path.exists(settings_path):
+              raise FileNotFoundError("settings.json does not exist")
+
+          with open(settings_path, "r", encoding="utf-8") as fh:
+              settings = json.load(fh)
+
+          # Assert env keys
+          env = settings.get("env", {})
+          expected_env = {
+              "ANOSYS_HOOK_DRY_RUN": "false",
+              "ANOSYS_HOOK_APIKEY": "test-logs-key",
+              "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+              "OTEL_SERVICE_NAME": "claude-code",
+              "OTEL_TRACES_EXPORTER": "otlp",
+              "OTEL_METRICS_EXPORTER": "otlp",
+              "OTEL_LOGS_EXPORTER": "otlp",
+              "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+              "OTEL_EXPORTER_OTLP_ENDPOINT": "https://api.anosys.ai/ingestion",
+              "OTEL_EXPORTER_OTLP_HEADERS": "anosys-apikey=test-otel-key"
+          }
+          for key, val in expected_env.items():
+              if env.get(key) != val:
+                  raise ValueError(f"Mismatch for env.{key}: expected {val}, got {env.get(key)}")
+
+          # Assert hooks
+          stop_hooks = settings.get("hooks", {}).get("Stop", [])
+          found = False
+          for group in stop_hooks:
+              if isinstance(group, dict) and isinstance(group.get("hooks"), list):
+                  for hook in group["hooks"]:
+                      if (hook.get("owner") == "anosys" and 
+                          hook.get("type") == "command" and 
+                          hook.get("command") == "anosys-claude-code run"):
+                          found = True
+
+          if not found:
+              raise ValueError("anosys hook command not found in settings.json hooks structure")
+
+          print("Python validation successful! settings.json matches schema.")
+          '
+
+      - name: Perform non-interactive uninstallation
+        shell: bash
+        run: |
+          anosys-claude-code uninstall
+
+      - name: Validate clean uninstallation
+        shell: bash
+        run: |
+          python -c '
+          import json
+          import os
+
+          settings_path = os.path.expanduser("~/.claude/settings.json")
+          if not os.path.exists(settings_path):
+              print("settings.json not present (valid)")
+              exit(0)
+
+          with open(settings_path, "r", encoding="utf-8") as fh:
+              settings = json.load(fh)
+
+          env = settings.get("env", {})
+          keys = [
+              "ANOSYS_HOOK_DRY_RUN",
+              "ANOSYS_HOOK_APIKEY",
+              "CLAUDE_CODE_ENABLE_TELEMETRY",
+              "OTEL_SERVICE_NAME",
+              "OTEL_TRACES_EXPORTER",
+              "OTEL_METRICS_EXPORTER",
+              "OTEL_LOGS_EXPORTER",
+              "OTEL_EXPORTER_OTLP_PROTOCOL",
+              "OTEL_EXPORTER_OTLP_ENDPOINT",
+              "OTEL_EXPORTER_OTLP_HEADERS"
+          ]
+          for key in keys:
+              if key in env:
+                  raise ValueError(f"Error: key {key} still present in env after uninstall")
+
+          stop_hooks = settings.get("hooks", {}).get("Stop", [])
+          for group in stop_hooks:
+              if isinstance(group, dict) and isinstance(group.get("hooks"), list):
+                  for hook in group["hooks"]:
+                      if hook.get("owner") == "anosys":
+                          raise ValueError("Error: anosys hook still present after uninstall")
+
+          print("Python uninstall validation successful! All entries cleared.")
+          '
