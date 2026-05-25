@@ -2,10 +2,11 @@
 AnoSys Claude Code integration — observability hook for Claude Code sessions.
 """
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version
 from anosys_sdk_claude_code.installer import update_env, update_stop_hooks
 from anosys_sdk_claude_code.mapper import transform_record
 
-from importlib.metadata import version, PackageNotFoundError
 
 try:
     __version__ = version("anosys-claude-code")
