@@ -1,17 +1,28 @@
 # Anosys SDK
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
-Python SDK for integrating with [AnoSys](https://anosys.ai) - AI observability and monitoring platform.
+SDKs for integrating with [AnoSys](https://anosys.ai) - AI observability and monitoring platform.
 
 ## Packages
 
+### Python
+
 | Package | Description | Install |
 |---------|-------------|---------|
-| [`anosys-sdk-core`](./packages/core/) | Shared core utilities | `pip install anosys-sdk-core` |
-| [`anosys-sdk-openai`](./packages/openai/) | OpenAI SDK instrumentation | `pip install anosys-sdk-openai` |
-| [`anosys-sdk-openai-agents`](./packages/openai_agents/) | OpenAI Agents SDK instrumentation | `pip install anosys-sdk-openai-agents` |
+| [`anosys-sdk-core`](./packages/python/core/) | Shared core utilities | `pip install anosys-sdk-core` |
+| [`anosys-sdk-openai`](./packages/python/openai/) | OpenAI SDK instrumentation | `pip install anosys-sdk-openai` |
+| [`anosys-sdk-openai-agents`](./packages/python/openai_agents/) | OpenAI Agents SDK instrumentation | `pip install anosys-sdk-openai-agents` |
+| [`anosys-claude-code`](./packages/python/claude_code/) | Claude Code observability hook | `pip install anosys-claude-code` |
+
+### JavaScript
+
+| Package | Description | Install |
+|---------|-------------|---------|
+| [`anosys-sdk-openai`](./packages/js/openai/) | OpenAI SDK instrumentation | `npm install anosys-sdk-openai` |
+| [`anosys-sdk-openai-agents`](./packages/js/openai-agents/) | OpenAI Agents SDK instrumentation | `npm install anosys-sdk-openai-agents` |
+| [`anosys-sdk-claude-code`](./packages/js/claude-code/) | Claude Code observability hook | `npm install anosys-sdk-claude-code` |
 
 ## Quick Start
 

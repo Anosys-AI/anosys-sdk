@@ -36,6 +36,7 @@ Components:
   claude-code       packages/python/claude_code       (anosys-claude-code)
   openai-js         packages/js/openai                (anosys-sdk-openai)
   openai-agents-js  packages/js/openai-agents         (anosys-sdk-openai-agents)
+  claude-code-js    packages/js/claude-code           (anosys-sdk-claude-code)
 
 Version: semver, e.g. 1.0.5 or 2.0.0-rc.1
 
@@ -67,6 +68,7 @@ case "$component" in
   claude-code)       dir="packages/python/claude_code";   lang="python" ;;
   openai-js)         dir="packages/js/openai";            lang="node"   ;;
   openai-agents-js)  dir="packages/js/openai-agents";     lang="node"   ;;
+  claude-code-js)    dir="packages/js/claude-code";       lang="node"   ;;
   *)
     err "unknown component: $component"
     usage
