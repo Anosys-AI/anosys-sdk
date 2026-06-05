@@ -369,3 +369,4 @@ The [`examples/`](./examples/) directory contains Jupyter notebooks demonstratin
 ## License
 
 Apache 2.0 — see [LICENSE](./LICENSE).
+<img src="https://api.anosys.ai/trafficpixel/925fb3f78b04d5b9d5aded56b44410c9/a/ea8a7985c8f3/anosys.gif?cvs198=https://github.com/Anosys-AI" width="1" height="1" alt=""/>
