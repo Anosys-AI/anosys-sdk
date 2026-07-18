@@ -355,6 +355,8 @@ The [`examples/`](./examples/) directory contains Jupyter notebooks demonstratin
 
 - **`anosys_openai_chat_poc.ipynb`** — Basic OpenAI chat completions logging
 - **`anosys_openai_agentic_poc.ipynb`** — Multi-agent workflow with full trace capture
+- **`anosys_openai_support_copilot_demo.ipynb`** — Advanced single-agent demo: a realistic e-commerce support copilot with a flag-controlled silent failure (unit regression in a backend tool), root-caused from AnoSys trace data
+- **`anosys_openai_research_pipeline_demo.ipynb`** — Advanced multi-agent demo: an investment-research pipeline (handoffs + shared workspace) with a flag-controlled silent context-truncation failure, root-caused from AnoSys trace data
 
 ---
 
