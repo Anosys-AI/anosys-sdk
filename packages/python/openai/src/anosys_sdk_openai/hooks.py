@@ -288,8 +288,10 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
                 elif 'image' in object_type:
                     output_type = 'image'
             
-            # JSON mode check
-            if invocation_params.get('response_format', {}).get('type') == 'json_object':
+            # JSON mode check (invocation_params is None for non-LLM spans,
+            # e.g. custom tool/agent spans emitted by user code)
+            if isinstance(invocation_params, dict) and \
+                    invocation_params.get('response_format', {}).get('type') == 'json_object':
                 output_type = 'json'
             
             # Finish reasons
