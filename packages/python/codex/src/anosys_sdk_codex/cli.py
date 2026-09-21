@@ -11,6 +11,7 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -43,13 +44,18 @@ def cmd_install(args: argparse.Namespace) -> None:
     print("\nAnoSys OpenAI Codex Hook Installer")
     print("=" * 45)
 
+    yes = getattr(args, "yes", False)
+
     redaction = args.redaction
     if not redaction and not args.no_redaction:
-        choice = _prompt("Enable content redaction? (y/N): ", "n").lower()
-        redaction = choice == "y"
+        if yes:
+            redaction = False
+        else:
+            choice = _prompt("Enable content redaction? (y/N): ", "n").lower()
+            redaction = choice == "y"
 
-    api_key = args.api_key
-    if not api_key:
+    api_key = args.api_key or os.environ.get("ANOSYS_API_KEY") or os.environ.get("ANOSYS_HOOK_APIKEY") or ""
+    if not api_key and not yes:
         api_key = _prompt("AnoSys API key for logs (leave blank to skip): ")
 
     if api_key:
@@ -61,8 +67,11 @@ def cmd_install(args: argparse.Namespace) -> None:
 
     auto_update = args.auto_update
     if auto_update is None:
-        choice = _prompt("Would you like to automatically update ~/.codex/config.toml? (Y/n): ", "y").lower()
-        auto_update = choice != "n"
+        if yes:
+            auto_update = True
+        else:
+            choice = _prompt("Would you like to automatically update ~/.codex/config.toml? (Y/n): ", "y").lower()
+            auto_update = choice != "n"
 
     config_path = get_config_path()
     env_path = get_env_path()
@@ -164,6 +173,7 @@ def main(argv: list[str] | None = None) -> None:
 
     p_install = subparsers.add_parser("install", help="Install AnoSys hook into ~/.codex/config.toml")
     p_install.add_argument("--api-key", help="AnoSys logs API key")
+    p_install.add_argument("-y", "--yes", action="store_true", default=False, help="Automatic yes to prompts (non-interactive)")
     p_install.add_argument("--redaction", action="store_true", default=False, help="Enable content redaction")
     p_install.add_argument("--no-redaction", action="store_true", default=False, help="Disable content redaction")
     p_install.add_argument("--auto-update", dest="auto_update", action="store_true", default=None)

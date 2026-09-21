@@ -194,3 +194,18 @@ def test_fallback_turn():
     assert fb["user_prompt"] == "fallback prompt"
     assert fb["assistant_output"] == "fallback answer"
     assert fb["model"] == "gpt-4o-mini"
+
+
+def test_cmd_install_non_interactive(monkeypatch, tmp_path):
+    from unittest.mock import patch
+    from anosys_sdk_codex.cli import main
+    
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    
+    with patch("anosys_sdk_codex.cli.validate_api_key", return_value=True):
+        main(["install", "--api-key", "test-py-key-12345", "-y"])
+        
+    env_file = tmp_path / ".codex" / "anosys-env.sh"
+    assert env_file.is_file()
+    assert "test-py-key-12345" in env_file.read_text(encoding="utf-8")

@@ -197,3 +197,25 @@ test('extractTurnFallback extracts fallback data', () => {
   assert.equal(fb.assistant_output, 'fallback ans');
   assert.equal(fb.model, 'o3-mini');
 });
+
+test('cmdInstall runs non-interactively with -y and --api-key', async () => {
+  const { cmdInstall } = require('../src/cli');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-cli-test-'));
+  const origHome = process.env.HOME;
+  const origUserProfile = process.env.USERPROFILE;
+  process.env.HOME = tmpDir;
+  process.env.USERPROFILE = tmpDir;
+
+  try {
+    // Should complete cleanly without any prompts
+    await cmdInstall(['install', '--api-key', 'test-api-key-12345', '-y']);
+    const envFile = path.join(tmpDir, '.codex', 'anosys-env.sh');
+    assert.ok(fs.existsSync(envFile));
+    const envContent = fs.readFileSync(envFile, 'utf8');
+    assert.ok(envContent.includes('test-api-key-12345'));
+  } finally {
+    process.env.HOME = origHome;
+    process.env.USERPROFILE = origUserProfile;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

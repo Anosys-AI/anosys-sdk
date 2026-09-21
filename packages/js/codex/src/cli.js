@@ -33,17 +33,25 @@ async function cmdInstall(args) {
   console.log('\nAnoSys OpenAI Codex Hook Installer (JavaScript)');
   console.log('=============================================');
 
+  const nonInteractive = args.includes('-y') || args.includes('--yes') || args.includes('--non-interactive');
+
   let redaction = args.includes('--redaction');
   if (!redaction && !args.includes('--no-redaction')) {
-    const choice = (await prompt('Enable content redaction? (y/N): ', 'n')).toLowerCase();
-    redaction = choice === 'y';
+    if (nonInteractive) {
+      redaction = false;
+    } else {
+      const choice = (await prompt('Enable content redaction? (y/N): ', 'n')).toLowerCase();
+      redaction = choice === 'y';
+    }
   }
 
   let apiKey = '';
   const keyIdx = args.indexOf('--api-key');
   if (keyIdx !== -1 && args[keyIdx + 1]) {
     apiKey = args[keyIdx + 1].trim();
-  } else {
+  } else if (process.env.ANOSYS_API_KEY || process.env.ANOSYS_HOOK_APIKEY) {
+    apiKey = (process.env.ANOSYS_API_KEY || process.env.ANOSYS_HOOK_APIKEY).trim();
+  } else if (!nonInteractive) {
     apiKey = await prompt('AnoSys API key for logs (leave blank to skip): ');
   }
 
@@ -61,8 +69,12 @@ async function cmdInstall(args) {
   if (args.includes('--no-auto-update')) {
     autoUpdate = false;
   } else if (!args.includes('--auto-update')) {
-    const choice = (await prompt('Would you like to automatically update ~/.codex/config.toml? (Y/n): ', 'y')).toLowerCase();
-    autoUpdate = choice !== 'n';
+    if (nonInteractive) {
+      autoUpdate = true;
+    } else {
+      const choice = (await prompt('Would you like to automatically update ~/.codex/config.toml? (Y/n): ', 'y')).toLowerCase();
+      autoUpdate = choice !== 'n';
+    }
   }
 
   const configPath = getConfigPath();
@@ -157,12 +169,16 @@ async function main() {
   } else if (cmd === 'run') {
     await run();
   } else {
-    console.log('Usage: anosys-codex <install|uninstall|status|run> [options]');
+    console.log('Usage: anosys-codex <install|uninstall|status|run> [--api-key <key>] [-y|--yes] [--redaction|--no-redaction] [--auto-update|--no-auto-update]');
     process.exit(1);
   }
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = { cmdInstall, cmdUninstall, cmdStatus, main };
