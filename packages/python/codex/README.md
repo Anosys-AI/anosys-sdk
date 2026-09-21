@@ -22,6 +22,7 @@ anosys-codex install
 
 The installer will prompt you for:
 1. **AnoSys API Key for logs**: Your ingestion API key from the [AnoSys Console](https://console.anosys.ai/collect/integrationoptions).
+   > **Pixel Type Requirement**: This key must belong to a **`CC` (Claude Code / Codex CLI)** pixel. The installer automatically validates the key against `https://console.anosys.ai/api/resolveapikeys` to ensure it resolves to a `/cc/` endpoint. Keys belonging to `T` (OTEL) or Web Traffic (`a`/`g`) pixels are rejected with a warning.
 2. **Content Redaction**: If enabled, sensitive conversation content (prompts, answers, code, tool inputs/outputs) will be redacted and replaced with `[REDACTED]`. Only metadata and token statistics will be tracked.
 3. **Automatic Config Update**: Confirms whether to automatically write `notify = ["anosys-codex run"]` to `~/.codex/config.toml` (and creates a `.bak` backup first).
 

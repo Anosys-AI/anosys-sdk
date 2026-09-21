@@ -219,3 +219,47 @@ test('cmdInstall runs non-interactively with -y and --api-key', async () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('validateApiKey returns true for CC pixel and false for non-CC pixel', async () => {
+  const { validateApiKey } = require('../src/installer');
+  const https = require('https');
+  const origGet = https.get;
+
+  try {
+    // Mock CC pixel response
+    https.get = (url, opts, cb) => {
+      const callback = typeof opts === 'function' ? opts : cb;
+      const res = {
+        statusCode: 200,
+        on: (ev, handler) => {
+          if (ev === 'data') handler(JSON.stringify({ apiUrl: 'https://api.anosys.ai/ingestion/123/cc/456' }));
+          if (ev === 'end') handler();
+        }
+      };
+      callback(res);
+      return { on: () => {} };
+    };
+
+    const isCc = await validateApiKey('cc-key', 'cc');
+    assert.equal(isCc, true);
+
+    // Mock T (OTEL) pixel response
+    https.get = (url, opts, cb) => {
+      const callback = typeof opts === 'function' ? opts : cb;
+      const res = {
+        statusCode: 200,
+        on: (ev, handler) => {
+          if (ev === 'data') handler(JSON.stringify({ apiUrl: 'https://api.anosys.ai/ingestion/123/t/456' }));
+          if (ev === 'end') handler();
+        }
+      };
+      callback(res);
+      return { on: () => {} };
+    };
+
+    const isT = await validateApiKey('t-key', 'cc');
+    assert.equal(isT, false);
+  } finally {
+    https.get = origGet;
+  }
+});

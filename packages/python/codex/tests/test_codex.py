@@ -209,3 +209,27 @@ def test_cmd_install_non_interactive(monkeypatch, tmp_path):
     env_file = tmp_path / ".codex" / "anosys-env.sh"
     assert env_file.is_file()
     assert "test-py-key-12345" in env_file.read_text(encoding="utf-8")
+
+
+def test_validate_api_key_cc_pixel():
+    from unittest.mock import patch, MagicMock
+    from anosys_sdk_codex.installer import validate_api_key
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = b'{"apiUrl": "https://api.anosys.ai/ingestion/123/cc/456"}'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        assert validate_api_key("valid-cc", "cc") is True
+        assert validate_api_key("valid-cc", "codex") is True
+        assert validate_api_key("valid-cc", "otel") is False
+
+    with patch("urllib.request.urlopen") as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = b'{"apiUrl": "https://api.anosys.ai/ingestion/123/t/456"}'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        # Key belongs to T (OTEL) pixel, so CC validation should fail
+        assert validate_api_key("t-key", "cc") is False

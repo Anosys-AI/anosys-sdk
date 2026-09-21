@@ -438,10 +438,11 @@ When a key is **not found** in the mapping, the `reassign()` function allocates 
 
 The SDK performs strict type coercion (Double, Boolean, JSON) before sending data, using a validation table that matches the target Protobuf schema.
 
-| Source (`cvs200`) | Validation Table | Target Schema |
-|---|---|---|
-| `ClaudeCodeHook` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
-| (Everything else) | `OTEL_AI_VALID_TYPES` | `schemaOtelAI.proto` |
+| Source (`cvs200`) | Pixel Type | Validation Table | Target Schema |
+|---|---|---|---|
+| `ClaudeCodeHook` | `CC` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
+| `CodexHook` | `CC` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
+| (Everything else) | `T` / OTEL | `OTEL_AI_VALID_TYPES` | `schemaOtelAI.proto` |
 
 ### Coercion Rules:
 - **Double**: Strictly cast to float (defaults to `0.0` on failure).

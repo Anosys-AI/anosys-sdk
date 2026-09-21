@@ -157,7 +157,7 @@ function removeCodexEnv(customPath) {
   return false;
 }
 
-function validateApiKey(apiKey, keyType = 'codex') {
+function validateApiKey(apiKey, keyType = 'cc') {
   return new Promise(resolve => {
     if (!apiKey) return resolve(false);
     const encoded = encodeURIComponent(apiKey);
@@ -172,7 +172,16 @@ function validateApiKey(apiKey, keyType = 'codex') {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(body);
-          resolve(Boolean(parsed && parsed.apiUrl));
+          const apiUrl = parsed && parsed.apiUrl;
+          if (!apiUrl) return resolve(false);
+          const lower = String(keyType).toLowerCase();
+          if (lower === 'cc' || lower === 'claudecode' || lower === 'codex') {
+            return resolve(apiUrl.includes('/cc/'));
+          }
+          if (lower === 't' || lower === 'otel') {
+            return resolve(apiUrl.includes('/t/'));
+          }
+          return resolve(false);
         } catch (_) {
           resolve(false);
         }

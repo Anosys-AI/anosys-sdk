@@ -57,11 +57,11 @@ async function cmdInstall(args) {
 
   if (apiKey) {
     console.log('Validating Logs API key...');
-    const valid = await validateApiKey(apiKey, 'codex');
+    const valid = await validateApiKey(apiKey, 'cc');
     if (!valid) {
-      console.log('⚠️  Warning: Logs API key validation failed (invalid key or incompatible type).');
+      console.log('⚠️  Warning: Logs API key validation failed: key does not belong to a CC (Claude Code / Codex) pixel or is invalid.');
     } else {
-      console.log('✅ Logs API key is valid.');
+      console.log('✅ Logs API key is valid (CC pixel).');
     }
   }
 

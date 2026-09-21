@@ -232,7 +232,7 @@ def remove_codex_env(path: Path | None = None) -> bool:
     return False
 
 
-def validate_api_key(api_key: str, key_type: str = "codex") -> bool:
+def validate_api_key(api_key: str, key_type: str = "cc") -> bool:
     if not api_key:
         return False
     try:
@@ -250,6 +250,11 @@ def validate_api_key(api_key: str, key_type: str = "codex") -> bool:
             api_url = data.get("apiUrl")
             if not api_url:
                 return False
-            return True
+            lower = str(key_type).lower()
+            if lower in ("cc", "claudecode", "codex"):
+                return "/cc/" in api_url
+            if lower in ("t", "otel"):
+                return "/t/" in api_url
+            return False
     except Exception:
         return False

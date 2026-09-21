@@ -169,6 +169,8 @@ CLI commands: `install` · `uninstall` · `status` · `run`
 
 ### OpenAI Codex — Python
 
+> **Note**: Requires an AnoSys API key for a **`CC` (Claude Code / Codex CLI)** pixel (not `T` / OTEL). The installer automatically validates this during setup.
+
 Install the package and run the setup wizard:
 
 ```bash

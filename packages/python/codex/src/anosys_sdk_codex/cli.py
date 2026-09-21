@@ -60,10 +60,10 @@ def cmd_install(args: argparse.Namespace) -> None:
 
     if api_key:
         print("Validating Logs API key...")
-        if not validate_api_key(api_key, "codex"):
-            print("⚠️  Warning: Logs API key validation failed (invalid key or incompatible type).")
+        if not validate_api_key(api_key, "cc"):
+            print("⚠️  Warning: Logs API key validation failed: key does not belong to a CC (Claude Code / Codex) pixel or is invalid.")
         else:
-            print("✅ Logs API key is valid.")
+            print("✅ Logs API key is valid (CC pixel).")
 
     auto_update = args.auto_update
     if auto_update is None:
