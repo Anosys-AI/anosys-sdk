@@ -405,6 +405,57 @@ OpenAI token breakdowns (input, output, cache read/write, reasoning tokens), and
 | `os_user` | string | Operating system username |
 | `cvs199` | string | JSON-serialized array of all tool calls with arguments and outputs |
 
+---
+
+## 4c. Google Antigravity Hook Schema Mapping
+
+**Source of truth:**
+- Python: `packages/python/antigravity/src/anosys_sdk_antigravity/mapper.py` → `transform_antigravity_turn()`
+- JS: `packages/js/antigravity/src/mapper.js` → `transformAntigravityTurn()`
+
+Google Antigravity CLI/IDE Hook uses the unified generic ingestion format with source tag `cvs200: 'AntigravityHook'`.
+It captures agent turns, planner LLM steps (including Gemini reasoning/thinking), tool calls (`run_command`, `write_to_file`, `replace_file_content`, `view_file`, `search_web`, `browser_subagent`), IDE editor state (active document, cursor line, client timestamp), settings changes, and execution durations.
+
+| Key | Type | Description |
+|---|---|---|
+| `cvs200` | string | `'AntigravityHook'` (source identifier) |
+| `sessionId` / `session_id` | string | Antigravity conversation UUID (`cvs1`) |
+| `uuid` / `event_id` | string | Unique turn identifier (`cvs13`) |
+| `timestamp` | number | Turn start timestamp (unix ms) |
+| `userPrompt` / `user_prompt` | string | Clean user prompt from `<USER_REQUEST>` (`cvs4`) |
+| `assistantText` / `assistant_text`| string | Final assistant completion / response (`cvs5`) |
+| `model` / `primary_model` | string | Model name (e.g. `gemini-2.5-pro`, `gemini-2.5-flash`) (`cvs9`) |
+| `model_provider` | string | Always `'google'` (`cvs17`) |
+| `cwd` | string | Active workspace directory (`cvs12`) |
+| `project` | string | Basename of workspace (`cvs2`) |
+| `active_document` | string | Focused document path in editor (`cvs70`) |
+| `active_document_language` | string | Language identifier (`cvs71`) |
+| `cursor_line` | number | Cursor line number (`cvn25`) |
+| `client_timestamp_iso` | string | Client local ISO timestamp (`cvs72`) |
+| `user_settings_change` | string | User settings change text (`cvs75`) |
+| `termination_reason` | string | Stop termination reason (`cvs6`) |
+| `duration_ms` | number | Turn duration in milliseconds (`cvn6`) |
+| `tool_count` | number | Total tool calls executed (`cvn41`) |
+| `tool_duration_ms` | number | Cumulative tool execution time (ms) (`cvn39`) |
+| `tools_used` | list/array | Array of tool names invoked |
+| `commands` | list/array | Shell commands executed via `run_command` (`cvs90`) |
+| `written_paths` | list/array | Files created or patched (`cvs91`) |
+| `viewed_paths` | list/array | Files viewed (`cvs76`) |
+| `searched_queries` | list/array | Web and grep queries executed (`cvs77`) |
+| `subagents_spawned` | list/array | Subagent tasks launched (`cvs78`) |
+| `has_thinking` | boolean | True if Gemini reasoning/thinking is present (`cvb2`) |
+| `llm_step_count` | number | Number of model invocations in the turn (`cvn26`) |
+| `fully_idle` | boolean | Background tasks completion flag (`cvb3`) |
+| `execution_num` | number | Stop execution sequence number (`cvn8`) |
+| `transcript_path` | string | Path to session transcript JSONL (`cvs88`) |
+| `artifact_directory` | string | Path to session artifact directory (`cvs89`) |
+| `workspace_paths` | list/array | All workspace folder paths (`cvs93`) |
+| `integration_version` | string | Antigravity package version (`cvs32`) |
+| `os_user` | string | Operating system username (`cvs33`) |
+| `cvs199` | string | JSON-serialized array of all planner steps, tool calls, and results |
+
+---
+
 ## 5. Source Tag Values (`cvs200`)
 
 | Package | Path | `cvs200` value |
@@ -419,6 +470,7 @@ OpenAI token breakdowns (input, output, cache read/write, reasoning tokens), and
 | JS Agents (OTel) | `extractOtelSpanInfo()` | `openAI_Agents_Telemetry` |
 | Claude Code | `transform_record()` | `ClaudeCodeHook` |
 | Codex CLI | `transform_codex_turn()` | `CodexHook` |
+| Antigravity CLI / IDE | `transform_antigravity_turn()` | `AntigravityHook` |
 
 ---
 
@@ -444,6 +496,7 @@ The SDK performs strict type coercion (Double, Boolean, JSON) before sending dat
 |---|---|---|---|
 | `ClaudeCodeHook` | `CC` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
 | `CodexHook` | `CC` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
+| `AntigravityHook` | `CC` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
 | (Everything else) | `T` / OTEL | `OTEL_AI_VALID_TYPES` | `schemaOtelAI.proto` |
 
 ### Coercion Rules:

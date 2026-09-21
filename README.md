@@ -22,6 +22,7 @@ Add a few lines of code and every LLM call, agent run, Claude Code, and OpenAI C
 | [`anosys-sdk-openai-agents`](./packages/python/openai_agents/) | 1.0.12 | OpenAI Agents SDK tracing (TracingProcessor) | `pip install anosys-sdk-openai-agents` |
 | [`anosys-claude-code`](./packages/python/claude_code/) | 0.2.8 | Claude Code observability hook & CLI | `pip install anosys-claude-code` |
 | [`anosys-codex`](./packages/python/codex/) | 0.1.0 | OpenAI Codex CLI observability hook & CLI | `pip install anosys-codex` |
+| [`anosys-antigravity`](./packages/python/antigravity/) | 0.1.0 | Google Antigravity CLI/IDE observability hook & CLI | `pip install anosys-antigravity` |
 
 ### JavaScript / Node.js
 
@@ -31,6 +32,7 @@ Add a few lines of code and every LLM call, agent run, Claude Code, and OpenAI C
 | [`anosys-sdk-openai-agents`](./packages/js/openai-agents/) | 1.0.11 | OpenAI Agents SDK tracing (`addTracingProcessor`) | `npm install anosys-sdk-openai-agents` |
 | [`anosys-sdk-claude-code`](./packages/js/claude-code/) | 0.2.5 | Claude Code observability hook & CLI | `npx anosys-sdk-claude-code install` |
 | [`anosys-sdk-codex`](./packages/js/codex/) | 0.1.0 | OpenAI Codex CLI observability hook & CLI | `npx anosys-sdk-codex install` |
+| [`anosys-sdk-antigravity`](./packages/js/antigravity/) | 0.1.0 | Google Antigravity CLI/IDE observability hook & CLI | `npx anosys-sdk-antigravity install` |
 
 ---
 

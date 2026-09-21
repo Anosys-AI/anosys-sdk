@@ -10,6 +10,7 @@ install-py:
 	pip install -e packages/python/openai_agents
 	pip install -e packages/python/claude_code
 	pip install -e packages/python/codex
+	pip install -e packages/python/antigravity
 
 install-py-dev: install-py
 	pip install pytest pytest-asyncio ruff mypy
@@ -20,6 +21,7 @@ test-py:
 	pytest packages/python/openai_agents/tests -v
 	pytest packages/python/claude_code/tests -v
 	pytest packages/python/codex/tests -v
+	pytest packages/python/antigravity/tests -v
 
 lint-py:
 	ruff check packages/python/
@@ -34,6 +36,7 @@ build-py:
 	(cd packages/python/openai_agents && python -m build)
 	(cd packages/python/claude_code && python -m build)
 	(cd packages/python/codex && python -m build)
+	(cd packages/python/antigravity && python -m build)
 
 # ── JavaScript ────────────────────────────────────────────────────────────────
 

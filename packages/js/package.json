@@ -5,7 +5,8 @@
     "claude-code",
     "openai",
     "openai-agents",
-    "codex"
+    "codex",
+    "antigravity"
   ],
   "engines": {
     "node": ">=18.0.0"
