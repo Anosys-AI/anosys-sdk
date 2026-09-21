@@ -53,6 +53,8 @@ function parseArgs(argv) {
       args.apiKey = a.split('=')[1];
     } else if (a.startsWith('--endpoint-url=')) {
       args.endpointUrl = a.split('=')[1];
+    } else if (a === '-h' || a === '--help' || a === 'help') {
+      args.help = true;
     } else if (!a.startsWith('-')) {
       args._.push(a);
     }
@@ -79,7 +81,11 @@ async function cmdInstall(args) {
     }
   }
 
-  let apiKey = args.apiKey || process.env.ANOSYS_HOOK_APIKEY || process.env.ANOSYS_API_KEY || '';
+  let apiKey = args.apiKey
+    || (args._[1] && !args._[1].startsWith('-') ? args._[1] : null)
+    || process.env.ANOSYS_HOOK_APIKEY
+    || process.env.ANOSYS_API_KEY
+    || '';
   if (!apiKey && !yes) {
     apiKey = await promptUser('AnoSys API key for logs (leave blank to skip): ');
   }
@@ -204,7 +210,52 @@ function cmdStatus(args) {
 async function main() {
   const argv = process.argv.slice(2);
   const args = parseArgs(argv);
-  const command = args._[0] || 'help';
+  const command = args._[0] || (args.help ? 'help' : 'help');
+
+  if (args.help) {
+    if (command === 'install') {
+      console.log(`
+Usage: anosys-antigravity install [api_key] [options]
+
+Arguments:
+  api_key               AnoSys logs API key (optional positional argument)
+
+Options:
+  --api-key <key>       AnoSys logs API key (flag)
+  -y, --yes             Automatic yes to prompts (non-interactive mode)
+  --redaction           Enable content redaction
+  --no-redaction        Disable content redaction
+  --workspace           Target workspace .agents/hooks.json
+  --endpoint-url <url>  Custom ingestion endpoint URL
+  -h, --help            Show this help message
+
+Examples:
+  npx anosys-sdk-antigravity install --api-key "YOUR_KEY" -y
+  npx anosys-sdk-antigravity install "YOUR_KEY" -y
+`);
+      process.exit(0);
+    }
+    if (command === 'uninstall') {
+      console.log(`
+Usage: anosys-antigravity uninstall [options]
+
+Options:
+  --workspace           Target workspace .agents/hooks.json
+  -h, --help            Show this help message
+`);
+      process.exit(0);
+    }
+    if (command === 'status') {
+      console.log(`
+Usage: anosys-antigravity status [options]
+
+Options:
+  --workspace           Check workspace .agents/hooks.json
+  -h, --help            Show this help message
+`);
+      process.exit(0);
+    }
+  }
 
   switch (command) {
     case 'install':
@@ -226,20 +277,21 @@ async function main() {
 Usage: anosys-antigravity <command> [options]
 
 Commands:
-  install      Install AnoSys hook into hooks.json
-  uninstall    Remove AnoSys hook from hooks.json
-  status       Check hook installation status
-  run [event]  Execute hook handler
+  install [api_key]    Install AnoSys hook into hooks.json
+  uninstall            Remove AnoSys hook from hooks.json
+  status               Check hook installation status
+  run [event]          Execute hook handler
 
 Options:
-  --api-key <key>       AnoSys API key
+  --api-key <key>       AnoSys API key (or pass as positional argument)
   -y, --yes             Automatic yes to prompts
   --redaction           Enable content redaction
   --no-redaction        Disable content redaction
   --workspace           Target workspace .agents/hooks.json
   --endpoint-url <url>  Custom ingestion endpoint URL
+  -h, --help            Show this help message
 `);
-      process.exit(1);
+      process.exit(args.help ? 0 : 1);
   }
 }
 

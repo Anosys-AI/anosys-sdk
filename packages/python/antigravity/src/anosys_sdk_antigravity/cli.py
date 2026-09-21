@@ -61,7 +61,9 @@ def cmd_install(args: argparse.Namespace) -> None:
             redaction = choice == "y"
 
     api_key = (
-        getattr(args, "api_key", None)
+        getattr(args, "api_key_flag", None)
+        or getattr(args, "api_key", None)
+        or getattr(args, "api_key_pos", None)
         or os.environ.get("ANOSYS_HOOK_APIKEY")
         or os.environ.get("ANOSYS_API_KEY")
         or ""
@@ -194,7 +196,8 @@ def main(argv: list[str] | None = None) -> None:
 
     # install
     p_install = subparsers.add_parser("install", help="Install AnoSys hook into hooks.json")
-    p_install.add_argument("--api-key", help="AnoSys logs API key")
+    p_install.add_argument("api_key_pos", nargs="?", default=None, metavar="api_key", help="AnoSys logs API key (optional positional argument)")
+    p_install.add_argument("--api-key", dest="api_key_flag", default=None, metavar="KEY", help="AnoSys logs API key (flag)")
     p_install.add_argument("-y", "--yes", action="store_true", default=False, help="Non-interactive mode")
     p_install.add_argument("--redaction", action="store_true", default=False, help="Enable content redaction")
     p_install.add_argument("--no-redaction", action="store_true", default=False, help="Disable content redaction")

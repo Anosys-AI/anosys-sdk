@@ -411,3 +411,40 @@ def test_validate_api_key_mock():
         assert validate_api_key("valid_key", "cc") is True
         assert validate_api_key("valid_key", "antigravity") is True
         assert validate_api_key("valid_key", "otel") is False
+
+
+def test_cli_install_with_api_key_flag(tmp_path: Path, monkeypatch):
+    from anosys_sdk_antigravity.cli import main
+
+    hooks_file = tmp_path / "hooks.json"
+    env_file = tmp_path / "anosys-env.json"
+
+    monkeypatch.setattr("anosys_sdk_antigravity.cli.get_hooks_path", lambda workspace=False: hooks_file)
+    monkeypatch.setattr("anosys_sdk_antigravity.cli.get_env_path", lambda workspace=False: env_file)
+    monkeypatch.setattr("anosys_sdk_antigravity.cli.validate_api_key", lambda key, t: True)
+
+    main(["install", "--api-key", "my-secret-key", "-y"])
+
+    assert hooks_file.is_file()
+    assert env_file.is_file()
+    env_data = json.loads(env_file.read_text(encoding="utf-8"))
+    assert env_data["ANOSYS_HOOK_APIKEY"] == "my-secret-key"
+
+
+def test_cli_install_with_api_key_positional(tmp_path: Path, monkeypatch):
+    from anosys_sdk_antigravity.cli import main
+
+    hooks_file = tmp_path / "hooks.json"
+    env_file = tmp_path / "anosys-env.json"
+
+    monkeypatch.setattr("anosys_sdk_antigravity.cli.get_hooks_path", lambda workspace=False: hooks_file)
+    monkeypatch.setattr("anosys_sdk_antigravity.cli.get_env_path", lambda workspace=False: env_file)
+    monkeypatch.setattr("anosys_sdk_antigravity.cli.validate_api_key", lambda key, t: True)
+
+    main(["install", "my-positional-key", "-y"])
+
+    assert hooks_file.is_file()
+    assert env_file.is_file()
+    env_data = json.loads(env_file.read_text(encoding="utf-8"))
+    assert env_data["ANOSYS_HOOK_APIKEY"] == "my-positional-key"
+
