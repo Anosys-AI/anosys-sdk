@@ -407,7 +407,8 @@ The [`examples/`](./examples/) directory contains Jupyter notebooks demonstratin
 
 - **SDK Docs**: [docs.anosys.ai](https://docs.anosys.ai)
 - **AnoSys Console**: [console.anosys.ai](https://console.anosys.ai)
-- **Telemetry Variables Map**: [TELEMETRY_VARIABLES.md](./TELEMETRY_VARIABLES.md) — complete reference for all Named & CV variables
+- **Telemetry Variables Map (Codex & Global)**: [TELEMETRY_VARIABLES.md](./TELEMETRY_VARIABLES.md) — complete reference for all Named & CV variables
+- **Claude Code Variables Map**: [CLAUDE_CODE_VARIABLES.md](./CLAUDE_CODE_VARIABLES.md) — dedicated reference for all Claude Code Named & CV variables
 - **CVS Variable Mappings**: [MAPPINGS.md](./MAPPINGS.md) — full reference for how SDK fields map to AnoSys platform variables
 
 ---
