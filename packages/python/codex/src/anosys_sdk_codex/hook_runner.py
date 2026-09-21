@@ -127,9 +127,13 @@ def post_records_batch(payloads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     import requests
 
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "anosys-codex-hook/0.1.0",
+    }
     if API_KEY:
         headers["anosys-apikey"] = API_KEY
+        headers["x-api-key"] = API_KEY
 
     failed_records = []
     batch_size = 100

@@ -217,6 +217,7 @@ function extractTurnFromRollout(rolloutPath, turnId, fallbackEvent = null) {
     reasoning_output_tokens: 0
   };
   let observedTokens = false;
+  let prevTotalTokens = null;
 
   let inTurn = false;
   let turnStartMs = 0;
@@ -340,6 +341,14 @@ function extractTurnFromRollout(rolloutPath, turnId, fallbackEvent = null) {
 
       if (outer === 'event_msg' && ptype === 'token_count') {
         const info = payload.info || {};
+        const total = info.total_token_usage;
+        // Avoid double-counting rate-limit-only rebroadcasts (openai/codex#14489)
+        if (total && prevTotalTokens && JSON.stringify(total) === JSON.stringify(prevTotalTokens)) {
+          continue;
+        }
+        if (total) {
+          prevTotalTokens = total;
+        }
         const last = info.last_token_usage || {};
         for (const k of tokenFields) {
           if (typeof last[k] === 'number') {
