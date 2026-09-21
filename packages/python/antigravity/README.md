@@ -86,6 +86,23 @@ Credentials and configuration are stored in `~/.gemini/config/anosys-env.json`. 
 
 ---
 
+## Telemetry Coverage & Limitations
+
+### AI Token Usage (`input_tokens`, `output_tokens`, `total_tokens`)
+
+Unlike Claude Code or OpenAI Codex (which record token counters in local session logs), **Google Antigravity does not report token counts** in either its hook stdin payloads (`PreInvocation`, `Stop`) or in its local transcript files (`transcript_full.jsonl`).
+
+Consequently:
+- **`input_tokens` (`cvn1`)**, **`output_tokens` (`cvn2`)**, and **`total_tokens` (`cvn3`)** are emitted as **`0`**.
+- Model and agent activity is observed and tracked through:
+  - **`llm_step_count` (`cvn26`)**: Total number of LLM planner round-trips in the turn.
+  - **`has_thinking` (`cvb2`) & `thinking`**: Full Gemini reasoning and thinking blocks captured in `llm_steps` and `cvs199`.
+  - **`duration_ms` (`cvn6`) & `tool_duration_ms` (`cvn39`)**: Turn wall-clock duration and cumulative tool execution time.
+  - **`tool_count` (`cvn41`)**: Total number of tool invocations performed in the turn.
+  - **`commands` (`cvs90`) & `written_paths` (`cvs91`)**: Full audit trail of executed terminal commands and modified files.
+
+---
+
 ## License
 
 Apache 2.0
