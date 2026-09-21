@@ -87,7 +87,7 @@ async function cmdInstall(args) {
     updateCodexEnv({ apiKey, redaction, customPath: envPath });
 
     if (backupPath) console.log(`  Backed up original settings -> ${backupPath}`);
-    console.log(`  Hook command registered in notify: ${HOOK_COMMAND}`);
+    console.log('  Hook command registered in notify: ["anosys-codex", "run"]');
     console.log(`  Ingestion URL: ${INGESTION_URL}`);
     if (apiKey) {
       const masked = apiKey.length > 4 ? '*'.repeat(apiKey.length - 4) + apiKey.slice(-4) : '****';
@@ -101,7 +101,7 @@ async function cmdInstall(args) {
   } else {
     console.log('\n================================================================');
     console.log('Add the following to your ~/.codex/config.toml file:');
-    console.log(`\nnotify = ["${HOOK_COMMAND}"]\n`);
+    console.log('\nnotify = ["anosys-codex", "run"]\n');
     console.log('And create ~/.codex/anosys-env.sh with:');
     console.log(`export ANOSYS_HOOK_APIKEY="${apiKey}"`);
     console.log(`export ANOSYS_HOOK_ENDPOINT_URL="${INGESTION_URL}"`);
@@ -168,6 +168,7 @@ async function main() {
     cmdStatus();
   } else if (cmd === 'run') {
     await run();
+    process.exit(0);
   } else {
     console.log('Usage: anosys-codex <install|uninstall|status|run> [--api-key <key>] [-y|--yes] [--redaction|--no-redaction] [--auto-update|--no-auto-update]');
     process.exit(1);

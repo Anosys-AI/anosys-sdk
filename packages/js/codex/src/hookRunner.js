@@ -102,36 +102,51 @@ function clearPendingRecords() {
 function postRecordsBatch(payloads) {
   return new Promise(resolve => {
     if (!payloads || !payloads.length) return resolve([]);
-    if (DRY_RUN) {
-      log(`[DRY RUN] Would POST ${payloads.length} records`);
+
+    loadEnvFile();
+    const targetUrl = process.env.ANOSYS_HOOK_ENDPOINT_URL || INGESTION_URL;
+    const apiKey = process.env.ANOSYS_HOOK_APIKEY || API_KEY;
+    const isDryRun = (process.env.ANOSYS_HOOK_DRY_RUN || 'false').toLowerCase() === 'true';
+
+    if (isDryRun) {
+      log(`[DRY RUN] Would POST ${payloads.length} records to ${targetUrl}`);
       return resolve([]);
     }
 
+    log(`POSTing ${payloads.length} record(s) to ${targetUrl}`);
+    log(`Outgoing payload:\n${JSON.stringify(payloads, null, 2)}`);
+
     const data = JSON.stringify(payloads);
-    const urlObj = new URL(INGESTION_URL);
+    const urlObj = new URL(targetUrl);
     const isHttps = urlObj.protocol === 'https:';
     const client = isHttps ? https : http;
 
     const headers = {
       'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(data)
+      'Content-Length': Buffer.byteLength(data),
+      'User-Agent': 'anosys-codex-hook/0.1.0'
     };
-    if (API_KEY) {
-      headers['anosys-apikey'] = API_KEY;
+    if (apiKey) {
+      headers['anosys-apikey'] = apiKey;
+      headers['x-api-key'] = apiKey;
     }
 
-    const req = client.request(INGESTION_URL, {
+    const req = client.request(targetUrl, {
       method: 'POST',
       headers: headers,
       timeout: 15000
     }, res => {
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        log(`Batch POST success — sent ${payloads.length} records`);
-        resolve([]);
-      } else {
-        log(`Batch POST failed — HTTP ${res.statusCode}`);
-        resolve(payloads);
-      }
+      let resBody = '';
+      res.on('data', chunk => { resBody += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          log(`Batch POST success (HTTP ${res.statusCode}) — sent ${payloads.length} record(s). Response: ${resBody.slice(0, 300)}`);
+          resolve([]);
+        } else {
+          log(`Batch POST failed — HTTP ${res.statusCode}: ${resBody}`);
+          resolve(payloads);
+        }
+      });
     });
 
     req.on('error', err => {
@@ -167,15 +182,40 @@ function findRolloutFile(sessionId) {
   return walk(sessionsDir);
 }
 
-function extractTurnFromRollout(rolloutPath, turnId) {
-  if (!turnId || !fs.existsSync(rolloutPath)) return null;
+function extractTextFromContent(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map(c => {
+      if (typeof c === 'string') return c;
+      if (c && typeof c === 'object') return c.text || c.content || '';
+      return '';
+    }).join('');
+  }
+  if (content && typeof content === 'object') {
+    return content.text || content.content || '';
+  }
+  return '';
+}
+
+function extractTurnFromRollout(rolloutPath, turnId, fallbackEvent = null) {
+  if (!fs.existsSync(rolloutPath)) return null;
 
   const tokenFields = [
-    'input_tokens', 'output_tokens', 'total_tokens',
-    'cached_input_tokens', 'cache_write_input_tokens', 'reasoning_output_tokens'
+    'input_tokens',
+    'output_tokens',
+    'total_tokens',
+    'cached_input_tokens',
+    'cache_write_input_tokens',
+    'reasoning_output_tokens'
   ];
-  const tokenSums = {};
-  for (const k of tokenFields) tokenSums[k] = 0;
+  const tokenSums = {
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+    cached_input_tokens: 0,
+    cache_write_input_tokens: 0,
+    reasoning_output_tokens: 0
+  };
   let observedTokens = false;
 
   let inTurn = false;
@@ -194,6 +234,8 @@ function extractTurnFromRollout(rolloutPath, turnId) {
   const pendingFunc = {};
   const pendingCustom = {};
   let pendingSearchEnd = null;
+
+  const rawEvents = [];
 
   try {
     const content = fs.readFileSync(rolloutPath, 'utf8');
@@ -217,6 +259,7 @@ function extractTurnFromRollout(rolloutPath, turnId) {
 
       if (outer === 'turn_context') {
         if (payload.turn_id === turnId) {
+          rawEvents.push(obj);
           model = payload.model || model;
           cwd = payload.cwd || cwd;
           permissionMode = payload.approval_policy || permissionMode;
@@ -229,12 +272,47 @@ function extractTurnFromRollout(rolloutPath, turnId) {
         if (inTurn) break; // next turn
         if (payload.turn_id === turnId) {
           inTurn = true;
+          rawEvents.push(obj);
           turnStartMs = typeof payload.started_at === 'number' ? (payload.started_at * 1000) : tsMs;
         }
         continue;
       }
 
       if (!inTurn) continue;
+      rawEvents.push(obj);
+
+      if (outer === 'event_msg' && ptype === 'item_completed' && payload.item) {
+        const item = payload.item;
+        if (item.type === 'UserMessage') {
+          const t = extractTextFromContent(item.content);
+          if (t) userPrompt = t;
+        } else if (item.type === 'AgentMessage') {
+          const t = extractTextFromContent(item.content);
+          if (t) assistantOutput = t;
+        } else if (item.type === 'CommandExecution') {
+          const cmd = Array.isArray(item.command) ? item.command.join(' ') : String(item.command || '');
+          toolCalls.push({
+            tool: 'exec',
+            args: cmd,
+            output: item.stdout || item.aggregated_output || '',
+            call_id: item.id || '',
+            start_ts: payload.started_at_ms || tsMs,
+            end_ts: payload.completed_at_ms || tsMs
+          });
+        }
+        continue;
+      }
+
+      if (outer === 'response_item' && ptype === 'message') {
+        if (payload.role === 'user') {
+          const t = extractTextFromContent(payload.content);
+          if (t) userPrompt = t;
+        } else if (payload.role === 'assistant') {
+          const t = extractTextFromContent(payload.content);
+          if (t) assistantOutput = t;
+        }
+        continue;
+      }
 
       if (outer === 'event_msg' && ptype === 'user_message') {
         userPrompt = payload.message || userPrompt;
@@ -243,8 +321,20 @@ function extractTurnFromRollout(rolloutPath, turnId) {
 
       if (outer === 'event_msg' && (ptype === 'agent_message' || ptype === 'task_complete')) {
         if (payload.message) assistantOutput = payload.message;
+        if (payload.last_agent_message) assistantOutput = payload.last_agent_message;
         if (typeof payload.completed_at === 'number') turnEndMs = payload.completed_at * 1000;
         if (typeof payload.duration_ms === 'number') durationMs = payload.duration_ms;
+        continue;
+      }
+
+      if (outer === 'token_usage_record') {
+        const usage = payload.turn_token_usage || payload.usage || {};
+        for (const k of tokenFields) {
+          if (typeof usage[k] === 'number') {
+            tokenSums[k] = usage[k];
+            observedTokens = true;
+          }
+        }
         continue;
       }
 
@@ -354,6 +444,25 @@ function extractTurnFromRollout(rolloutPath, turnId) {
     durationMs = turnEndMs - turnStartMs;
   }
 
+  if (!userPrompt && fallbackEvent) {
+    const userMsgs = fallbackEvent['input-messages'] || fallbackEvent.input_messages || '';
+    if (Array.isArray(userMsgs) && userMsgs.length) {
+      const last = userMsgs[userMsgs.length - 1];
+      userPrompt = typeof last === 'string' ? last : (last.content || '');
+    } else if (typeof userMsgs === 'string') {
+      userPrompt = userMsgs;
+    }
+  }
+
+  if (!assistantOutput && fallbackEvent) {
+    const ast = fallbackEvent['last-assistant-message'] || fallbackEvent.last_assistant_message || '';
+    if (typeof ast === 'object' && ast !== null) {
+      assistantOutput = ast.text || ast.content || '';
+    } else if (typeof ast === 'string') {
+      assistantOutput = ast;
+    }
+  }
+
   return {
     turn_id: turnId,
     model: model,
@@ -367,7 +476,11 @@ function extractTurnFromRollout(rolloutPath, turnId) {
     turn_end_ms: turnEndMs,
     duration_ms: durationMs || 0,
     tokens: observedTokens ? tokenSums : {},
-    tool_calls: toolCalls
+    tool_calls: toolCalls,
+    raw: {
+      hook_event: fallbackEvent || null,
+      events: rawEvents
+    }
   };
 }
 
@@ -394,7 +507,11 @@ function extractTurnFallback(inputJson, threadId, turnId) {
     turn_end_ms: now,
     duration_ms: 0,
     tokens: {},
-    tool_calls: []
+    tool_calls: [],
+    raw: {
+      hook_event: inputJson,
+      events: []
+    }
   };
 }
 
@@ -416,8 +533,22 @@ async function run() {
 
   // 2. Parse notify payload
   let rawInput = '{}';
-  if (process.argv.length > 2 && process.argv[2].trim()) {
-    rawInput = process.argv[2].trim();
+  for (let i = 2; i < process.argv.length; i++) {
+    const arg = process.argv[i].trim();
+    if (arg === 'run') continue;
+    if (arg.startsWith('{') || arg.startsWith('[')) {
+      rawInput = arg;
+      break;
+    }
+  }
+  if (rawInput === '{}') {
+    for (let i = 2; i < process.argv.length; i++) {
+      const arg = process.argv[i].trim();
+      if (arg !== 'run') {
+        rawInput = arg;
+        break;
+      }
+    }
   }
 
   let event = {};
@@ -450,7 +581,7 @@ async function run() {
   let turnData = null;
   if (rolloutPath) {
     log(`Extracting turn ${turnId} from ${rolloutPath}`);
-    turnData = extractTurnFromRollout(rolloutPath, turnId);
+    turnData = extractTurnFromRollout(rolloutPath, turnId, event);
   }
 
   if (!turnData) {

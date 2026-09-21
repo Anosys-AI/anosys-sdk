@@ -40,15 +40,19 @@ function loadToml(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     const result = {};
-    const notifyMatch = content.match(/^\s*notify\s*=\s*\[(.*?)\]/ms);
+    const notifyMatch = content.match(/^[ \t]*notify[ \t]*=[ \t]*(\[.*\])/m) || content.match(/^\s*notify\s*=\s*\[(.*?)\]/ms);
     if (notifyMatch) {
-      const items = [];
-      const regex = /["']([^"']+)["']/g;
-      let match;
-      while ((match = regex.exec(notifyMatch[1])) !== null) {
-        items.push(match[1]);
+      try {
+        result.notify = JSON.parse(notifyMatch[1]);
+      } catch (_) {
+        const items = [];
+        const regex = /["']([^"']+)["']/g;
+        let match;
+        while ((match = regex.exec(notifyMatch[1])) !== null) {
+          items.push(match[1]);
+        }
+        result.notify = items;
       }
-      result.notify = items;
     }
     return result;
   } catch (err) {
@@ -94,20 +98,40 @@ function hasAnosysHook(data) {
 }
 
 function updateCodexConfig(hookCmd, customPath) {
-  const cmd = hookCmd || HOOK_COMMAND;
   const filePath = customPath || getConfigPath();
-  const data = loadToml(filePath);
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
 
-  let notifyList = data.notify || [];
-  if (notifyList.includes(cmd)) {
+  let content = '';
+  if (fs.existsSync(filePath)) {
+    content = fs.readFileSync(filePath, 'utf8');
+  }
+
+  const data = loadToml(filePath);
+  if (hasAnosysHook(data)) {
     return false; // already present
   }
 
-  notifyList = notifyList.filter(x => !String(x).includes('anosys-codex'));
-  notifyList.push(cmd);
-  data.notify = notifyList;
+  const notifyArgs = Array.isArray(hookCmd)
+    ? hookCmd
+    : (typeof hookCmd === 'string' && hookCmd.trim())
+      ? (hookCmd.includes(' ') ? hookCmd.trim().split(/\s+/) : [hookCmd.trim()])
+      : ['anosys-codex', 'run'];
 
-  writeTomlAtomic(filePath, data);
+  const serialized = notifyArgs.map(x => `"${String(x).replace(/"/g, '\\"')}"`).join(', ');
+  const notifyLine = `notify = [${serialized}]`;
+  const notifyRegex = /^[ \t]*notify[ \t]*=[ \t]*\[.*?\][ \t]*(?:\r?\n|$)/m;
+
+  let newContent;
+  if (notifyRegex.test(content)) {
+    newContent = content.replace(notifyRegex, `${notifyLine}\n`);
+  } else {
+    newContent = content ? `${notifyLine}\n\n${content}` : `${notifyLine}\n`;
+  }
+
+  const tmpPath = path.join(dir, `.tmp_${Date.now()}_config.toml`);
+  fs.writeFileSync(tmpPath, newContent, 'utf8');
+  fs.renameSync(tmpPath, filePath);
   return true;
 }
 
@@ -116,14 +140,16 @@ function removeCodexConfig(customPath) {
   if (!fs.existsSync(filePath)) return false;
 
   const data = loadToml(filePath);
-  let notifyList = data.notify || [];
-  const prevLen = notifyList.length;
+  if (!hasAnosysHook(data)) return false;
 
-  notifyList = notifyList.filter(x => !String(x).includes('anosys-codex'));
-  if (notifyList.length === prevLen) return false;
+  const content = fs.readFileSync(filePath, 'utf8');
+  const dir = path.dirname(filePath);
+  const notifyRegex = /^[ \t]*notify[ \t]*=[ \t]*\[.*?\][ \t]*(?:\r?\n|$)/m;
+  const newContent = content.replace(notifyRegex, '');
 
-  data.notify = notifyList;
-  writeTomlAtomic(filePath, data);
+  const tmpPath = path.join(dir, `.tmp_${Date.now()}_config.toml`);
+  fs.writeFileSync(tmpPath, newContent, 'utf8');
+  fs.renameSync(tmpPath, filePath);
   return true;
 }
 

@@ -173,7 +173,23 @@ def _iso_to_ms(ts: str) -> int:
         return 0
 
 
-def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict[str, Any]]:
+def _extract_text_from_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        res = []
+        for c in content:
+            if isinstance(c, str):
+                res.append(c)
+            elif isinstance(c, dict):
+                res.append(c.get("text") or c.get("content") or "")
+        return "".join(res)
+    if isinstance(content, dict):
+        return content.get("text") or content.get("content") or ""
+    return ""
+
+
+def extract_turn_from_rollout(rollout_path: Path, turn_id: str, fallback_event: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     if not turn_id or not rollout_path.is_file():
         return None
 
@@ -206,10 +222,12 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict
     pending_custom: Dict[str, Dict[str, Any]] = {}
     pending_search_end: Optional[Dict[str, Any]] = None
 
+    raw_events: List[Dict[str, Any]] = []
+
     try:
-        with open(rollout_path, "r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
+        with rollout_path.open("r", encoding="utf-8") as fh:
+            for raw_line in fh:
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:
@@ -220,7 +238,7 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict
                 outer = obj.get("type")
                 payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
                 ptype = payload.get("type")
-                ts_ms = _iso_to_ms(obj.get("timestamp", ""))
+                ts_ms = _iso_to_ms(obj.get("timestamp") or "")
 
                 if outer == "session_meta":
                     model_provider = payload.get("model_provider") or model_provider
@@ -228,11 +246,13 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict
 
                 if outer == "turn_context":
                     if payload.get("turn_id") == turn_id:
+                        raw_events.append(obj)
                         model = payload.get("model") or model
                         cwd = payload.get("cwd") or cwd
                         permission_mode = payload.get("approval_policy") or permission_mode
-                        sandbox_policy = payload.get("sandbox_policy") or {}
-                        sandbox_mode = sandbox_policy.get("type") or sandbox_mode
+                        sb = payload.get("sandbox_policy")
+                        if isinstance(sb, dict):
+                            sandbox_mode = sb.get("type") or sandbox_mode
                     continue
 
                 if outer == "event_msg" and ptype == "task_started":
@@ -240,6 +260,7 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict
                         break
                     if payload.get("turn_id") == turn_id:
                         in_turn = True
+                        raw_events.append(obj)
                         started_at = payload.get("started_at")
                         if isinstance(started_at, int):
                             turn_start_ms = started_at * 1000
@@ -250,12 +271,51 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict
                 if not in_turn:
                     continue
 
+                raw_events.append(obj)
+
+                if outer == "event_msg" and ptype == "item_completed" and payload.get("item"):
+                    item = payload["item"]
+                    if isinstance(item, dict):
+                        itype = item.get("type")
+                        if itype == "UserMessage":
+                            t = _extract_text_from_content(item.get("content"))
+                            if t:
+                                user_prompt = t
+                        elif itype == "AgentMessage":
+                            t = _extract_text_from_content(item.get("content"))
+                            if t:
+                                assistant_output = t
+                        elif itype == "CommandExecution":
+                            cmd = item.get("command")
+                            cmd_str = " ".join(cmd) if isinstance(cmd, list) else str(cmd or "")
+                            tool_calls.append({
+                                "tool": "exec",
+                                "args": cmd_str,
+                                "output": item.get("stdout") or item.get("aggregated_output") or "",
+                                "call_id": item.get("id") or "",
+                                "start_ts": payload.get("started_at_ms") or ts_ms,
+                                "end_ts": payload.get("completed_at_ms") or ts_ms,
+                            })
+                    continue
+
+                if outer == "response_item" and ptype == "message":
+                    role = payload.get("role")
+                    if role == "user":
+                        t = _extract_text_from_content(payload.get("content"))
+                        if t:
+                            user_prompt = t
+                    elif role == "assistant":
+                        t = _extract_text_from_content(payload.get("content"))
+                        if t:
+                            assistant_output = t
+                    continue
+
                 if outer == "event_msg" and ptype == "user_message":
                     user_prompt = payload.get("message") or user_prompt
                     continue
 
                 if outer == "event_msg" and ptype in ("agent_message", "task_complete"):
-                    msg = payload.get("message")
+                    msg = payload.get("message") or payload.get("last_agent_message")
                     if msg:
                         assistant_output = msg
                     completed_at = payload.get("completed_at")
@@ -264,6 +324,16 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict
                     d = payload.get("duration_ms")
                     if isinstance(d, int):
                         duration_ms = d
+                    continue
+
+                if outer == "token_usage_record":
+                    usage = payload.get("turn_token_usage") or payload.get("usage") or {}
+                    if isinstance(usage, dict):
+                        for k in token_fields:
+                            v = usage.get(k)
+                            if isinstance(v, int):
+                                token_sums[k] = v
+                                observed_tokens = True
                     continue
 
                 if outer == "event_msg" and ptype == "token_count":
@@ -366,6 +436,21 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict
     if duration_ms is None and turn_start_ms and turn_end_ms >= turn_start_ms:
         duration_ms = turn_end_ms - turn_start_ms
 
+    if not user_prompt and fallback_event:
+        user_msgs = fallback_event.get("input-messages") or fallback_event.get("input_messages") or ""
+        if isinstance(user_msgs, list) and user_msgs:
+            last = user_msgs[-1]
+            user_prompt = last if isinstance(last, str) else (last.get("content") or "")
+        elif isinstance(user_msgs, str):
+            user_prompt = user_msgs
+
+    if not assistant_output and fallback_event:
+        ast = fallback_event.get("last-assistant-message") or fallback_event.get("last_assistant_message") or ""
+        if isinstance(ast, dict):
+            assistant_output = ast.get("text") or ast.get("content") or ""
+        elif isinstance(ast, str):
+            assistant_output = ast
+
     return {
         "turn_id": turn_id,
         "model": model,
@@ -380,6 +465,10 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str) -> Optional[Dict
         "duration_ms": duration_ms or 0,
         "tokens": token_sums if observed_tokens else {},
         "tool_calls": tool_calls,
+        "raw": {
+            "hook_event": fallback_event,
+            "events": raw_events,
+        },
     }
 
 
@@ -414,6 +503,10 @@ def _extract_turn_fallback(input_json: Dict[str, Any], thread_id: str, turn_id: 
         "duration_ms": 0,
         "tokens": {},
         "tool_calls": [],
+        "raw": {
+            "hook_event": input_json,
+            "events": [],
+        },
     }
 
 
@@ -431,9 +524,20 @@ def run() -> None:
             save_pending_records(still_failed, overwrite=True)
 
     raw_input = "{}"
-    if len(sys.argv) > 1 and sys.argv[1].strip():
-        raw_input = sys.argv[1].strip()
-    elif not sys.stdin.isatty():
+    for arg in sys.argv[1:]:
+        arg_clean = arg.strip()
+        if arg_clean == "run":
+            continue
+        if arg_clean.startswith("{") or arg_clean.startswith("["):
+            raw_input = arg_clean
+            break
+    if raw_input == "{}":
+        for arg in sys.argv[1:]:
+            arg_clean = arg.strip()
+            if arg_clean != "run":
+                raw_input = arg_clean
+                break
+    if raw_input == "{}" and not sys.stdin.isatty():
         try:
             raw_input = sys.stdin.read().strip() or "{}"
         except Exception:
@@ -474,7 +578,7 @@ def run() -> None:
     turn_data: Optional[Dict[str, Any]] = None
     if rollout_file:
         log.info("Extracting turn %s from %s", turn_id, rollout_file)
-        turn_data = extract_turn_from_rollout(rollout_file, turn_id)
+        turn_data = extract_turn_from_rollout(rollout_file, turn_id, fallback_event=event)
 
     if not turn_data:
         log.warning("Could not extract turn from rollout file. Using fallback.")

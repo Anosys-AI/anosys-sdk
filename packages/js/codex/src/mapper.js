@@ -132,19 +132,73 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
   const startTs = turn.turn_start_ms || Date.now();
   const durationMs = turn.duration_ms !== undefined ? turn.duration_ms : null;
 
+  const rawData = turn.raw || {
+    hook_event: turn,
+    events: []
+  };
+
+  const origPrompt = turn.user_prompt || '';
+  const origAssistant = turn.assistant_output || '';
+  let rawToSerialize = rawData;
+  if (doRedact) {
+    try {
+      let s = JSON.stringify(rawData);
+      if (origPrompt) {
+        s = s.split(origPrompt).join('[REDACTED]');
+      }
+      if (origAssistant) {
+        s = s.split(origAssistant).join('[REDACTED]');
+      }
+      rawToSerialize = JSON.parse(s);
+    } catch (_) {
+      rawToSerialize = rawData;
+    }
+  }
+
+  let permMode = null;
+  if (turn.permission_mode) {
+    if (typeof turn.permission_mode === 'string') {
+      permMode = turn.permission_mode;
+    } else if (typeof turn.permission_mode === 'object') {
+      permMode = turn.permission_mode.type || Object.keys(turn.permission_mode)[0] || 'custom';
+    }
+  }
+
+  let sandboxMode = null;
+  if (turn.sandbox_mode) {
+    if (typeof turn.sandbox_mode === 'string') {
+      sandboxMode = turn.sandbox_mode;
+    } else if (typeof turn.sandbox_mode === 'object') {
+      sandboxMode = turn.sandbox_mode.type || Object.keys(turn.sandbox_mode)[0] || 'custom';
+    }
+  }
+
+  const commandsStr = commands.length ? JSON.stringify(commands) : null;
+  const writtenPathsStr = writtenPaths.length ? JSON.stringify(writtenPaths) : null;
+
   const payload = {
+    session_id: sessionId,
     sessionId: sessionId,
     uuid: turnId,
     eventId: turnId,
+    event_id: turnId,
+    event_type: 'codex_turn',
+    event_source_name: 'codex',
     timestamp: startTs,
+    user_timestamp: startTs,
+    debug: false,
+    user_prompt: userPrompt,
     userPrompt: userPrompt,
+    assistant_text: assistantText,
     assistantText: assistantText,
     model: model,
+    primary_model: model,
     model_provider: provider,
     cwd: cwd || null,
     project: project,
-    permissionMode: turn.permission_mode || null,
-    sandbox_mode: turn.sandbox_mode || null,
+    permission_mode: permMode,
+    permissionMode: permMode,
+    sandbox_mode: sandboxMode,
     duration_ms: durationMs,
     input_tokens: inputTokens,
     output_tokens: outputTokens,
@@ -161,13 +215,30 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
     incremental_cache_creation: inc.cache_creation !== undefined ? inc.cache_creation : cacheWriteTokens,
     tool_count: toolCalls.length,
     tool_duration_ms: toolDurationMs,
-    tools_used: toolCalls.map(tc => tc.tool).filter(Boolean),
-    commands: commands.length ? commands : null,
-    written_paths: writtenPaths.length ? writtenPaths : null,
+    commands: commandsStr,
+    written_paths: writtenPathsStr,
     has_thinking: reasoningTokens > 0,
     integration_version: INTEGRATION_VERSION,
     os_user: OS_USER,
-    cvs199: JSON.stringify(cleanToolCalls),
+
+    // Legacy CV attributes for dashboard UI
+    cvs1: sessionId,
+    cvs2: project,
+    cvs4: userPrompt,
+    cvs5: assistantText,
+    cvs9: model,
+    cvs12: cwd,
+    cvs19: 'anosys-codex run',
+    cvs32: INTEGRATION_VERSION,
+    cvs33: OS_USER,
+    cvn1: inputTokens,
+    cvn2: outputTokens,
+    cvn3: totalTokens,
+    cvn4: cachedTokens,
+    cvn5: cacheWriteTokens,
+    cvn6: durationMs,
+    cvn7: costEst,
+    cvs199: JSON.stringify(rawToSerialize),
     cvs200: 'CodexHook'
   };
 

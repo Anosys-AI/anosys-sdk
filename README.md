@@ -200,7 +200,7 @@ npx anosys-sdk-codex install --api-key "your_logs_api_key" -y
 
 CLI commands: `install` · `uninstall` · `status` · `run`
 
-**How it works:** When installed, both Python and JS packages register a notify hook (`notify = ["anosys-codex run"]`) in `~/.codex/config.toml`. When a Codex CLI turn completes, the hook scans the session rollout transcript (`~/.codex/sessions/`), maps messages, tool calls, and model tokens, calculates pricing, applies optional content redaction, and batches results to your AnoSys workspace.
+**How it works:** When installed, both Python and JS packages register a notify hook (`notify = ["anosys-codex", "run"]`) in `~/.codex/config.toml`. When a Codex CLI turn completes, the hook scans the session rollout transcript (`~/.codex/sessions/`), maps messages, tool calls, and model tokens, calculates pricing, applies optional content redaction, and batches results to your AnoSys workspace.
 
 ---
 

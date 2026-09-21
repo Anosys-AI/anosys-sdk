@@ -84,7 +84,7 @@ def cmd_install(args: argparse.Namespace) -> None:
 
         if backup_path:
             print(f"  Backed up original settings -> {backup_path}")
-        print(f"  Hook command registered in notify: {HOOK_COMMAND}")
+        print('  Hook command registered in notify: ["anosys-codex", "run"]')
         print(f"  Ingestion URL: {INGESTION_URL}")
         if api_key:
             masked = ("*" * (len(api_key) - 4)) + api_key[-4:] if len(api_key) > 4 else "****"
@@ -97,7 +97,7 @@ def cmd_install(args: argparse.Namespace) -> None:
     else:
         print("\n================================================================")
         print("Add the following to your ~/.codex/config.toml file:")
-        print(f'\nnotify = ["{HOOK_COMMAND}"]\n')
+        print('\nnotify = ["anosys-codex", "run"]\n')
         print("And create ~/.codex/anosys-env.sh with:")
         print(f'export ANOSYS_HOOK_APIKEY="{api_key}"')
         print(f'export ANOSYS_HOOK_ENDPOINT_URL="{INGESTION_URL}"')

@@ -118,14 +118,21 @@ def test_installer_config_lifecycle():
         config_path = Path(tmpdir) / "config.toml"
         env_path = Path(tmpdir) / "anosys-env.sh"
 
+        # Pre-populate config with other sections
+        config_path.write_text('[desktop]\nfollowUpQueueMode = "steer"\n\n[plugins."browser@openai-bundled"]\nenabled = true\n', encoding="utf-8")
+
         # 1. Update config
         updated = update_codex_config(HOOK_COMMAND, path=config_path)
         assert updated is True
         assert config_path.is_file()
 
+        content_after = config_path.read_text(encoding="utf-8")
+        assert "[desktop]" in content_after
+        assert '[plugins."browser@openai-bundled"]' in content_after
+
         data = load_toml(config_path)
         assert has_anosys_hook(data) is True
-        assert HOOK_COMMAND in data["notify"]
+        assert "anosys-codex" in data["notify"]
 
         # 2. Idempotent check
         updated_again = update_codex_config(HOOK_COMMAND, path=config_path)
@@ -147,6 +154,11 @@ def test_installer_config_lifecycle():
         assert removed is True
         data_after = load_toml(config_path)
         assert has_anosys_hook(data_after) is False
+
+        # Ensure sections still exist after remove
+        content_final = config_path.read_text(encoding="utf-8")
+        assert "[desktop]" in content_final
+        assert '[plugins."browser@openai-bundled"]' in content_final
 
 
 def test_extract_turn_from_rollout():

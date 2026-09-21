@@ -171,19 +171,67 @@ def transform_codex_turn(
     start_ts = turn.get("turn_start_ms") or int(time.time() * 1000)
     duration_ms = turn.get("duration_ms")
 
+    raw_data = turn.get("raw") or {
+        "hook_event": turn,
+        "events": [],
+    }
+
+    orig_prompt = str(turn.get("user_prompt") or "")
+    orig_assistant = str(turn.get("assistant_output") or "")
+    raw_to_serialize = raw_data
+    if do_redact:
+        try:
+            raw_str = json.dumps(raw_data, default=str)
+            if orig_prompt:
+                raw_str = raw_str.replace(orig_prompt, "[REDACTED]")
+            if orig_assistant:
+                raw_str = raw_str.replace(orig_assistant, "[REDACTED]")
+            raw_to_serialize = json.loads(raw_str)
+        except Exception:
+            raw_to_serialize = raw_data
+
+    raw_perm = turn.get("permission_mode")
+    if isinstance(raw_perm, dict):
+        perm_mode = raw_perm.get("type") or (list(raw_perm.keys())[0] if raw_perm else "custom")
+    elif raw_perm:
+        perm_mode = str(raw_perm)
+    else:
+        perm_mode = None
+
+    raw_sb = turn.get("sandbox_mode")
+    if isinstance(raw_sb, dict):
+        sandbox_mode = raw_sb.get("type") or (list(raw_sb.keys())[0] if raw_sb else "custom")
+    elif raw_sb:
+        sandbox_mode = str(raw_sb)
+    else:
+        sandbox_mode = None
+
+    commands_str = json.dumps(commands) if commands else None
+    written_paths_str = json.dumps(written_paths) if written_paths else None
+
     payload: Dict[str, Any] = {
+        "session_id": session_id,
         "sessionId": session_id,
         "uuid": turn_id,
         "eventId": turn_id,
+        "event_id": turn_id,
+        "event_type": "codex_turn",
+        "event_source_name": "codex",
         "timestamp": start_ts,
+        "user_timestamp": start_ts,
+        "debug": False,
+        "user_prompt": user_prompt,
         "userPrompt": user_prompt,
+        "assistant_text": assistant_text,
         "assistantText": assistant_text,
         "model": model,
+        "primary_model": model,
         "model_provider": provider,
         "cwd": cwd or None,
         "project": project,
-        "permissionMode": turn.get("permission_mode") or None,
-        "sandbox_mode": turn.get("sandbox_mode") or None,
+        "permission_mode": perm_mode,
+        "permissionMode": perm_mode,
+        "sandbox_mode": sandbox_mode,
         "duration_ms": duration_ms,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -200,13 +248,28 @@ def transform_codex_turn(
         "incremental_cache_creation": inc.get("cache_creation", cache_write_tokens),
         "tool_count": len(tool_calls),
         "tool_duration_ms": tool_duration_ms,
-        "tools_used": [tc.get("tool") for tc in tool_calls if tc.get("tool")],
-        "commands": commands if commands else None,
-        "written_paths": written_paths if written_paths else None,
+        "commands": commands_str,
+        "written_paths": written_paths_str,
         "has_thinking": reasoning_tokens > 0,
         "integration_version": INTEGRATION_VERSION,
         "os_user": OS_USER,
-        "cvs199": json.dumps(tool_calls_clean, separators=(",", ":")),
+        "cvs1": session_id,
+        "cvs2": project,
+        "cvs4": user_prompt,
+        "cvs5": assistant_text,
+        "cvs9": model,
+        "cvs12": cwd,
+        "cvs19": "anosys-codex run",
+        "cvs32": INTEGRATION_VERSION,
+        "cvs33": OS_USER,
+        "cvn1": input_tokens,
+        "cvn2": output_tokens,
+        "cvn3": total_tokens,
+        "cvn4": cached_tokens,
+        "cvn5": cache_write_tokens,
+        "cvn6": duration_ms,
+        "cvn7": cost_est,
+        "cvs199": json.dumps(raw_to_serialize, default=str),
         "cvs200": "CodexHook",
     }
 

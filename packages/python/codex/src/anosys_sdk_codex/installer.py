@@ -79,10 +79,13 @@ def load_toml(path: Path) -> Dict[str, Any]:
 
 def _fallback_parse_toml(content: str) -> Dict[str, Any]:
     res: Dict[str, Any] = {}
-    notify_match = re.search(r'^\s*notify\s*=\s*\[(.*?)\]', content, re.MULTILINE | re.DOTALL)
+    notify_match = re.search(r'^[ \t]*notify[ \t]*=[ \t]*(\[.*\])', content, re.MULTILINE) or re.search(r'^\s*notify\s*=\s*\[(.*?)\]', content, re.MULTILINE | re.DOTALL)
     if notify_match:
-        items = re.findall(r'["\']([^"\']+)["\']', notify_match.group(1))
-        res["notify"] = items
+        try:
+            res["notify"] = json.loads(notify_match.group(1))
+        except Exception:
+            items = re.findall(r'["\']([^"\']+)["\']', notify_match.group(1))
+            res["notify"] = items
     return res
 
 
@@ -146,22 +149,43 @@ def update_codex_config(hook_command: str = HOOK_COMMAND, path: Path | None = No
     if path is None:
         path = get_config_path()
 
-    data = load_toml(path)
-    notify_list = data.get("notify", [])
-    if isinstance(notify_list, str):
-        notify_list = [notify_list]
-    elif not isinstance(notify_list, list):
-        notify_list = []
+    content = ""
+    if path.is_file():
+        content = path.read_text(encoding="utf-8")
 
-    existing = [x for x in notify_list if "anosys-codex" in str(x)]
-    if existing and hook_command in notify_list:
+    data = load_toml(path)
+    if has_anosys_hook(data):
         return False
 
-    new_notify = [x for x in notify_list if "anosys-codex" not in str(x)]
-    new_notify.append(hook_command)
-    data["notify"] = new_notify
+    if isinstance(hook_command, list):
+        args = hook_command
+    elif isinstance(hook_command, str) and hook_command.strip():
+        args = hook_command.strip().split() if " " in hook_command else [hook_command.strip()]
+    else:
+        args = ["anosys-codex", "run"]
 
-    write_toml_atomic(path, data)
+    serialized = ", ".join(f'"{x}"' for x in args)
+    notify_line = f"notify = [{serialized}]"
+    notify_pattern = re.compile(r'^[ \t]*notify[ \t]*=[ \t]*\[.*?\][ \t]*(?:\r?\n|$)', re.MULTILINE)
+
+    if notify_pattern.search(content):
+        new_content = notify_pattern.sub(f"{notify_line}\n", content)
+    else:
+        new_content = f"{notify_line}\n\n{content}" if content else f"{notify_line}\n"
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix="config_", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(new_content)
+        shutil.move(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
     return True
 
 
@@ -172,22 +196,25 @@ def remove_codex_config(path: Path | None = None) -> bool:
         return False
 
     data = load_toml(path)
-    notify_list = data.get("notify", [])
-    if isinstance(notify_list, str):
-        notify_list = [notify_list]
-    elif not isinstance(notify_list, list):
+    if not has_anosys_hook(data):
         return False
 
-    new_notify = [x for x in notify_list if "anosys-codex" not in str(x)]
-    if len(new_notify) == len(notify_list):
-        return False
+    content = path.read_text(encoding="utf-8")
+    notify_pattern = re.compile(r'^[ \t]*notify[ \t]*=[ \t]*\[.*?\][ \t]*(?:\r?\n|$)', re.MULTILINE)
+    new_content = notify_pattern.sub("", content)
 
-    if new_notify:
-        data["notify"] = new_notify
-    else:
-        data.pop("notify", None)
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix="config_", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(new_content)
+        shutil.move(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
-    write_toml_atomic(path, data)
     return True
 
 

@@ -113,19 +113,26 @@ test('transformCodexTurn handles content redaction', () => {
   assert.ok(mapped.cvs199.includes('[REDACTED]'));
 });
 
-test('installer manages config.toml lifecycle idempotently', () => {
+test('installer manages config.toml lifecycle idempotently and preserves existing sections', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-js-test-'));
   const configPath = path.join(tmpDir, 'config.toml');
   const envPath = path.join(tmpDir, 'anosys-env.sh');
+
+  // Pre-populate config with other sections
+  fs.writeFileSync(configPath, '[desktop]\nfollowUpQueueMode = "steer"\n\n[plugins."browser@openai-bundled"]\nenabled = true\n', 'utf8');
 
   // 1. Update config
   const updated = updateCodexConfig(HOOK_COMMAND, configPath);
   assert.equal(updated, true);
   assert.ok(fs.existsSync(configPath));
 
+  const contentAfter = fs.readFileSync(configPath, 'utf8');
+  assert.ok(contentAfter.includes('[desktop]'));
+  assert.ok(contentAfter.includes('[plugins."browser@openai-bundled"]'));
+
   const data = loadToml(configPath);
   assert.equal(hasAnosysHook(data), true);
-  assert.ok(data.notify.includes(HOOK_COMMAND));
+  assert.ok(data.notify.includes('anosys-codex'));
 
   // 2. Idempotent check
   const updatedAgain = updateCodexConfig(HOOK_COMMAND, configPath);
@@ -147,6 +154,11 @@ test('installer manages config.toml lifecycle idempotently', () => {
   assert.equal(removed, true);
   const dataAfter = loadToml(configPath);
   assert.equal(hasAnosysHook(dataAfter), false);
+
+  // Ensure sections still exist after remove
+  const contentFinal = fs.readFileSync(configPath, 'utf8');
+  assert.ok(contentFinal.includes('[desktop]'));
+  assert.ok(contentFinal.includes('[plugins."browser@openai-bundled"]'));
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
