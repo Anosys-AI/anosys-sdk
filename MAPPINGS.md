@@ -2,6 +2,8 @@
 
 > Auto-generated from source code scan on 2026-05-13.
 > Covers all Python and JS packages.
+> 
+> **Detailed Named & CV Variables Map**: For a complete field-by-field description of all named payload variables and physical CV columns, see [TELEMETRY_VARIABLES.md](./TELEMETRY_VARIABLES.md).
 
 ---
 
