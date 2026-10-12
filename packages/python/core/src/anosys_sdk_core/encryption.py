@@ -10,7 +10,7 @@ import hashlib
 import logging
 import os
 import sys
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 

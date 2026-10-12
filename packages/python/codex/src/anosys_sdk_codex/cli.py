@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from pathlib import Path
 
 from anosys_sdk_codex.installer import (
     HOOK_COMMAND,
@@ -133,7 +132,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     config_path = get_config_path()
     env_path = get_env_path()
 
-    print(f"\nAnoSys Codex Hook Status")
+    print("\nAnoSys Codex Hook Status")
     print("=" * 45)
     print(f"Codex Config: {config_path}")
     print(f"Env File:     {env_path}")
@@ -153,9 +152,9 @@ def cmd_status(args: argparse.Namespace) -> None:
         print("\nStatus: ❌ Not registered in config.toml")
 
     if env_path.is_file():
-        print(f"Env file exists: ✅ Yes")
+        print("Env file exists: ✅ Yes")
     else:
-        print(f"Env file exists: ❌ No")
+        print("Env file exists: ❌ No")
     print()
 
 

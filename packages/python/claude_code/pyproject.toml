@@ -42,5 +42,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 "anosys_sdk_claude_code" = ["py.typed"]
 
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
 [tool.ruff.lint.per-file-ignores]
 "src/anosys_sdk_claude_code/mapper.py" = ["E701", "E702"]

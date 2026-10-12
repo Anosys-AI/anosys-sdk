@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from anosys_sdk_claude_code.mapper import transform_record
+from anosys_sdk_claude_code.encryption import encrypt_payload
 
 INGESTION_URL = "https://api.anosys.ai/ingestion"
 API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "")
@@ -178,8 +179,6 @@ def clear_pending_records():
     except Exception as e:
         log.error("Failed to clear pending records: %s", e)
 
-
-from anosys_sdk_claude_code.encryption import encrypt_payload
 
 async def post_records_batch(payloads: List[dict]) -> List[dict]:
     import requests

@@ -1,9 +1,6 @@
 import json
-import os
 import tempfile
 from pathlib import Path
-
-import pytest
 
 from anosys_sdk_codex.installer import (
     HOOK_COMMAND,
