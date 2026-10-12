@@ -23,7 +23,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { transformRecord } = require('./mapper');
+const { transformRecord, encryptPayload } = require('./mapper');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -289,14 +289,15 @@ async function postRecordsBatch(payloads) {
 
   for (let i = 0; i < payloads.length; i += batchSize) {
     const chunk = payloads.slice(i, i + batchSize);
+    const preparedChunk = chunk.map(r => encryptPayload(r));
 
     if (DRY_RUN) {
-      log.info('[DRY RUN] Would POST chunk of %s records', chunk.length);
+      log.info('[DRY RUN] Would POST chunk of %s records', preparedChunk.length);
       continue;
     }
 
     try {
-      await _httpPost(INGESTION_URL, chunk, headers);
+      await _httpPost(INGESTION_URL, preparedChunk, headers);
       log.info('Batch POST success — sent %s records', chunk.length);
     } catch (e) {
       log.error('Batch POST failed — trying to send %s records: %s', chunk.length, e);

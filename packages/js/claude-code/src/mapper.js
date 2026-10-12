@@ -11,6 +11,15 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const {
+  encryptPayload,
+  derive256BitKey,
+  decrypt,
+  getEncryptionKey,
+  getTargetColumns,
+  ANOSYS_ENCRYPTION_PREFIX,
+  DEFAULT_ENCRYPTED_COLUMNS,
+} = require('./encryption');
 
 // Version of the Claude Code integration package (read from package.json)
 const INTEGRATION_VERSION = require('../package.json').version;
@@ -1303,9 +1312,10 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
   }
 
   // Remove null/undefined values — mirrors Python's {k:v for k,v in payload.items() if v is not None}
-  return Object.fromEntries(
+  const cleanPayload = Object.fromEntries(
     Object.entries(payload).filter(([, v]) => v !== null && v !== undefined)
   );
+  return encryptPayload(cleanPayload);
 }
 
 module.exports = {
@@ -1314,6 +1324,13 @@ module.exports = {
   toUnixMs,
   logUnhandled,
   redactRawRecord,
+  encryptPayload,
+  derive256BitKey,
+  decrypt,
+  getEncryptionKey,
+  getTargetColumns,
+  ANOSYS_ENCRYPTION_PREFIX,
+  DEFAULT_ENCRYPTED_COLUMNS,
   INTEGRATION_VERSION,
   OS_USER,
   CLAUDE_PIXEL,

@@ -302,9 +302,111 @@ anosys-sdk/
 |----------|----------|-------------|
 | `ANOSYS_API_KEY` | Yes | Your AnoSys API key ([get one here](https://console.anosys.ai/collect/integrationoptions)) |
 | `OPENAI_API_KEY` | Yes* | Required for OpenAI / OpenAI Agents packages |
+| `ANOSYS_ENCRYPTION_KEY` | No | Secret passphrase to encrypt sensitive telemetry client-side before transmission |
+| `ANOSYS_ENCRYPTED_COLUMNS` | No | Comma-separated columns to encrypt (overrides defaults; alias: `ANOSYS_ENCRYPTES_COLUMNS`) |
 | `ANOSYS_API_URL` | No | Override the logging endpoint (default: `https://www.anosys.ai`) |
 | `ANOSYS_RESOLVER_URL` | No | Override the API key resolver endpoint |
 | `ANOSYS_LOG_LEVEL` | No | JS only: `debug` / `info` / `warn` / `error` / `silent` (default: `warn`) |
+
+---
+
+## Client-Side Data Encryption
+
+AnoSys SDK supports end-to-end client-side data encryption across all Python and JavaScript packages. When configured, sensitive telemetry columns (prompts, completions, messages, system instructions, raw context) are encrypted with AES-256-CBC directly within your application before any network requests are sent to the AnoSys backend (`https://api.anosys.ai`).
+
+### How It Works
+
+1. **Activation**: Encryption is enabled automatically whenever the `ANOSYS_ENCRYPTION_KEY` environment variable is set and non-empty.
+2. **Algorithm**: AES-256-CBC.
+   - **Key**: 32 bytes derived from `ANOSYS_ENCRYPTION_KEY` via SHA-256 (`hashlib.sha256` / `crypto.createHash('sha256')`).
+   - **Initialization Vector (IV)**: Static 16 zero-bytes (`b'\x00' * 16`).
+   - **Padding**: PKCS#7.
+   - **Encoding**: Standard Base64.
+3. **Ciphertext Prefix**: Encrypted values are prepended with `enc:`:
+   - `123` &rarr; `enc:XYZ`
+4. **Idempotency**: Fields that already start with `enc:` are preserved and will not be re-encrypted.
+
+### Default Encrypted Columns
+
+By default, the following prompt, completion, message, and context columns are encrypted if present:
+
+- `llm_input`
+- `llm_output`
+- `gen_ai_input_messages`
+- `gen_ai_output_messages`
+- `gen_ai_system_instructions`
+- `llm_system`
+- `user_prompt` / `userPrompt` / `cvs4`
+- `assistant_text` / `assistantText` / `cvs5`
+- `last_prompt` / `cvs24`
+- `tool_use_result` / `cvs26`
+- `task_description`
+- `summary_content` / `cvs65`
+- `cvs199` (raw span / event context)
+
+### Custom Column Overrides
+
+To encrypt only specific columns, set `ANOSYS_ENCRYPTED_COLUMNS` (or `ANOSYS_ENCRYPTES_COLUMNS`) with a comma-separated list of column names:
+
+```bash
+export ANOSYS_ENCRYPTION_KEY="your-strong-secret-passphrase"
+export ANOSYS_ENCRYPTED_COLUMNS="llm_input,llm_output,cvs199"
+```
+
+When set, this completely overwrites the default column selection — only the specified columns will be encrypted.
+
+### Non-String Column Handling
+
+Encryption operates strictly on string fields. If a targeted column contains non-string data (such as numbers, booleans, arrays, or objects), a warning is printed to the console:
+
+```
+[ANOSYS] Warning: Column 'llm_input' contains non-string data (type: number). Skipping encryption.
+```
+
+The non-string value remains unencrypted and intact.
+
+### Python Example
+
+```python
+import os
+from openai import OpenAI
+from anosys_sdk_openai import AnosysOpenAILogger
+
+# Enable client-side encryption
+os.environ["ANOSYS_ENCRYPTION_KEY"] = "my-secret-team-passphrase"
+# Optional: customize target columns
+# os.environ["ANOSYS_ENCRYPTED_COLUMNS"] = "llm_input,llm_output,cvs199"
+
+# Initialize logger — telemetry payloads are encrypted before being sent to AnoSys
+AnosysOpenAILogger()
+
+client = OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Confidential prompt content"}]
+)
+```
+
+### JavaScript Example
+
+```javascript
+import { AnosysOpenAILogger } from 'anosys-sdk-openai';
+import OpenAI from 'openai';
+
+// Enable client-side encryption
+process.env.ANOSYS_ENCRYPTION_KEY = 'my-secret-team-passphrase';
+// Optional: customize target columns
+// process.env.ANOSYS_ENCRYPTED_COLUMNS = 'llm_input,llm_output,cvs199';
+
+// Initialize logger — telemetry payloads are encrypted before being sent to AnoSys
+new AnosysOpenAILogger();
+
+const client = new OpenAI();
+const response = await client.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Confidential prompt content' }],
+});
+```
 
 ---
 

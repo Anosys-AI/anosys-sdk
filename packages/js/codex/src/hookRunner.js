@@ -6,7 +6,7 @@ const https = require('https');
 const http = require('http');
 
 const { getCodexHome, getEnvPath } = require('./installer');
-const { transformCodexTurn } = require('./mapper');
+const { transformCodexTurn, encryptPayload } = require('./mapper');
 
 const CODEX_HOME = getCodexHome();
 const STATE_DIR = path.join(CODEX_HOME, 'state');
@@ -113,10 +113,11 @@ function postRecordsBatch(payloads) {
       return resolve([]);
     }
 
-    log(`POSTing ${payloads.length} record(s) to ${targetUrl}`);
-    log(`Outgoing payload:\n${JSON.stringify(payloads, null, 2)}`);
+    const preparedPayloads = payloads.map(p => encryptPayload(p));
+    log(`POSTing ${preparedPayloads.length} record(s) to ${targetUrl}`);
+    log(`Outgoing payload:\n${JSON.stringify(preparedPayloads, null, 2)}`);
 
-    const data = JSON.stringify(payloads);
+    const data = JSON.stringify(preparedPayloads);
     const urlObj = new URL(targetUrl);
     const isHttps = urlObj.protocol === 'https:';
     const client = isHttps ? https : http;

@@ -245,3 +245,26 @@ def test_validate_api_key_cc_pixel():
 
         # Key belongs to T (OTEL) pixel, so CC validation should fail
         assert validate_api_key("t-key", "cc") is False
+
+
+def test_transform_codex_turn_encryption():
+    import os
+    from unittest.mock import patch
+    from anosys_sdk_codex.encryption import ANOSYS_ENCRYPTION_PREFIX, decrypt, derive_256_bit_key
+
+    turn = {
+        "model": "gpt-4o",
+        "user_prompt": "Codex secret query",
+        "assistant_output": "Codex completion text",
+    }
+    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "codex-secret"}):
+        result = transform_codex_turn(turn, session_id="s1", turn_id="t1")
+        assert result["user_prompt"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+        assert result["assistant_text"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+        assert result["cvs4"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+        assert result["cvs5"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+        assert result["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+
+        key = derive_256_bit_key("codex-secret")
+        assert decrypt(result["user_prompt"], key) == "Codex secret query"
+        assert decrypt(result["assistant_text"], key) == "Codex completion text"

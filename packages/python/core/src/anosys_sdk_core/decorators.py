@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Optional
 import requests
 
 from anosys_sdk_core.config import resolve_api_key
+from anosys_sdk_core.encryption import encrypt_payload
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
 from anosys_sdk_core.util.json import to_json_fallback, to_str_or_none
 from anosys_sdk_core.util.batching import assign, reassign
@@ -110,6 +111,7 @@ def _log_payload(
     # Send log
     try:
         mapped_data = reassign(variables, _key_to_cvs, _starting_indices)
+        mapped_data = encrypt_payload(mapped_data)
         response = requests.post(_log_api_url, json=mapped_data, timeout=5)
         response.raise_for_status()
         logger.debug("Logged successfully")

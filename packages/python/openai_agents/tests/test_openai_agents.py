@@ -254,3 +254,25 @@ def test_agents_starting_indices_valid():
     assert "number" in AGENTS_STARTING_INDICES
     assert "bool" in AGENTS_STARTING_INDICES
     assert all(isinstance(v, int) for v in AGENTS_STARTING_INDICES.values())
+
+
+def test_openai_agents_encryption_exports():
+    import os
+    from unittest.mock import patch
+    from anosys_sdk_openai_agents import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_256_bit_key, decrypt
+
+    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "agents-key"}):
+        payload = {
+            "llm_input": "agent prompt",
+            "llm_output": "agent response",
+            "cvs199": '{"agent": "trace"}',
+            "otel_name": "MyAgent",
+        }
+        encrypted = encrypt_payload(payload)
+        assert encrypted["llm_input"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+        assert encrypted["llm_output"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+        assert encrypted["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+        assert encrypted["otel_name"] == "MyAgent"
+
+        key = derive_256_bit_key("agents-key")
+        assert decrypt(encrypted["llm_input"], key) == "agent prompt"

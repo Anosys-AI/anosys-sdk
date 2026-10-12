@@ -23,6 +23,7 @@ import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
+from anosys_sdk_core.encryption import encrypt_payload
 from anosys_sdk_openai.hooks import extract_span_info
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ class AnosysHttpExporter(SpanExporter):
                 span_name = data.get("otel_name") or "unknown"
                 logger.debug("Exporting span from: %s | Name: %s", span_source, span_name)
 
+                data = encrypt_payload(data)
                 response = requests.post(_log_api_url, json=data, timeout=5)
                 response.raise_for_status()
 

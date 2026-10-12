@@ -482,3 +482,23 @@ def test_validate_api_key_failure():
     with patch("urllib.request.urlopen") as mock_urlopen:
         mock_urlopen.side_effect = Exception("Network error")
         assert validate_api_key("any", "claudecode") is False
+
+
+def test_transform_record_encryption():
+    import os
+    from unittest.mock import patch
+    from anosys_sdk_claude_code.encryption import ANOSYS_ENCRYPTION_PREFIX, decrypt, derive_256_bit_key
+
+    rec = {
+        "type": "user",
+        "uuid": "u1",
+        "sessionId": "s1",
+        "message": {"content": "Secret prompt text"}
+    }
+    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "claude-secret"}):
+        result = transform_record(rec)
+        assert result["user_prompt"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+        assert result["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+
+        key = derive_256_bit_key("claude-secret")
+        assert decrypt(result["user_prompt"], key) == "Secret prompt text"

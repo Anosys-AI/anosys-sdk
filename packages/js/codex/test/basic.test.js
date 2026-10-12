@@ -249,7 +249,7 @@ test('validateApiKey returns true for CC pixel and false for non-CC pixel', asyn
         }
       };
       callback(res);
-      return { on: () => {} };
+      return { on: () => { } };
     };
 
     const isCc = await validateApiKey('cc-key', 'cc');
@@ -266,7 +266,7 @@ test('validateApiKey returns true for CC pixel and false for non-CC pixel', asyn
         }
       };
       callback(res);
-      return { on: () => {} };
+      return { on: () => { } };
     };
 
     const isT = await validateApiKey('t-key', 'cc');
@@ -275,3 +275,112 @@ test('validateApiKey returns true for CC pixel and false for non-CC pixel', asyn
     https.get = origGet;
   }
 });
+
+const {
+  derive256BitKey,
+  encrypt,
+  decrypt,
+  encryptPayload,
+  ANOSYS_ENCRYPTION_PREFIX,
+} = require('../src/mapper');
+
+test('encryption matches cross-platform AES-256-CBC test vector exactly', () => {
+  const key = derive256BitKey('YOUR_SECRET_KEY_HERE');
+  const ciphertext = encrypt('Hello from AnoSys Technologies!', key);
+  const prefixed = ANOSYS_ENCRYPTION_PREFIX + ciphertext;
+
+  assert.equal(
+    prefixed,
+    'enc:J+0Ntn9F5hhtKSBGTFZPce61f8zwRKwrp7bNpwp2Cw4='
+  );
+  assert.equal(decrypt(prefixed, key), 'Hello from AnoSys Technologies!');
+  assert.equal(decrypt(ciphertext, key), 'Hello from AnoSys Technologies!');
+});
+
+test('transformCodexTurn handles encryption when ANOSYS_ENCRYPTION_KEY is set', () => {
+  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
+  try {
+    const turn = {
+      model: 'gpt-4o',
+      user_prompt: 'Codex secret query',
+      assistant_output: 'Codex completion text',
+    };
+    const res = transformCodexTurn(turn, 's1', 't1');
+    assert.ok(res.user_prompt.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+    assert.ok(res.assistant_text.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+    assert.ok(res.cvs4.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+    assert.ok(res.cvs5.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+    assert.ok(res.cvs199.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+    assert.equal(res.model, 'gpt-4o');
+
+    const key = derive256BitKey('codex-secret-key');
+    assert.equal(decrypt(res.user_prompt, key), 'Codex secret query');
+    assert.equal(decrypt(res.assistant_text, key), 'Codex completion text');
+  } finally {
+    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+    else delete process.env.ANOSYS_ENCRYPTION_KEY;
+  }
+});
+
+test('supports ANOSYS_ENCRYPTED_COLUMNS and typo alias ANOSYS_ENCRYPTES_COLUMNS override', () => {
+  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+  const oldCols = process.env.ANOSYS_ENCRYPTES_COLUMNS;
+  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
+  process.env.ANOSYS_ENCRYPTES_COLUMNS = 'user_prompt';
+  try {
+    const turn = {
+      model: 'gpt-4o',
+      user_prompt: 'Only encrypt this',
+      assistant_output: 'Do not encrypt this',
+    };
+    const res = transformCodexTurn(turn, 's1', 't1');
+    assert.ok(res.user_prompt.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+    assert.equal(res.assistant_text, 'Do not encrypt this');
+  } finally {
+    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+    else delete process.env.ANOSYS_ENCRYPTION_KEY;
+    if (oldCols) process.env.ANOSYS_ENCRYPTES_COLUMNS = oldCols;
+    else delete process.env.ANOSYS_ENCRYPTES_COLUMNS;
+  }
+});
+
+test('warns on non-string column and skips encryption', () => {
+  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
+  let warned = false;
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    warned = true;
+    originalWarn(...args);
+  };
+  try {
+    const payload = {
+      user_prompt: 12345,
+      cvs199: true,
+    };
+    const res = encryptPayload(payload);
+    assert.equal(res.user_prompt, 12345);
+    assert.equal(res.cvs199, true);
+    assert.ok(warned);
+  } finally {
+    console.warn = originalWarn;
+    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+    else delete process.env.ANOSYS_ENCRYPTION_KEY;
+  }
+});
+
+test('is idempotent and does not re-encrypt already encrypted fields', () => {
+  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
+  try {
+    const payload = { user_prompt: 'Test message' };
+    const res1 = encryptPayload(payload);
+    const res2 = encryptPayload(res1);
+    assert.equal(res1.user_prompt, res2.user_prompt);
+  } finally {
+    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+    else delete process.env.ANOSYS_ENCRYPTION_KEY;
+  }
+});
+

@@ -2,6 +2,16 @@
 
 const path = require('path');
 const os = require('os');
+const {
+  encryptPayload,
+  derive256BitKey,
+  encrypt,
+  decrypt,
+  getEncryptionKey,
+  getTargetColumns,
+  ANOSYS_ENCRYPTION_PREFIX,
+  DEFAULT_ENCRYPTED_COLUMNS,
+} = require('./encryption');
 
 const INTEGRATION_VERSION = require('../package.json').version || '0.1.0';
 const OS_USER = os.userInfo().username || 'unknown';
@@ -249,11 +259,19 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
       cleanPayload[k] = v;
     }
   }
-  return cleanPayload;
+  return encryptPayload(cleanPayload);
 }
 
 module.exports = {
   calculateCost,
   extractCommandsAndPaths,
-  transformCodexTurn
+  transformCodexTurn,
+  encryptPayload,
+  derive256BitKey,
+  encrypt,
+  decrypt,
+  getEncryptionKey,
+  getTargetColumns,
+  ANOSYS_ENCRYPTION_PREFIX,
+  DEFAULT_ENCRYPTED_COLUMNS,
 };

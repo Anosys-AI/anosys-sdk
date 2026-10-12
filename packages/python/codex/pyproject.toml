@@ -25,6 +25,7 @@ classifiers = [
 keywords = ["anosys", "codex", "openai", "observability", "monitoring", "audit", "llm"]
 dependencies = [
     "requests>=2.25.1",
+    "cryptography>=3.4.0",
 ]
 
 [project.scripts]

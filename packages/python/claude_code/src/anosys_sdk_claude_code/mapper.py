@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Optional
+from anosys_sdk_claude_code.encryption import encrypt_payload
 
 INTEGRATION_VERSION = '0.2.0'
 
@@ -805,4 +806,5 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
             'cvb15': isP50,
         }
 
-    return {k: v for k, v in payload.items() if v is not None and v is not U}
+    res = {k: v for k, v in payload.items() if v is not None and v is not U}
+    return encrypt_payload(res)

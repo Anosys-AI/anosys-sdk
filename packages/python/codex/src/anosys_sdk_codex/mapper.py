@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from anosys_sdk_codex.encryption import encrypt_payload
 
 INTEGRATION_VERSION = "0.1.0"
 OS_USER = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
@@ -273,4 +274,5 @@ def transform_codex_turn(
         "cvs200": "CodexHook",
     }
 
-    return {k: v for k, v in payload.items() if v is not None}
+    res = {k: v for k, v in payload.items() if v is not None}
+    return encrypt_payload(res)

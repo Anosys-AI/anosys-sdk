@@ -3,7 +3,16 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { transformRecord, toUnixMs, calculateCost, INTEGRATION_VERSION } = require('../src/mapper');
+const {
+  transformRecord,
+  toUnixMs,
+  calculateCost,
+  INTEGRATION_VERSION,
+  encryptPayload,
+  derive256BitKey,
+  decrypt,
+  ANOSYS_ENCRYPTION_PREFIX,
+} = require('../src/mapper');
 
 // ---------------------------------------------------------------------------
 // toUnixMs
@@ -277,3 +286,118 @@ describe('mapper.INTEGRATION_VERSION', () => {
     assert.match(INTEGRATION_VERSION, /^\d+\.\d+\.\d+$/);
   });
 });
+
+describe('mapper encryption', () => {
+  it('matches cross-platform AES-256-CBC test vector exactly', () => {
+    const key = derive256BitKey('YOUR_SECRET_KEY_HERE');
+    const ciphertext = encryptPayload({ text: 'Hello from AnoSys Technologies!' }, key); // test vector helper
+    const cipher = require('../src/encryption').encrypt('Hello from AnoSys Technologies!', key);
+    const prefixed = ANOSYS_ENCRYPTION_PREFIX + cipher;
+    assert.equal(
+      prefixed,
+      'enc:J+0Ntn9F5hhtKSBGTFZPce61f8zwRKwrp7bNpwp2Cw4='
+    );
+    assert.equal(decrypt(prefixed, key), 'Hello from AnoSys Technologies!');
+  });
+
+  it('noop when ANOSYS_ENCRYPTION_KEY is not set', () => {
+    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+    delete process.env.ANOSYS_ENCRYPTION_KEY;
+    try {
+      const r = { type: 'user', uuid: 'u1', sessionId: 's1', timestamp: '2024-01-15T12:00:00Z', message: { content: 'Secret prompt' } };
+      const p = transformRecord(r);
+      assert.equal(p.user_prompt, 'Secret prompt');
+    } finally {
+      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+    }
+  });
+
+  it('encrypts user_prompt and cvs199 when ANOSYS_ENCRYPTION_KEY is set', () => {
+    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+    process.env.ANOSYS_ENCRYPTION_KEY = 'claude-secret-key';
+    try {
+      const r = {
+        type: 'user',
+        uuid: 'u1',
+        sessionId: 's1',
+        timestamp: '2024-01-15T12:00:00Z',
+        message: { content: 'Where is the nearest restaurant?' },
+      };
+      const p = transformRecord(r);
+      assert.ok(p.user_prompt.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+      assert.ok(p.cvs199.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+
+      const key = derive256BitKey('claude-secret-key');
+      assert.equal(decrypt(p.user_prompt, key), 'Where is the nearest restaurant?');
+    } finally {
+      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+      else delete process.env.ANOSYS_ENCRYPTION_KEY;
+    }
+  });
+
+  it('supports column override via ANOSYS_ENCRYPTED_COLUMNS / ANOSYS_ENCRYPTES_COLUMNS', () => {
+    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+    const oldCols = process.env.ANOSYS_ENCRYPTES_COLUMNS;
+    process.env.ANOSYS_ENCRYPTION_KEY = 'claude-secret-key';
+    process.env.ANOSYS_ENCRYPTES_COLUMNS = 'session_id, user_prompt';
+    try {
+      const r = {
+        type: 'user',
+        uuid: 'u1',
+        sessionId: 's1',
+        timestamp: '2024-01-15T12:00:00Z',
+        message: { content: 'Secret question' },
+      };
+      const p = transformRecord(r);
+      assert.ok(p.session_id.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+      assert.ok(p.user_prompt.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+      // cvs199 is NOT in override list, should not be encrypted (or start with prefix)
+      assert.ok(!p.cvs199.startsWith(ANOSYS_ENCRYPTION_PREFIX));
+    } finally {
+      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+      else delete process.env.ANOSYS_ENCRYPTION_KEY;
+      if (oldCols) process.env.ANOSYS_ENCRYPTES_COLUMNS = oldCols;
+      else delete process.env.ANOSYS_ENCRYPTES_COLUMNS;
+    }
+  });
+
+  it('warns on non-string column and skips encryption', () => {
+    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+    process.env.ANOSYS_ENCRYPTION_KEY = 'claude-secret-key';
+    let warned = false;
+    const originalWarn = console.warn;
+    console.warn = (...args) => {
+      warned = true;
+      originalWarn(...args);
+    };
+    try {
+      const payload = {
+        user_prompt: 12345,
+        cvs199: false,
+      };
+      const res = encryptPayload(payload);
+      assert.equal(res.user_prompt, 12345);
+      assert.equal(res.cvs199, false);
+      assert.ok(warned);
+    } finally {
+      console.warn = originalWarn;
+      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+      else delete process.env.ANOSYS_ENCRYPTION_KEY;
+    }
+  });
+
+  it('is idempotent and does not re-encrypt already encrypted values', () => {
+    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
+    process.env.ANOSYS_ENCRYPTION_KEY = 'claude-secret-key';
+    try {
+      const payload = { user_prompt: 'hello world' };
+      const res1 = encryptPayload(payload);
+      const res2 = encryptPayload(res1);
+      assert.equal(res1.user_prompt, res2.user_prompt);
+    } finally {
+      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
+      else delete process.env.ANOSYS_ENCRYPTION_KEY;
+    }
+  });
+});
+

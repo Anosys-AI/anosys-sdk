@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from anosys_sdk_codex.installer import get_codex_home, get_env_path
 from anosys_sdk_codex.mapper import transform_codex_turn
+from anosys_sdk_codex.encryption import encrypt_payload
 
 CODEX_HOME = get_codex_home()
 STATE_DIR = CODEX_HOME / "state"
@@ -144,7 +145,8 @@ def post_records_batch(payloads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             log.info("[DRY RUN] Would POST chunk of %d records", len(chunk))
             continue
         try:
-            resp = requests.post(INGESTION_URL, json=chunk, headers=headers, timeout=15)
+            encrypted_chunk = [encrypt_payload(p) for p in chunk]
+            resp = requests.post(INGESTION_URL, json=encrypted_chunk, headers=headers, timeout=15)
             resp.raise_for_status()
             log.info("Batch POST success — sent %d records", len(chunk))
         except Exception as e:
