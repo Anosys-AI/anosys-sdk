@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
 import { reassign, AGENTS_KEY_MAPPING, AGENTS_STARTING_INDICES } from './mapping.js';
+import { encryptPayload } from './encryption.js';
 
 let _logApiUrl = DEFAULT_API_URL;
 let _keyToCvs = { ...AGENTS_KEY_MAPPING };
@@ -51,7 +52,8 @@ async function logPayload(source, args, output, errorInfo, callerInfo) {
 
   try {
     const mapped = reassign(variables, _keyToCvs, { ..._startingIndices });
-    await axios.post(_logApiUrl, mapped, { timeout: 5000 });
+    const payloadToSend = encryptPayload(mapped);
+    await axios.post(_logApiUrl, payloadToSend, { timeout: 5000 });
     log.debug('Logged successfully');
   } catch (e) {
     log.error('POST failed:', e.message);
@@ -80,7 +82,8 @@ export function anosysLogger(source = null) {
 export async function anosysRawLogger(data = {}) {
   try {
     const mapped = reassign(data, _keyToCvs, { ..._startingIndices });
-    await axios.post(_logApiUrl, mapped, { timeout: 5000 });
+    const payloadToSend = encryptPayload(mapped);
+    await axios.post(_logApiUrl, payloadToSend, { timeout: 5000 });
     log.debug('Raw logger: data logged successfully');
   } catch (e) {
     log.error('Raw logger POST failed:', e.message);

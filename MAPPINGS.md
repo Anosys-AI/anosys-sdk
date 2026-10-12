@@ -2,6 +2,8 @@
 
 > Auto-generated from source code scan on 2026-05-13.
 > Covers all Python and JS packages.
+> 
+> **Detailed Named & CV Variables Map**: For a complete field-by-field description of all named payload variables and physical CV columns, see [TELEMETRY_VARIABLES.md](./TELEMETRY_VARIABLES.md) and [CLAUDE_CODE_VARIABLES.md](./CLAUDE_CODE_VARIABLES.md).
 
 ---
 
@@ -353,6 +355,56 @@ Both Python and JS populate via `reassign()` through `AGENTS_KEY_MAPPING`:
 
 ---
 
+
+---
+
+## 4b. Codex Hook Schema Mapping
+
+**Source of truth:**
+- Python: `packages/python/codex/src/anosys_sdk_codex/mapper.py` → `transform_codex_turn()`
+- JS: `packages/js/codex/src/mapper.js` → `transformCodexTurn()`
+
+Codex CLI Hook uses the unified generic ingestion format with source tag `cvs200: 'CodexHook'`.
+It captures agent turns, tool calls (`shell`, `apply_patch`, Code Mode custom tools, `web_search`),
+OpenAI token breakdowns (input, output, cache read/write, reasoning tokens), and cost estimates.
+
+| Key | Type | Description |
+|---|---|---|
+| `cvs200` | string | `'CodexHook'` (source identifier) |
+| `sessionId` | string | Codex session thread ID |
+| `uuid` | string | Codex turn identifier |
+| `eventId` | string | Unique event ID (matches turn ID) |
+| `timestamp` | number | Turn start timestamp (unix ms) |
+| `userPrompt` | string | Extracted user prompt |
+| `assistantText` | string | Extracted assistant completion message |
+| `model` | string | Model name (e.g. `gpt-4o`, `o3-mini`, `o1`) |
+| `model_provider` | string | Provider (e.g. `openai`) |
+| `cwd` | string | Active working directory |
+| `project` | string | Basename of cwd |
+| `permissionMode` | string | Codex approval policy |
+| `sandbox_mode` | string | Codex sandbox policy |
+| `duration_ms` | number | Turn duration in milliseconds |
+| `input_tokens` | number | Prompt input tokens |
+| `output_tokens` | number | Completion output tokens |
+| `total_tokens` | number | Total tokens |
+| `cache_read` | number | Cached input tokens |
+| `cache_creation` | number | Cache write tokens |
+| `reasoning_tokens` | number | Reasoning output tokens |
+| `cost_estimate` | number | Estimated USD cost (OpenAI pricing model) |
+| `incremental_input` | number | Delta input tokens for the turn |
+| `incremental_output` | number | Delta output tokens for the turn |
+| `incremental_total` | number | Delta total tokens for the turn |
+| `incremental_cost` | number | Delta cost for the turn |
+| `tool_count` | number | Number of tools executed in this turn |
+| `tool_duration_ms` | number | Cumulative tool execution time (ms) |
+| `tools_used` | list/array | Array of tool names invoked |
+| `commands` | list/array | Shell commands executed |
+| `written_paths` | list/array | Files created or patched |
+| `has_thinking` | boolean | True if reasoning tokens > 0 |
+| `integration_version` | string | Codex package version |
+| `os_user` | string | Operating system username |
+| `cvs199` | string | JSON-serialized array of all tool calls with arguments and outputs |
+
 ## 5. Source Tag Values (`cvs200`)
 
 | Package | Path | `cvs200` value |
@@ -366,6 +418,7 @@ Both Python and JS populate via `reassign()` through `AGENTS_KEY_MAPPING`:
 | JS Agents (span2json) | `span2json()` | `openAI_Agents_Traces` |
 | JS Agents (OTel) | `extractOtelSpanInfo()` | `openAI_Agents_Telemetry` |
 | Claude Code | `transform_record()` | `ClaudeCodeHook` |
+| Codex CLI | `transform_codex_turn()` | `CodexHook` |
 
 ---
 
@@ -387,10 +440,11 @@ When a key is **not found** in the mapping, the `reassign()` function allocates 
 
 The SDK performs strict type coercion (Double, Boolean, JSON) before sending data, using a validation table that matches the target Protobuf schema.
 
-| Source (`cvs200`) | Validation Table | Target Schema |
-|---|---|---|
-| `ClaudeCodeHook` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
-| (Everything else) | `OTEL_AI_VALID_TYPES` | `schemaOtelAI.proto` |
+| Source (`cvs200`) | Pixel Type | Validation Table | Target Schema |
+|---|---|---|---|
+| `ClaudeCodeHook` | `CC` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
+| `CodexHook` | `CC` | `CLAUDE_VALID_TYPES` | `schemaClaudeCode.proto` |
+| (Everything else) | `T` / OTEL | `OTEL_AI_VALID_TYPES` | `schemaOtelAI.proto` |
 
 ### Coercion Rules:
 - **Double**: Strictly cast to float (defaults to `0.0` on failure).

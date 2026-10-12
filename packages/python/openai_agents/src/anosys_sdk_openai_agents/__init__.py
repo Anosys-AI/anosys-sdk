@@ -7,8 +7,21 @@ using the TracingProcessor interface.
 
 from anosys_sdk_openai_agents.processor import AnosysOpenAIAgentsLogger, setup_tracing
 
-# Re-export core decorators for convenience
-from anosys_sdk_core import anosys_logger, anosys_raw_logger, setup_api, setup_decorator
+# Re-export core decorators and encryption for convenience
+from anosys_sdk_core import (
+    anosys_logger,
+    anosys_raw_logger,
+    setup_api,
+    setup_decorator,
+    encrypt_payload,
+    get_encryption_key,
+    get_target_columns,
+    derive_256_bit_key,
+    encrypt,
+    decrypt,
+    ANOSYS_ENCRYPTION_PREFIX,
+    DEFAULT_ENCRYPTED_COLUMNS,
+)
 
 from importlib.metadata import version, PackageNotFoundError
 
@@ -25,4 +38,12 @@ __all__ = [
     "anosys_raw_logger",
     "setup_api",
     "setup_decorator",
+    "encrypt_payload",
+    "get_encryption_key",
+    "get_target_columns",
+    "derive_256_bit_key",
+    "encrypt",
+    "decrypt",
+    "ANOSYS_ENCRYPTION_PREFIX",
+    "DEFAULT_ENCRYPTED_COLUMNS",
 ]

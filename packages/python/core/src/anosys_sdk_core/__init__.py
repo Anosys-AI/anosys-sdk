@@ -13,6 +13,16 @@ from anosys_sdk_core.client import AnosysClient
 from anosys_sdk_core.decorators import anosys_logger, anosys_raw_logger, setup_api
 from anosys_sdk_core.context import get_user_context, set_user_context
 from anosys_sdk_core.models import BASE_KEY_MAPPING
+from anosys_sdk_core.encryption import (
+    ANOSYS_ENCRYPTION_PREFIX,
+    DEFAULT_ENCRYPTED_COLUMNS,
+    derive_256_bit_key,
+    encrypt,
+    decrypt,
+    get_encryption_key,
+    get_target_columns,
+    encrypt_payload,
+)
 
 from importlib.metadata import version, PackageNotFoundError
 
@@ -41,4 +51,13 @@ __all__ = [
     "set_user_context",
     # Models
     "BASE_KEY_MAPPING",
+    # Encryption
+    "ANOSYS_ENCRYPTION_PREFIX",
+    "DEFAULT_ENCRYPTED_COLUMNS",
+    "derive_256_bit_key",
+    "encrypt",
+    "decrypt",
+    "get_encryption_key",
+    "get_target_columns",
+    "encrypt_payload",
 ]

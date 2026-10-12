@@ -28,6 +28,7 @@ from agents import TracingProcessor
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.context import clean_contextvars
+from anosys_sdk_core.encryption import encrypt_payload
 from anosys_sdk_openai_agents.mapping import span2json, extract_otel_span_info
 from anosys_sdk_openai_agents.utils import safe_serialize, clean_nulls
 
@@ -57,8 +58,9 @@ class AnosysHttpExporter(SpanExporter):
                 
                 # Remove null values and empty containers
                 cleaned_data = clean_nulls(data)
+                encrypted_data = encrypt_payload(cleaned_data)
                 
-                response = requests.post(_log_api_url, json=cleaned_data, timeout=5)
+                response = requests.post(_log_api_url, json=encrypted_data, timeout=5)
                 response.raise_for_status()
                 logger.info(f"[ANOSYS]✅ Successfully sent to backend: {span_source} | {span_name}")
                 
@@ -244,7 +246,8 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             # Transform and send
             transformed = span2json(payload)
             cleaned_transformed = clean_nulls(transformed)
-            response = requests.post(self.log_api_url, json=cleaned_transformed, timeout=5)
+            encrypted_transformed = encrypt_payload(cleaned_transformed)
+            response = requests.post(self.log_api_url, json=encrypted_transformed, timeout=5)
             response.raise_for_status()
             
         except Exception as e:

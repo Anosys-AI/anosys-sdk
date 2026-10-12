@@ -1,0 +1,38 @@
+{
+  "name": "anosys-sdk-codex",
+  "version": "0.1.0",
+  "description": "AnoSys observability hook for OpenAI Codex CLI \u2014 automatic instrumentation and logging for Codex sessions",
+  "author": "AnoSys <support@anosys.ai>",
+  "license": "Apache-2.0",
+  "homepage": "https://anosys.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anosys-ai/anosys-sdk.git"
+  },
+  "main": "src/hookRunner.js",
+  "exports": {
+    ".": "./src/hookRunner.js"
+  },
+  "bin": {
+    "anosys-codex": "src/cli.js"
+  },
+  "files": [
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "anosys",
+    "codex",
+    "openai",
+    "observability",
+    "monitoring",
+    "logging",
+    "llm",
+    "hooks"
+  ],
+  "scripts": {
+    "test": "node --test"
+  }
+}

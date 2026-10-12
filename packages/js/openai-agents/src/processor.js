@@ -8,6 +8,7 @@ import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { span2json, extractOtelSpanInfo } from './mapping.js';
 import { safeSerialize, cleanNulls } from './utils.js';
+import { encryptPayload } from './encryption.js';
 
 let _logApiUrl = DEFAULT_API_URL;
 let _tracingInitialized = false;
@@ -29,7 +30,8 @@ export class AnosysHttpExporter {
         const spanName   = cleaned.otel_name ?? cleaned.name ?? 'unknown';
         log.debug('Exporting span from: %s | Name: %s', spanSource, spanName);
 
-        await axios.post(_logApiUrl, cleaned, { timeout: 5000 });
+        const payloadToSend = encryptPayload(cleaned);
+        await axios.post(_logApiUrl, payloadToSend, { timeout: 5000 });
         log.debug('Successfully sent: %s | %s', spanSource, spanName);
 
       } catch (e) {
@@ -151,7 +153,8 @@ export class AnosysOpenAIAgentsLogger {
       }
 
       const transformed = span2json(payload);
-      await axios.post(this._logApiUrl, transformed, { timeout: 5000 });
+      const payloadToSend = encryptPayload(transformed);
+      await axios.post(this._logApiUrl, payloadToSend, { timeout: 5000 });
 
     } catch (e) {
       log.error('Error logging trace:', e.message);

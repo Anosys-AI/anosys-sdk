@@ -7,6 +7,7 @@ import axios from 'axios';
 import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { extractSpanInfo } from './hooks.js';
+import { encryptPayload } from './encryption.js';
 
 let _logApiUrl = DEFAULT_API_URL;
 let _tracingInitialized = false;
@@ -39,7 +40,8 @@ export class AnosysHttpExporter {
         const spanName   = data.otel_name ?? 'unknown';
         log.debug('Exporting span from: %s | Name: %s', spanSource, spanName);
 
-        await axios.post(_logApiUrl, data, { timeout: 5000 });
+        const payloadToSend = encryptPayload(data);
+        await axios.post(_logApiUrl, payloadToSend, { timeout: 5000 });
 
       } catch (e) {
         if (e.response) {

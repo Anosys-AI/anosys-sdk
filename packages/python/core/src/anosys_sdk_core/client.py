@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 import requests
 
 from anosys_sdk_core.config import resolve_api_key
+from anosys_sdk_core.encryption import encrypt_payload
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +55,10 @@ class AnosysClient:
             Response object on success, None on failure
         """
         try:
+            payload = encrypt_payload(data)
             response = requests.post(
                 self.api_url,
-                json=data,
+                json=payload,
                 timeout=self.timeout
             )
             response.raise_for_status()

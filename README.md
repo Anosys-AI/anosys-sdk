@@ -7,7 +7,7 @@
 
 Official SDKs for integrating with [AnoSys](https://anosys.ai) — AI observability, monitoring, and analytics platform.
 
-Add a few lines of code and every LLM call, agent run, and Claude Code session is automatically captured and sent to your AnoSys workspace.
+Add a few lines of code and every LLM call, agent run, Claude Code, and OpenAI Codex session is automatically captured and sent to your AnoSys workspace.
 
 ---
 
@@ -21,6 +21,7 @@ Add a few lines of code and every LLM call, agent run, and Claude Code session i
 | [`anosys-sdk-openai`](./packages/python/openai/) | 1.0.13 | OpenAI SDK instrumentation via OpenTelemetry | `pip install anosys-sdk-openai` |
 | [`anosys-sdk-openai-agents`](./packages/python/openai_agents/) | 1.0.12 | OpenAI Agents SDK tracing (TracingProcessor) | `pip install anosys-sdk-openai-agents` |
 | [`anosys-claude-code`](./packages/python/claude_code/) | 0.2.8 | Claude Code observability hook & CLI | `pip install anosys-claude-code` |
+| [`anosys-codex`](./packages/python/codex/) | 0.1.0 | OpenAI Codex CLI observability hook & CLI | `pip install anosys-codex` |
 
 ### JavaScript / Node.js
 
@@ -29,6 +30,7 @@ Add a few lines of code and every LLM call, agent run, and Claude Code session i
 | [`anosys-sdk-openai`](./packages/js/openai/) | 1.0.11 | OpenAI SDK instrumentation via OpenTelemetry | `npm install anosys-sdk-openai` |
 | [`anosys-sdk-openai-agents`](./packages/js/openai-agents/) | 1.0.11 | OpenAI Agents SDK tracing (`addTracingProcessor`) | `npm install anosys-sdk-openai-agents` |
 | [`anosys-sdk-claude-code`](./packages/js/claude-code/) | 0.2.5 | Claude Code observability hook & CLI | `npx anosys-sdk-claude-code install` |
+| [`anosys-sdk-codex`](./packages/js/codex/) | 0.1.0 | OpenAI Codex CLI observability hook & CLI | `npx anosys-sdk-codex install` |
 
 ---
 
@@ -165,6 +167,43 @@ CLI commands: `install` · `uninstall` · `status` · `run`
 
 ---
 
+### OpenAI Codex — Python
+
+> **Note**: Requires an AnoSys API key for a **`CC` (Claude Code / Codex CLI)** pixel (not `T` / OTEL). The installer automatically validates this during setup.
+
+Install the package and run the setup wizard:
+
+```bash
+pip install anosys-codex
+anosys-codex install
+```
+
+Or install non-interactively:
+
+```bash
+anosys-codex install --api-key "your_logs_api_key" -y
+```
+
+CLI commands: `install` · `uninstall` · `status` · `run`
+
+### OpenAI Codex — JavaScript
+
+```bash
+npx anosys-sdk-codex install
+```
+
+Or install non-interactively:
+
+```bash
+npx anosys-sdk-codex install --api-key "your_logs_api_key" -y
+```
+
+CLI commands: `install` · `uninstall` · `status` · `run`
+
+**How it works:** When installed, both Python and JS packages register a notify hook (`notify = ["anosys-codex", "run"]`) in `~/.codex/config.toml`. When a Codex CLI turn completes, the hook scans the session rollout transcript (`~/.codex/sessions/`), maps messages, tool calls, and model tokens, calculates pricing, applies optional content redaction, and batches results to your AnoSys workspace.
+
+---
+
 ### Custom Function Logging
 
 Use the core decorator to log any function — works with both sync and async:
@@ -236,11 +275,13 @@ anosys-sdk/
 │   │   ├── core/               # anosys-sdk-core
 │   │   ├── openai/             # anosys-sdk-openai
 │   │   ├── openai_agents/      # anosys-sdk-openai-agents
-│   │   └── claude_code/        # anosys-claude-code
+│   │   ├── claude_code/        # anosys-claude-code
+│   │   └── codex/              # anosys-codex
 │   └── js/
 │       ├── openai/             # anosys-sdk-openai (npm)
 │       ├── openai-agents/      # anosys-sdk-openai-agents (npm)
-│       └── claude-code/        # anosys-sdk-claude-code (npm)
+│       ├── claude-code/        # anosys-sdk-claude-code (npm)
+│       └── codex/              # anosys-sdk-codex (npm)
 ├── examples/                   # Jupyter notebook demos
 ├── scripts/
 │   └── release.sh              # Per-package release script
@@ -261,9 +302,111 @@ anosys-sdk/
 |----------|----------|-------------|
 | `ANOSYS_API_KEY` | Yes | Your AnoSys API key ([get one here](https://console.anosys.ai/collect/integrationoptions)) |
 | `OPENAI_API_KEY` | Yes* | Required for OpenAI / OpenAI Agents packages |
+| `ANOSYS_ENCRYPTION_KEY` | No | Secret passphrase to encrypt sensitive telemetry client-side before transmission |
+| `ANOSYS_ENCRYPTED_COLUMNS` | No | Comma-separated columns to encrypt (overrides defaults; alias: `ANOSYS_ENCRYPTES_COLUMNS`) |
 | `ANOSYS_API_URL` | No | Override the logging endpoint (default: `https://www.anosys.ai`) |
 | `ANOSYS_RESOLVER_URL` | No | Override the API key resolver endpoint |
 | `ANOSYS_LOG_LEVEL` | No | JS only: `debug` / `info` / `warn` / `error` / `silent` (default: `warn`) |
+
+---
+
+## Client-Side Data Encryption
+
+AnoSys SDK supports end-to-end client-side data encryption across all Python and JavaScript packages. When configured, sensitive telemetry columns (prompts, completions, messages, system instructions, raw context) are encrypted with AES-256-CBC directly within your application before any network requests are sent to the AnoSys backend (`https://api.anosys.ai`).
+
+### How It Works
+
+1. **Activation**: Encryption is enabled automatically whenever the `ANOSYS_ENCRYPTION_KEY` environment variable is set and non-empty.
+2. **Algorithm**: AES-256-CBC.
+   - **Key**: 32 bytes derived from `ANOSYS_ENCRYPTION_KEY` via SHA-256 (`hashlib.sha256` / `crypto.createHash('sha256')`).
+   - **Initialization Vector (IV)**: Static 16 zero-bytes (`b'\x00' * 16`).
+   - **Padding**: PKCS#7.
+   - **Encoding**: Standard Base64.
+3. **Ciphertext Prefix**: Encrypted values are prepended with `enc:`:
+   - `123` &rarr; `enc:XYZ`
+4. **Idempotency**: Fields that already start with `enc:` are preserved and will not be re-encrypted.
+
+### Default Encrypted Columns
+
+By default, the following prompt, completion, message, and context columns are encrypted if present:
+
+- `llm_input`
+- `llm_output`
+- `gen_ai_input_messages`
+- `gen_ai_output_messages`
+- `gen_ai_system_instructions`
+- `llm_system`
+- `user_prompt` / `userPrompt` / `cvs4`
+- `assistant_text` / `assistantText` / `cvs5`
+- `last_prompt` / `cvs24`
+- `tool_use_result` / `cvs26`
+- `task_description`
+- `summary_content` / `cvs65`
+- `cvs199` (raw span / event context)
+
+### Custom Column Overrides
+
+To encrypt only specific columns, set `ANOSYS_ENCRYPTED_COLUMNS` (or `ANOSYS_ENCRYPTES_COLUMNS`) with a comma-separated list of column names:
+
+```bash
+export ANOSYS_ENCRYPTION_KEY="your-strong-secret-passphrase"
+export ANOSYS_ENCRYPTED_COLUMNS="llm_input,llm_output,cvs199"
+```
+
+When set, this completely overwrites the default column selection — only the specified columns will be encrypted.
+
+### Non-String Column Handling
+
+Encryption operates strictly on string fields. If a targeted column contains non-string data (such as numbers, booleans, arrays, or objects), a warning is printed to the console:
+
+```
+[ANOSYS] Warning: Column 'llm_input' contains non-string data (type: number). Skipping encryption.
+```
+
+The non-string value remains unencrypted and intact.
+
+### Python Example
+
+```python
+import os
+from openai import OpenAI
+from anosys_sdk_openai import AnosysOpenAILogger
+
+# Enable client-side encryption
+os.environ["ANOSYS_ENCRYPTION_KEY"] = "my-secret-team-passphrase"
+# Optional: customize target columns
+# os.environ["ANOSYS_ENCRYPTED_COLUMNS"] = "llm_input,llm_output,cvs199"
+
+# Initialize logger — telemetry payloads are encrypted before being sent to AnoSys
+AnosysOpenAILogger()
+
+client = OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Confidential prompt content"}]
+)
+```
+
+### JavaScript Example
+
+```javascript
+import { AnosysOpenAILogger } from 'anosys-sdk-openai';
+import OpenAI from 'openai';
+
+// Enable client-side encryption
+process.env.ANOSYS_ENCRYPTION_KEY = 'my-secret-team-passphrase';
+// Optional: customize target columns
+// process.env.ANOSYS_ENCRYPTED_COLUMNS = 'llm_input,llm_output,cvs199';
+
+// Initialize logger — telemetry payloads are encrypted before being sent to AnoSys
+new AnosysOpenAILogger();
+
+const client = new OpenAI();
+const response = await client.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Confidential prompt content' }],
+});
+```
 
 ---
 
@@ -335,9 +478,11 @@ scripts/release.sh <component> <version>
 | `openai-py` | `anosys-sdk-openai` | PyPI |
 | `openai-agents-py` | `anosys-sdk-openai-agents` | PyPI |
 | `claude-code` | `anosys-claude-code` | PyPI |
+| `codex` | `anosys-codex` | PyPI |
 | `openai-js` | `anosys-sdk-openai` | npm |
 | `openai-agents-js` | `anosys-sdk-openai-agents` | npm |
 | `claude-code-js` | `anosys-sdk-claude-code` | npm |
+| `codex-js` | `anosys-sdk-codex` | npm |
 
 The script bumps the version, commits, tags as `<component>-v<version>`, and pushes. The corresponding GitHub Actions workflow builds and publishes the package automatically.
 
@@ -364,6 +509,8 @@ The [`examples/`](./examples/) directory contains Jupyter notebooks demonstratin
 
 - **SDK Docs**: [docs.anosys.ai](https://docs.anosys.ai)
 - **AnoSys Console**: [console.anosys.ai](https://console.anosys.ai)
+- **Telemetry Variables Map (Codex & Global)**: [TELEMETRY_VARIABLES.md](./TELEMETRY_VARIABLES.md) — complete reference for all Named & CV variables
+- **Claude Code Variables Map**: [CLAUDE_CODE_VARIABLES.md](./CLAUDE_CODE_VARIABLES.md) — dedicated reference for all Claude Code Named & CV variables
 - **CVS Variable Mappings**: [MAPPINGS.md](./MAPPINGS.md) — full reference for how SDK fields map to AnoSys platform variables
 
 ---

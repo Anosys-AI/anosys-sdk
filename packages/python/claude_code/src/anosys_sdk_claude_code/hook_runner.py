@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from anosys_sdk_claude_code.mapper import transform_record
+from anosys_sdk_claude_code.encryption import encrypt_payload
 
 INGESTION_URL = "https://api.anosys.ai/ingestion"
 API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "")
@@ -197,7 +198,8 @@ async def post_records_batch(payloads: List[dict]) -> List[dict]:
             log.info("[DRY RUN] Would POST chunk of %d records", len(chunk))
             continue
         try:
-            resp = requests.post(INGESTION_URL, json=chunk, headers=headers, timeout=15)
+            encrypted_chunk = [encrypt_payload(p) for p in chunk]
+            resp = requests.post(INGESTION_URL, json=encrypted_chunk, headers=headers, timeout=15)
             resp.raise_for_status()
             log.info("Batch POST success — sent %d records", len(chunk))
         except Exception as e:
