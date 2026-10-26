@@ -55,4 +55,4 @@ jobs:
         working-directory: ${{ steps.pkg.outputs.dir }}
         run: npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPI_V3 }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPI_V4 }}
