@@ -6,6 +6,7 @@ on:
       - "openai-js-v*"
       - "openai-agents-js-v*"
       - "claude-code-js-v*"
+      - "codex-js-v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -31,6 +32,7 @@ jobs:
             openai-js-v*)         dir="packages/js/openai" ;;
             openai-agents-js-v*)  dir="packages/js/openai-agents" ;;
             claude-code-js-v*)    dir="packages/js/claude-code" ;;
+            codex-js-v*)          dir="packages/js/codex" ;;
             *)                    echo "Unknown tag prefix: $tag" >&2; exit 1 ;;
           esac
           echo "dir=$dir" >> "$GITHUB_OUTPUT"

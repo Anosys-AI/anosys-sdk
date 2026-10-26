@@ -34,9 +34,11 @@ Components:
   openai-py         packages/python/openai            (anosys-sdk-openai)
   openai-agents-py  packages/python/openai_agents     (anosys-sdk-openai-agents)
   claude-code       packages/python/claude_code       (anosys-claude-code)
+  codex             packages/python/codex             (anosys-codex)
   openai-js         packages/js/openai                (anosys-sdk-openai)
   openai-agents-js  packages/js/openai-agents         (anosys-sdk-openai-agents)
   claude-code-js    packages/js/claude-code           (anosys-sdk-claude-code)
+  codex-js          packages/js/codex                 (anosys-sdk-codex)
 
 Version: semver, e.g. 1.0.5 or 2.0.0-rc.1
 
@@ -66,9 +68,11 @@ case "$component" in
   openai-py)         dir="packages/python/openai";        lang="python" ;;
   openai-agents-py)  dir="packages/python/openai_agents"; lang="python" ;;
   claude-code)       dir="packages/python/claude_code";   lang="python" ;;
+  codex)             dir="packages/python/codex";         lang="python" ;;
   openai-js)         dir="packages/js/openai";            lang="node"   ;;
   openai-agents-js)  dir="packages/js/openai-agents";     lang="node"   ;;
   claude-code-js)    dir="packages/js/claude-code";       lang="node"   ;;
+  codex-js)          dir="packages/js/codex";             lang="node"   ;;
   *)
     err "unknown component: $component"
     usage

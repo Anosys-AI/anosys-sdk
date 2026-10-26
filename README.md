@@ -17,19 +17,19 @@ Add a few lines of code and every LLM call, agent run, Claude Code, and OpenAI C
 
 | Package | Version | Description | Install |
 |---------|---------|-------------|---------|
-| [`anosys-sdk-core`](./packages/python/core/) | 1.0.13 | Shared core — config, HTTP client, decorators, data models | `pip install anosys-sdk-core` |
-| [`anosys-sdk-openai`](./packages/python/openai/) | 1.0.13 | OpenAI SDK instrumentation via OpenTelemetry | `pip install anosys-sdk-openai` |
-| [`anosys-sdk-openai-agents`](./packages/python/openai_agents/) | 1.0.12 | OpenAI Agents SDK tracing (TracingProcessor) | `pip install anosys-sdk-openai-agents` |
-| [`anosys-claude-code`](./packages/python/claude_code/) | 0.2.8 | Claude Code observability hook & CLI | `pip install anosys-claude-code` |
+| [`anosys-sdk-core`](./packages/python/core/) | 1.0.14 | Shared core — config, HTTP client, decorators, data models | `pip install anosys-sdk-core` |
+| [`anosys-sdk-openai`](./packages/python/openai/) | 1.0.14 | OpenAI SDK instrumentation via OpenTelemetry | `pip install anosys-sdk-openai` |
+| [`anosys-sdk-openai-agents`](./packages/python/openai_agents/) | 1.0.13 | OpenAI Agents SDK tracing (TracingProcessor) | `pip install anosys-sdk-openai-agents` |
+| [`anosys-claude-code`](./packages/python/claude_code/) | 0.2.9 | Claude Code observability hook & CLI | `pip install anosys-claude-code` |
 | [`anosys-codex`](./packages/python/codex/) | 0.1.0 | OpenAI Codex CLI observability hook & CLI | `pip install anosys-codex` |
 
 ### JavaScript / Node.js
 
 | Package | Version | Description | Install |
 |---------|---------|-------------|---------|
-| [`anosys-sdk-openai`](./packages/js/openai/) | 1.0.11 | OpenAI SDK instrumentation via OpenTelemetry | `npm install anosys-sdk-openai` |
-| [`anosys-sdk-openai-agents`](./packages/js/openai-agents/) | 1.0.11 | OpenAI Agents SDK tracing (`addTracingProcessor`) | `npm install anosys-sdk-openai-agents` |
-| [`anosys-sdk-claude-code`](./packages/js/claude-code/) | 0.2.5 | Claude Code observability hook & CLI | `npx anosys-sdk-claude-code install` |
+| [`anosys-sdk-openai`](./packages/js/openai/) | 1.0.12 | OpenAI SDK instrumentation via OpenTelemetry | `npm install anosys-sdk-openai` |
+| [`anosys-sdk-openai-agents`](./packages/js/openai-agents/) | 1.0.12 | OpenAI Agents SDK tracing (`addTracingProcessor`) | `npm install anosys-sdk-openai-agents` |
+| [`anosys-sdk-claude-code`](./packages/js/claude-code/) | 0.2.6 | Claude Code observability hook & CLI | `npx anosys-sdk-claude-code install` |
 | [`anosys-sdk-codex`](./packages/js/codex/) | 0.1.0 | OpenAI Codex CLI observability hook & CLI | `npx anosys-sdk-codex install` |
 
 ---
