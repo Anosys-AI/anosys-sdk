@@ -23,6 +23,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Resolve package directory from tag
         id: pkg
@@ -53,4 +55,4 @@ jobs:
         working-directory: ${{ steps.pkg.outputs.dir }}
         run: npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_V2 }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPI_V3 }}
