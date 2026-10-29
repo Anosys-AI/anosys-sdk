@@ -16,6 +16,7 @@ let _logApiUrl = DEFAULT_API_URL;
 let _logApiUrlReady = Promise.resolve(DEFAULT_API_URL);
 let _tracingInitialized = false;
 let _provider = null;
+let _captureContent = true;
 let _hub = null;
 
 function scopeName(span) {
@@ -56,7 +57,7 @@ export class AnosysHttpExporter {
           }
         } catch { /* user context errors must not block export */ }
 
-        log.info(
+        log.debug(
           'Exporting span from: %s | Name: %s | input_len: %d | output_len: %d',
           data.cvs200,
           data.otel_name,
@@ -105,7 +106,7 @@ export function addSpanProcessor(processor) {
     const active = trace.getTracerProvider();
     const delegate = typeof active.getDelegate === 'function' ? active.getDelegate() : active;
     if (delegate !== _provider) {
-      log.warn('Another global tracer provider is registered. Pass `openTelemetry: { tracerProvider: getTracerProvider() }` to Anthropic clients so their spans reach AnoSys.');
+      log.warn('Another global tracer provider is registered. Pass `openTelemetry: getAnthropicOpenTelemetryOptions()` to Anthropic clients so their spans reach AnoSys.');
     }
   }
   _hub.add(processor);
@@ -119,15 +120,22 @@ export function getTracerProvider() {
 
 /**
  * Returns the recommended OpenTelemetry options to pass to `new Anthropic({ openTelemetry })`.
- * Ensures both the AnoSys tracer provider and full prompt/completion content capture are enabled.
+ * The SDK treats a given option as complete and ignores the environment, so this
+ * carries both the AnoSys tracer provider and the logger's `captureContent` choice.
+ * Call it after creating the logger.
  */
 export function getAnthropicOpenTelemetryOptions() {
-  return {
-    tracerProvider: getTracerProvider(),
+  const options = {
     traces: {
-      contentMode: 'content',
+      contentMode: _captureContent ? 'content' : 'metadata_only',
     },
   };
+  if (_provider) {
+    options.tracerProvider = _provider;
+  } else {
+    log.warn('getAnthropicOpenTelemetryOptions() was called before AnosysAnthropicLogger; the client will use the global tracer provider.');
+  }
+  return options;
 }
 
 /** Set the ingestion URL; a promise holds exports until it resolves. */
@@ -167,6 +175,7 @@ export class AnosysAnthropicLogger {
    */
   constructor({ getUserContext = null, captureContent = true, useBatchProcessor = false } = {}) {
     this.getUserContext = getUserContext;
+    _captureContent = captureContent;
     // The SDK records metadata only unless content mode is requested
     if (captureContent && process.env[CONTENT_MODE_ENV] === undefined) {
       process.env[CONTENT_MODE_ENV] = 'content';

@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _tracing_initialized = False
 _log_api_url = "https://www.anosys.ai"
+_capture_content = True
 
 # Read by the Anthropic SDK when a client is constructed
 CONTENT_MODE_ENV = "ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE"
@@ -151,6 +152,24 @@ def setup_tracing(
         logger.info("AnoSys attached to Anthropic OpenTelemetry traces")
 
 
+def get_anthropic_open_telemetry_options() -> dict:
+    """
+    Recommended ``open_telemetry`` option for ``anthropic.Anthropic(open_telemetry=...)``.
+
+    The SDK treats a given option as complete and ignores the environment, so a
+    hand-written option such as ``{"tracer_provider": ...}`` silently switches the
+    client to metadata-only. This carries the active tracer provider and the
+    logger's ``capture_content`` choice. Call it after creating the logger.
+    """
+    options: dict = {"traces": {"content_mode": "content" if _capture_content else "metadata_only"}}
+    provider = trace.get_tracer_provider()
+    if isinstance(provider, TracerProvider):
+        options["tracer_provider"] = provider
+    else:
+        logger.warning("get_anthropic_open_telemetry_options() was called before AnosysAnthropicLogger")
+    return options
+
+
 class AnosysAnthropicLogger:
     """
     Logging utility that captures Anthropic (Claude) API calls, transforms them,
@@ -181,7 +200,9 @@ class AnosysAnthropicLogger:
                 ``open_telemetry`` option of their own.
             use_batch_processor: If True, use BatchSpanProcessor
         """
-        global _tracing_initialized
+        global _tracing_initialized, _capture_content
+
+        _capture_content = capture_content
 
         # Resolve API URL
         self.log_api_url = resolve_api_key()

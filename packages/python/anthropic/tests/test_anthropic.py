@@ -12,7 +12,8 @@ from types import SimpleNamespace
 
 from anosys_sdk_core.models import CLAUDE_KEY_MAPPING
 from anosys_sdk_anthropic.hooks import extract_span_info
-from anosys_sdk_anthropic.instrumentor import _is_anthropic_span
+from anosys_sdk_anthropic import instrumentor
+from anosys_sdk_anthropic.instrumentor import _is_anthropic_span, get_anthropic_open_telemetry_options
 from anosys_sdk_anthropic.mapping import (
     ANTHROPIC_KEY_MAPPING,
     ANTHROPIC_SOURCE,
@@ -80,3 +81,17 @@ def test_exporter_accepts_application_genai_spans():
     assert _is_anthropic_span(_fake_span("my.app", tool_span))
     # Claude Agents spans have their own exporter
     assert not _is_anthropic_span(_fake_span("anosys.claude_agents", tool_span))
+
+
+def test_open_telemetry_options_follow_capture_content(monkeypatch):
+    monkeypatch.setattr(instrumentor, "_capture_content", False)
+    assert get_anthropic_open_telemetry_options()["traces"] == {"content_mode": "metadata_only"}
+    monkeypatch.setattr(instrumentor, "_capture_content", True)
+    assert get_anthropic_open_telemetry_options()["traces"] == {"content_mode": "content"}
+
+
+def test_open_telemetry_options_carry_sdk_provider(monkeypatch):
+    from opentelemetry.sdk.trace import TracerProvider
+    provider = TracerProvider()
+    monkeypatch.setattr(instrumentor.trace, "get_tracer_provider", lambda: provider)
+    assert get_anthropic_open_telemetry_options()["tracer_provider"] is provider

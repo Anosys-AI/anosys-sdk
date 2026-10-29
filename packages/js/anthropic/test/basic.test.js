@@ -9,7 +9,7 @@ import {
 } from '../src/mapping.js';
 import { extractGenAiSpanInfo, flattenMessages, spanToJson } from '../src/genai.js';
 import { extractSpanInfo, isAnthropicSpan, ANTHROPIC_SOURCE } from '../src/hooks.js';
-import { AnosysHttpExporter } from '../src/instrumentor.js';
+import { AnosysAnthropicLogger, AnosysHttpExporter, getAnthropicOpenTelemetryOptions, getTracerProvider } from '../src/instrumentor.js';
 
 function span(attributes, { name = 'anthropic.messages.create', status = 'OK' } = {}) {
   return {
@@ -144,6 +144,23 @@ describe('isAnthropicSpan', () => {
     assert.equal(isAnthropicSpan('@opentelemetry/instrumentation-http'), false);
     assert.equal(isAnthropicSpan('my.app', { 'gen_ai.operation.name': 'execute_tool' }), true);
     assert.equal(isAnthropicSpan('anosys.claude_agents', { 'gen_ai.operation.name': 'execute_tool' }), false);
+  });
+});
+
+describe('getAnthropicOpenTelemetryOptions', () => {
+  it('omits the provider before the logger exists', () => {
+    const options = getAnthropicOpenTelemetryOptions();
+    assert.equal(options.tracerProvider, undefined);
+  });
+
+  it('carries the AnoSys provider and the captureContent choice', () => {
+    new AnosysAnthropicLogger({ captureContent: false });
+    let options = getAnthropicOpenTelemetryOptions();
+    assert.equal(options.tracerProvider, getTracerProvider());
+    assert.equal(options.traces.contentMode, 'metadata_only');
+    new AnosysAnthropicLogger({ captureContent: true });
+    options = getAnthropicOpenTelemetryOptions();
+    assert.equal(options.traces.contentMode, 'content');
   });
 });
 

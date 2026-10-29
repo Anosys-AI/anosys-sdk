@@ -5,7 +5,11 @@ This package captures the OpenTelemetry spans that the Anthropic SDK emits
 for every API call and sends them to AnoSys.
 """
 
-from anosys_sdk_anthropic.instrumentor import AnosysAnthropicLogger, setup_tracing
+from anosys_sdk_anthropic.instrumentor import (
+    AnosysAnthropicLogger,
+    get_anthropic_open_telemetry_options,
+    setup_tracing,
+)
 
 # Re-export core decorators and encryption for convenience
 from anosys_sdk_core import (
@@ -32,6 +36,7 @@ except PackageNotFoundError:
 
 __all__ = [
     "AnosysAnthropicLogger",
+    "get_anthropic_open_telemetry_options",
     "setup_tracing",
     # Re-exports from core
     "anosys_logger",

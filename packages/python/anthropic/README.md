@@ -56,7 +56,13 @@ AnosysAnthropicLogger(
 )
 ```
 
-`capture_content` sets `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=content` when it is not already set. The SDK reads it when a client is constructed, so create clients after the logger. A client given its own `open_telemetry` option uses that option instead; for example `open_telemetry={"traces": {"content_mode": "metadata_only"}}` keeps content out of one client's spans.
+`capture_content` sets `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=content` when it is not already set. The SDK reads it when a client is constructed, so create clients after the logger. A client given its own `open_telemetry` option uses that option instead, and the SDK treats it as complete: `open_telemetry={"tracer_provider": provider}` alone silently switches the client to metadata-only. When you need to pass an option, start from `get_anthropic_open_telemetry_options()`, which keeps the active provider and your `capture_content` choice:
+
+```python
+from anosys_sdk_anthropic import get_anthropic_open_telemetry_options
+
+client = anthropic.Anthropic(open_telemetry={**get_anthropic_open_telemetry_options(), "conversation_id": "abc"})
+```
 
 If your application already registers an OpenTelemetry `TracerProvider`, the logger attaches to it. It sends the Anthropic SDK's spans plus any GenAI spans your code creates around them (spans with a `gen_ai.operation.name`, such as an agent loop or tool calls, as in the support-copilot notebook); other spans on the provider are skipped.
 
