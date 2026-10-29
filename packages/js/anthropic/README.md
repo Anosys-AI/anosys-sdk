@@ -41,7 +41,7 @@ new AnosysAnthropicLogger({
 
 `captureContent` sets `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=content` when it is not already set; the SDK reads it when a client is constructed. A client given its own `openTelemetry` option uses that instead.
 
-The logger registers a global tracer provider. If your application already registered one, pass ours to the client: `new Anthropic({ openTelemetry: { tracerProvider: getTracerProvider() } })`. Make sure a single `@opentelemetry/api` version is installed (`npm dedupe`), otherwise the SDK cannot see the registered provider.
+The logger registers a global tracer provider. If your application already registered one, pass ours to the client: `new Anthropic({ openTelemetry: getAnthropicOpenTelemetryOptions() })`. Make sure a single `@opentelemetry/api` version is installed (`npm dedupe`), otherwise the SDK cannot see the registered provider.
 
 ## What Data is Captured?
 

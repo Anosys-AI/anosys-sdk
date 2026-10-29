@@ -56,7 +56,13 @@ export class AnosysHttpExporter {
           }
         } catch { /* user context errors must not block export */ }
 
-        log.debug('Exporting span from: %s | Name: %s', data.cvs200, data.otel_name);
+        log.info(
+          'Exporting span from: %s | Name: %s | input_len: %d | output_len: %d',
+          data.cvs200,
+          data.otel_name,
+          data.llm_input ? String(data.llm_input).length : 0,
+          data.llm_output ? String(data.llm_output).length : 0,
+        );
 
         const payloadToSend = encryptPayload(data);
         await _logApiUrlReady;
@@ -109,6 +115,19 @@ export function addSpanProcessor(processor) {
 /** The AnoSys tracer provider (null until a logger is initialized). */
 export function getTracerProvider() {
   return _provider;
+}
+
+/**
+ * Returns the recommended OpenTelemetry options to pass to `new Anthropic({ openTelemetry })`.
+ * Ensures both the AnoSys tracer provider and full prompt/completion content capture are enabled.
+ */
+export function getAnthropicOpenTelemetryOptions() {
+  return {
+    tracerProvider: getTracerProvider(),
+    traces: {
+      contentMode: 'content',
+    },
+  };
 }
 
 /** Set the ingestion URL; a promise holds exports until it resolves. */

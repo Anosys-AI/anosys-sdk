@@ -5,6 +5,7 @@ export {
   addSpanProcessor,
   createSpanProcessor,
   getTracerProvider,
+  getAnthropicOpenTelemetryOptions,
   setLogApiUrl,
 } from './instrumentor.js';
 export { anosysLogger, anosysRawLogger, setupApi, setupDecorator } from './decorators.js';
