@@ -1,0 +1,86 @@
+# AnoSys SDK for Anthropic
+
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+
+Automatically capture and send Anthropic (Claude) API calls to [AnoSys](https://anosys.ai) for monitoring, analytics, and observability.
+
+## Features
+
+✨ **Native Instrumentation** - Uses the OpenTelemetry spans the Anthropic SDK emits itself; no third-party instrumentor  
+✨ **Streaming Support** - `messages.stream()` and `stream=True` calls are captured with final usage  
+✨ **OpenTelemetry Semantic Conventions** - Follows Gen AI standards, same columns as the OpenAI integration  
+✨ **Prompt Caching & Thinking** - Cache read/write tokens and extended thinking are tracked  
+✨ **Zero Configuration** - Works out of the box with just your API key  
+
+## Installation
+
+```bash
+pip install anosys-sdk-anthropic
+```
+
+Requires `anthropic>=2.0.0`.
+
+## Quick Start
+
+```python
+import os
+import anthropic
+from anosys_sdk_anthropic import AnosysAnthropicLogger
+
+os.environ["ANTHROPIC_API_KEY"] = "your-anthropic-key"
+os.environ["ANOSYS_API_KEY"] = "your-anosys-key"
+
+# Initialize (do once at startup, before creating clients)
+AnosysAnthropicLogger()
+
+# Use Anthropic normally - all calls are automatically logged
+client = anthropic.Anthropic()
+
+message = client.messages.create(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    system="You are a helpful assistant.",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(message.content[0].text)
+```
+
+## Options
+
+```python
+AnosysAnthropicLogger(
+    get_user_context=lambda: {"session_id": "abc", "token": "user-token"},
+    capture_content=True,       # record prompts and completions (default)
+    use_batch_processor=False,  # BatchSpanProcessor instead of SimpleSpanProcessor
+)
+```
+
+`capture_content` sets `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=content` when it is not already set. The SDK reads it when a client is constructed, so create clients after the logger. A client given its own `open_telemetry` option uses that option instead; for example `open_telemetry={"traces": {"content_mode": "metadata_only"}}` keeps content out of one client's spans.
+
+If your application already registers an OpenTelemetry `TracerProvider`, the logger attaches to it, and only Anthropic spans are sent to AnoSys.
+
+## What Data is Captured?
+
+Following [OpenTelemetry Gen AI standards](https://opentelemetry.io/docs/specs/semconv/gen-ai/):
+
+- `gen_ai.system` / `gen_ai.provider.name` - Always "anthropic"
+- `gen_ai.request.model`, `gen_ai.request.max_tokens`, `gen_ai.request.stop_sequences`
+- `gen_ai.response.model`, `gen_ai.response.id`, `gen_ai.response.finish_reasons` (stop reason)
+- `gen_ai.usage.input_tokens` (including cached tokens), `gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`
+- Prompt cache tokens (`cvn4` read, `cvn5` write) and extended thinking (`cvb3`)
+- System instructions, input and output messages
+- Timestamps, duration, errors
+
+Records are tagged `cvs200 = "AnthropicTelemetry"`. See [MAPPINGS.md](../../../MAPPINGS.md) for the column map.
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANOSYS_API_KEY` | Yes | Your AnoSys API key |
+| `ANTHROPIC_API_KEY` | Yes | Your Anthropic API key |
+
+## License
+
+Apache 2.0
