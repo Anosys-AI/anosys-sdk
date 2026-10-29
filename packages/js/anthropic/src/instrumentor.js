@@ -6,7 +6,7 @@ import axios from 'axios';
 import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { spanToJson } from './genai.js';
-import { extractSpanInfo, ANTHROPIC_SCOPE_PREFIX } from './hooks.js';
+import { extractSpanInfo, isAnthropicSpan } from './hooks.js';
 import { encryptPayload } from './encryption.js';
 
 // Read by the Anthropic SDK when a client is constructed
@@ -25,23 +25,23 @@ function scopeName(span) {
 // ── OTel HTTP exporter ────────────────────────────────────────────────────────
 
 /**
- * Sends GenAI spans of one instrumentation scope to AnoSys.
- * Spans of other scopes are skipped, so several integrations can share a provider.
+ * Sends GenAI spans to AnoSys. `acceptsSpan(scopeName, attributes)` picks the
+ * spans this exporter owns, so several integrations can share a provider.
  */
 export class AnosysHttpExporter {
   constructor({
     getUserContext = null,
-    acceptsScope = (name) => name.startsWith(ANTHROPIC_SCOPE_PREFIX),
+    acceptsSpan = isAnthropicSpan,
     extract = extractSpanInfo,
   } = {}) {
     this._getUserContext = getUserContext ?? (() => null);
-    this._acceptsScope = acceptsScope;
+    this._acceptsSpan = acceptsSpan;
     this._extract = extract;
   }
 
   async export(spans, resultCallback) {
     for (const span of spans) {
-      if (!this._acceptsScope(scopeName(span))) continue;
+      if (!this._acceptsSpan(scopeName(span), span.attributes ?? {})) continue;
       try {
         const data = this._extract(spanToJson(span));
 

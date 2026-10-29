@@ -8,7 +8,7 @@ export {
   setLogApiUrl,
 } from './instrumentor.js';
 export { anosysLogger, anosysRawLogger, setupApi, setupDecorator } from './decorators.js';
-export { extractSpanInfo, ANTHROPIC_SOURCE, ANTHROPIC_SCOPE_PREFIX } from './hooks.js';
+export { extractSpanInfo, isAnthropicSpan, ANTHROPIC_SOURCE, ANTHROPIC_SCOPE_PREFIX, CLAUDE_AGENTS_SCOPE } from './hooks.js';
 export { extractGenAiSpanInfo, flattenMessages, spanToJson, OPERATION_SPAN_KINDS } from './genai.js';
 export {
   BASE_KEY_MAPPING,

@@ -18,3 +18,6 @@ ANTHROPIC_SOURCE = "AnthropicTelemetry"
 
 # OpenTelemetry instrumentation scope of the Anthropic SDK's own spans
 ANTHROPIC_SCOPE_PREFIX = "com.anthropic"
+
+# Scope of the spans exported by anosys-sdk-claude-agents (never exported twice)
+CLAUDE_AGENTS_SCOPE = "anosys.claude_agents"

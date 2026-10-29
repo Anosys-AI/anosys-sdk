@@ -62,7 +62,21 @@ def test_extract_span_info_from_sdk_span():
     assert json.loads(out["cvs199"])["name"] == "anthropic.messages.create"
 
 
+def _fake_span(scope, attributes=None):
+    return SimpleNamespace(
+        instrumentation_scope=SimpleNamespace(name=scope) if scope else None,
+        attributes=attributes or {},
+    )
+
+
 def test_exporter_scope_filter():
-    assert _is_anthropic_span(SimpleNamespace(instrumentation_scope=SimpleNamespace(name="com.anthropic.sdk.python")))
-    assert not _is_anthropic_span(SimpleNamespace(instrumentation_scope=SimpleNamespace(name="openai")))
-    assert not _is_anthropic_span(SimpleNamespace(instrumentation_scope=None))
+    assert _is_anthropic_span(_fake_span("com.anthropic.sdk.python"))
+    assert not _is_anthropic_span(_fake_span("opentelemetry.instrumentation.fastapi"))
+    assert not _is_anthropic_span(_fake_span(None))
+
+
+def test_exporter_accepts_application_genai_spans():
+    tool_span = {"gen_ai.operation.name": "execute_tool"}
+    assert _is_anthropic_span(_fake_span("my.app", tool_span))
+    # Claude Agents spans have their own exporter
+    assert not _is_anthropic_span(_fake_span("anosys.claude_agents", tool_span))

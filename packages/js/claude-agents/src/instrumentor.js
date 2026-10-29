@@ -21,7 +21,7 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
   setLogApiUrl(apiUrl);
   const exporter = new AnosysHttpExporter({
     getUserContext,
-    acceptsScope: (name) => name === CLAUDE_AGENTS_SCOPE,
+    acceptsSpan: (name) => name === CLAUDE_AGENTS_SCOPE,
     extract: extractSpanInfo,
   });
   const provider = addSpanProcessor(createSpanProcessor(exporter, useBatchProcessor));

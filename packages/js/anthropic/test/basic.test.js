@@ -8,7 +8,7 @@ import {
   ANTHROPIC_KEY_MAPPING,
 } from '../src/mapping.js';
 import { extractGenAiSpanInfo, flattenMessages, spanToJson } from '../src/genai.js';
-import { extractSpanInfo, ANTHROPIC_SOURCE } from '../src/hooks.js';
+import { extractSpanInfo, isAnthropicSpan, ANTHROPIC_SOURCE } from '../src/hooks.js';
 import { AnosysHttpExporter } from '../src/instrumentor.js';
 
 function span(attributes, { name = 'anthropic.messages.create', status = 'OK' } = {}) {
@@ -135,6 +135,15 @@ describe('spanToJson', () => {
     assert.equal(json.kind, 'SpanKind.CLIENT');
     assert.deepEqual(json.status, { status_code: 'ERROR', description: 'boom' });
     assert.equal(new Date(json.end_time) - new Date(json.start_time), 1500);
+  });
+});
+
+describe('isAnthropicSpan', () => {
+  it('accepts SDK spans and application GenAI spans only', () => {
+    assert.equal(isAnthropicSpan('com.anthropic.sdk.typescript'), true);
+    assert.equal(isAnthropicSpan('@opentelemetry/instrumentation-http'), false);
+    assert.equal(isAnthropicSpan('my.app', { 'gen_ai.operation.name': 'execute_tool' }), true);
+    assert.equal(isAnthropicSpan('anosys.claude_agents', { 'gen_ai.operation.name': 'execute_tool' }), false);
   });
 });
 

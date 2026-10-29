@@ -27,7 +27,7 @@ from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.encryption import encrypt_payload
 from anosys_sdk_anthropic.hooks import extract_span_info
-from anosys_sdk_anthropic.mapping import ANTHROPIC_SCOPE_PREFIX
+from anosys_sdk_anthropic.mapping import ANTHROPIC_SCOPE_PREFIX, CLAUDE_AGENTS_SCOPE
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +41,25 @@ CONTENT_MODE_ENV = "ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE"
 
 
 def _is_anthropic_span(span) -> bool:
+    """Spans this exporter sends: the Anthropic SDK's own spans, plus GenAI
+    spans the application creates around them (agent loops, tool calls), which
+    carry ``gen_ai.operation.name``. Other spans on a shared provider are skipped."""
     scope = getattr(span, "instrumentation_scope", None)
-    return bool(scope and (scope.name or "").startswith(ANTHROPIC_SCOPE_PREFIX))
+    scope_name = (scope.name or "") if scope else ""
+    if scope_name.startswith(ANTHROPIC_SCOPE_PREFIX):
+        return True
+    if scope_name == CLAUDE_AGENTS_SCOPE:
+        return False
+    attributes = getattr(span, "attributes", None) or {}
+    return "gen_ai.operation.name" in attributes
 
 
 class AnosysHttpExporter(SpanExporter):
     """
     Custom exporter to send Anthropic spans to AnoSys API.
 
-    Only spans of the Anthropic SDK's instrumentation scope are exported, so
-    attaching it to a shared provider does not duplicate other integrations.
+    Exports the Anthropic SDK's spans and application GenAI spans (see
+    ``_is_anthropic_span``); unrelated spans on a shared provider are skipped.
     """
 
     def __init__(self, get_user_context: Optional[Callable] = None):

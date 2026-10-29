@@ -38,7 +38,7 @@ AnosysAnthropicLogger()
 client = anthropic.Anthropic()
 
 message = client.messages.create(
-    model="claude-sonnet-4-5",
+    model="claude-sonnet-5-5",
     max_tokens=1024,
     system="You are a helpful assistant.",
     messages=[{"role": "user", "content": "Hello!"}],
@@ -58,7 +58,7 @@ AnosysAnthropicLogger(
 
 `capture_content` sets `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=content` when it is not already set. The SDK reads it when a client is constructed, so create clients after the logger. A client given its own `open_telemetry` option uses that option instead; for example `open_telemetry={"traces": {"content_mode": "metadata_only"}}` keeps content out of one client's spans.
 
-If your application already registers an OpenTelemetry `TracerProvider`, the logger attaches to it, and only Anthropic spans are sent to AnoSys.
+If your application already registers an OpenTelemetry `TracerProvider`, the logger attaches to it. It sends the Anthropic SDK's spans plus any GenAI spans your code creates around them (spans with a `gen_ai.operation.name`, such as an agent loop or tool calls, as in the support-copilot notebook); other spans on the provider are skipped.
 
 ## What Data is Captured?
 
