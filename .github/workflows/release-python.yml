@@ -8,6 +8,8 @@ on:
       - "openai-agents-py-v*"
       - "claude-code-v*"
       - "codex-v*"
+      - "anthropic-py-v*"
+      - "claude-agents-py-v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -23,6 +25,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Resolve package directory from tag
         id: pkg
@@ -34,6 +38,8 @@ jobs:
             openai-agents-py-v*)  dir="packages/python/openai_agents" ;;
             claude-code-v*)       dir="packages/python/claude_code" ;;
             codex-v*)             dir="packages/python/codex" ;;
+            anthropic-py-v*)      dir="packages/python/anthropic" ;;
+            claude-agents-py-v*)  dir="packages/python/claude_agents" ;;
             *)                    echo "Unknown tag prefix: $tag" >&2; exit 1 ;;
           esac
           echo "dir=$dir" >> "$GITHUB_OUTPUT"

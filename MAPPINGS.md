@@ -405,6 +405,55 @@ OpenAI token breakdowns (input, output, cache read/write, reasoning tokens), and
 | `os_user` | string | Operating system username |
 | `cvs199` | string | JSON-serialized array of all tool calls with arguments and outputs |
 
+## 4c. Claude SDK Mapping (Anthropic client SDK + Claude Agent SDK)
+
+**Source of truth:**
+- Python: `packages/python/core/src/anosys_sdk_core/models.py` → `CLAUDE_KEY_MAPPING`, `CLAUDE_STARTING_INDICES`
+- Python extractor: `packages/python/core/src/anosys_sdk_core/genai.py` → `extract_genai_span_info()`
+- JS: `packages/js/anthropic/src/mapping.js` + `genai.js` → `extractGenAiSpanInfo()` (same keys as Python)
+
+Both Claude packages emit OpenTelemetry **GenAI semantic-convention** spans and go through
+`BASE_KEY_MAPPING`, so they land in the same `otel_*`, `gen_ai_*` and `llm_*` columns as OpenAI.
+`gen_ai.system` / `gen_ai.provider.name` = `anthropic`.
+
+- `anosys-sdk-anthropic` exports the spans the Anthropic SDK emits natively (`anthropic>=2` / `@anthropic-ai/sdk>=1`).
+- `anosys-sdk-claude-agents` builds spans from the Agent SDK message stream: one `invoke_agent` span per run,
+  one `execute_tool` span per tool call (subagent calls nested under their `Task`/`Agent` tool span), and
+  optional `chat` spans per assistant response.
+
+### Fixed extension slots (Claude only)
+
+Aligned with the Claude Code hook slots so dashboards line up across Claude Code and the Claude SDKs.
+
+| Key | CVS Variable | Notes |
+|---|---|---|
+| `gen_ai.usage.cache_read.input_tokens` | `cvn4` | Prompt-cache read tokens (Claude Code `cache_read`) |
+| `gen_ai.usage.cache_creation.input_tokens` | `cvn5` | Prompt-cache write tokens (Claude Code `cache_creation`); SDK attribute `gen_ai.usage.cache_write.input_tokens` |
+| `gen_ai.usage.cost` | `cvn7` | Run cost in USD from the Agent SDK result (Claude Code `cost_estimate`) |
+| `has_thinking` | `cvb3` | Output contains extended-thinking (reasoning) parts |
+
+Dynamic allocation for Claude sources starts at `cvn8` / `cvb4` (strings still at `cvs100`) so it can never
+collide with these slots.
+
+### Field normalisation
+
+| AnoSys key | From | Notes |
+|---|---|---|
+| `gen_ai.usage.input_tokens` | `gen_ai.usage.input_tokens` | Full prompt: uncached + cache read + cache write (OpenAI prompt-token meaning) |
+| `gen_ai.usage.total_tokens` | input + output | When not reported |
+| `gen_ai.response.finish_reasons` | `gen_ai.response.finish_reasons` / `anthropic.message.stop_reason` / result `stop_reason` | Always a list |
+| `gen_ai.span.kind` (`cvs19`), `kind` | `gen_ai.operation.name` | `chat`→`LLM`, `invoke_agent`→`AGENT`, `execute_tool`→`TOOL` |
+| `llm_input` / `llm_output` | messages (flattened `Role: text`) | Tool spans: `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` |
+| `llm_system` | `gen_ai.system_instructions` | Plain text |
+| `llm_token_count` | usage | JSON with input/output/total/cache read/cache creation/reasoning tokens |
+| `gen_ai.conversation.id` | Agent SDK `session_id` | |
+| `gen_ai.agent.name` | agent name / subagent `subagent_type` | |
+| `is_agent` (`cvb1`) | `invoke_agent` spans | |
+| `is_streaming` (`cvb2`) | `gen_ai.request.stream` | |
+| `user_context` (`cvs5`) | `get_user_context()` | |
+
+---
+
 ## 5. Source Tag Values (`cvs200`)
 
 | Package | Path | `cvs200` value |
@@ -419,6 +468,8 @@ OpenAI token breakdowns (input, output, cache read/write, reasoning tokens), and
 | JS Agents (OTel) | `extractOtelSpanInfo()` | `openAI_Agents_Telemetry` |
 | Claude Code | `transform_record()` | `ClaudeCodeHook` |
 | Codex CLI | `transform_codex_turn()` | `CodexHook` |
+| Python / JS Anthropic | `extract_span_info()` / `extractSpanInfo()` | `AnthropicTelemetry` |
+| Python / JS Claude Agents | `extract_span_info()` / `extractSpanInfo()` | `ClaudeAgentsTelemetry` |
 
 ---
 

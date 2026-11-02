@@ -87,3 +87,4 @@ dmypy.json
 /old/
 
 /testdata/
+/local-tests/

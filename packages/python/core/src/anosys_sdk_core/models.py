@@ -118,6 +118,18 @@ BASE_KEY_MAPPING: Dict[str, str] = {
     "gen_ai.request.tool_choice": "cvs15",
 }
 
+# Claude (Anthropic client SDK + Claude Agent SDK) mapping.
+# Extends the base mapping with Anthropic-only fields. The numeric slots match
+# the Claude Code hook (cache_read=cvn4, cache_creation=cvn5, cost_estimate=cvn7)
+# so the same columns line up across Claude Code and the Claude SDKs.
+CLAUDE_KEY_MAPPING: Dict[str, str] = {
+    **BASE_KEY_MAPPING,
+    "gen_ai.usage.cache_read.input_tokens": "cvn4",      # Prompt-cache read tokens
+    "gen_ai.usage.cache_creation.input_tokens": "cvn5",  # Prompt-cache write tokens
+    "gen_ai.usage.cost": "cvn7",                         # Estimated cost (USD)
+    "has_thinking": "cvb3",                              # Extended thinking used
+}
+
 # Validation maps per source based on Protobuf schemas
 OTEL_AI_VALID_TYPES = {
     "timestamp": "timestamp",
@@ -162,6 +174,11 @@ OTEL_AI_VALID_TYPES = {
     "gen_ai_output_messages": "json",
     "gen_ai_system_instructions": "json",
     "gen_ai_tool_definitions": "json",
+    # Claude extension (keyed by name so other sources' dynamic slots are unaffected)
+    "gen_ai.usage.cache_read.input_tokens": "double",
+    "gen_ai.usage.cache_creation.input_tokens": "double",
+    "gen_ai.usage.cost": "double",
+    "has_thinking": "boolean",
 }
 
 CLAUDE_VALID_TYPES = {
@@ -206,4 +223,12 @@ DEFAULT_STARTING_INDICES = {
     "string": 100,
     "number": 3,
     "bool": 1,
+}
+
+# Claude starting indices: dynamic numbers/bools start above the fixed
+# Claude slots (cvn4, cvn5, cvn7, cvb3) so they can never collide.
+CLAUDE_STARTING_INDICES = {
+    "string": 100,
+    "number": 8,
+    "bool": 4,
 }

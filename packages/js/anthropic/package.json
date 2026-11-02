@@ -1,0 +1,48 @@
+{
+  "name": "anosys-sdk-anthropic",
+  "version": "1.0.0",
+  "description": "AnoSys SDK for Anthropic — automatic instrumentation and logging for Anthropic (Claude) API calls",
+  "author": "AnoSys <support@anosys.ai>",
+  "license": "Apache-2.0",
+  "homepage": "https://anosys.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anosys-ai/anosys-sdk.git"
+  },
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "anosys",
+    "anthropic",
+    "claude",
+    "observability",
+    "monitoring",
+    "logging",
+    "llm",
+    "opentelemetry"
+  ],
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.0.0",
+    "@opentelemetry/sdk-trace-base": "^2.0.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.0.0"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "test": "node --test test/basic.test.js"
+  }
+}

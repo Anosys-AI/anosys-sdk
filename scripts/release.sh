@@ -35,10 +35,14 @@ Components:
   openai-agents-py  packages/python/openai_agents     (anosys-sdk-openai-agents)
   claude-code       packages/python/claude_code       (anosys-claude-code)
   codex             packages/python/codex             (anosys-codex)
+  anthropic-py      packages/python/anthropic         (anosys-sdk-anthropic)
+  claude-agents-py  packages/python/claude_agents     (anosys-sdk-claude-agents)
   openai-js         packages/js/openai                (anosys-sdk-openai)
   openai-agents-js  packages/js/openai-agents         (anosys-sdk-openai-agents)
   claude-code-js    packages/js/claude-code           (anosys-sdk-claude-code)
   codex-js          packages/js/codex                 (anosys-sdk-codex)
+  anthropic-js      packages/js/anthropic             (anosys-sdk-anthropic)
+  claude-agents-js  packages/js/claude-agents         (anosys-sdk-claude-agents)
 
 Version: semver, e.g. 1.0.5 or 2.0.0-rc.1
 
@@ -69,10 +73,14 @@ case "$component" in
   openai-agents-py)  dir="packages/python/openai_agents"; lang="python" ;;
   claude-code)       dir="packages/python/claude_code";   lang="python" ;;
   codex)             dir="packages/python/codex";         lang="python" ;;
+  anthropic-py)      dir="packages/python/anthropic";     lang="python" ;;
+  claude-agents-py)  dir="packages/python/claude_agents"; lang="python" ;;
   openai-js)         dir="packages/js/openai";            lang="node"   ;;
   openai-agents-js)  dir="packages/js/openai-agents";     lang="node"   ;;
   claude-code-js)    dir="packages/js/claude-code";       lang="node"   ;;
   codex-js)          dir="packages/js/codex";             lang="node"   ;;
+  anthropic-js)      dir="packages/js/anthropic";         lang="node"   ;;
+  claude-agents-js)  dir="packages/js/claude-agents";     lang="node"   ;;
   *)
     err "unknown component: $component"
     usage
