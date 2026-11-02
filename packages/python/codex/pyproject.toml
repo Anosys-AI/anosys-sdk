@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anosys-codex"
-version = "0.1.0"
+version = "0.1.1"
 description = "AnoSys observability hook for OpenAI Codex CLI"
 authors = [{name = "AnoSys", email = "support@anosys.ai"}]
 readme = "README.md"

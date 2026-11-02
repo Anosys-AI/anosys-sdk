@@ -8,7 +8,7 @@
 | Anthropic API | `capture_content=False` / `captureContent: false`; pass the supplied OpenTelemetry options helper to clients | Selected fields before export |
 | Claude Agent SDK | `capture_content=False` / `captureContent: false` | Selected fields before export |
 | Claude Code and Codex CLI | Installer `--redaction` or runtime `REDACTION=true` | Selected fields before sending hook telemetry |
-| Antigravity development branch | Installer `--redaction` | Not implemented on that branch |
+| Antigravity 0.1.0 | Installer `--redaction` or runtime `REDACTION=true` | Not implemented in this version |
 
 Redaction replaces supported content fields. It is not a general-purpose personal-data scanner and is separate from encryption. Review complete payloads before enabling collection for sensitive applications.
 

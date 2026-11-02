@@ -35,12 +35,14 @@ Components:
   openai-agents-py  packages/python/openai_agents     (anosys-sdk-openai-agents)
   claude-code       packages/python/claude_code       (anosys-claude-code)
   codex             packages/python/codex             (anosys-codex)
+  antigravity       packages/python/antigravity       (anosys-antigravity)
   anthropic-py      packages/python/anthropic         (anosys-sdk-anthropic)
   claude-agents-py  packages/python/claude_agents     (anosys-sdk-claude-agents)
   openai-js         packages/js/openai                (anosys-sdk-openai)
   openai-agents-js  packages/js/openai-agents         (anosys-sdk-openai-agents)
   claude-code-js    packages/js/claude-code           (anosys-sdk-claude-code)
   codex-js          packages/js/codex                 (anosys-sdk-codex)
+  antigravity-js    packages/js/antigravity           (anosys-sdk-antigravity)
   anthropic-js      packages/js/anthropic             (anosys-sdk-anthropic)
   claude-agents-js  packages/js/claude-agents         (anosys-sdk-claude-agents)
 
@@ -73,12 +75,14 @@ case "$component" in
   openai-agents-py)  dir="packages/python/openai_agents"; lang="python" ;;
   claude-code)       dir="packages/python/claude_code";   lang="python" ;;
   codex)             dir="packages/python/codex";         lang="python" ;;
+  antigravity)       dir="packages/python/antigravity";   lang="python" ;;
   anthropic-py)      dir="packages/python/anthropic";     lang="python" ;;
   claude-agents-py)  dir="packages/python/claude_agents"; lang="python" ;;
   openai-js)         dir="packages/js/openai";            lang="node"   ;;
   openai-agents-js)  dir="packages/js/openai-agents";     lang="node"   ;;
   claude-code-js)    dir="packages/js/claude-code";       lang="node"   ;;
   codex-js)          dir="packages/js/codex";             lang="node"   ;;
+  antigravity-js)    dir="packages/js/antigravity";       lang="node"   ;;
   anthropic-js)      dir="packages/js/anthropic";         lang="node"   ;;
   claude-agents-js)  dir="packages/js/claude-agents";     lang="node"   ;;
   *)

@@ -29,6 +29,8 @@ jobs:
           pip install -e packages/python/openai
           pip install -e packages/python/openai_agents
           pip install -e packages/python/claude_code
+          pip install -e packages/python/codex
+          pip install -e packages/python/antigravity
           pip install -e packages/python/anthropic
           pip install -e packages/python/claude_agents
 
@@ -49,6 +51,12 @@ jobs:
 
       - name: Test anthropic
         run: pytest packages/python/anthropic/tests -v
+
+      - name: Test codex
+        run: pytest packages/python/codex/tests -v
+
+      - name: Test antigravity
+        run: pytest packages/python/antigravity/tests -v
 
       - name: Test claude_agents
         run: pytest packages/python/claude_agents/tests -v
@@ -81,6 +89,14 @@ jobs:
 
       - name: Test claude-code
         working-directory: packages/js/claude-code
+        run: npm test
+
+      - name: Test codex
+        working-directory: packages/js/codex
+        run: REDACTION=false npm test
+
+      - name: Test antigravity
+        working-directory: packages/js/antigravity
         run: npm test
 
       - name: Test anthropic

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from anosys_sdk_codex.encryption import encrypt_payload
 
-INTEGRATION_VERSION = "0.1.0"
+INTEGRATION_VERSION = "0.1.1"
 OS_USER = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
 REDACTION = os.environ.get("REDACTION", "false").lower() == "true"
 
@@ -118,7 +118,9 @@ def transform_codex_turn(
     incremental_tokens: Optional[Dict[str, float]] = None,
     redact: bool | None = None,
 ) -> Dict[str, Any]:
-    do_redact = REDACTION if redact is None else redact
+    # The runner loads saved settings after package imports; read the active
+    # environment here rather than relying on the import-time constant.
+    do_redact = os.environ.get("REDACTION", "false").lower() == "true" if redact is None else redact
 
     model = turn.get("model") or "unknown"
     provider = turn.get("model_provider") or "openai"

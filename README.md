@@ -16,9 +16,9 @@ Capture model calls, agent runs, tool activity, token usage, estimated cost, and
 | Claude Agent SDK | [Guide](packages/python/claude_agents/README.md) | [Guide](packages/js/claude-agents/README.md) | Agent, tool, and subagent spans from the message stream |
 | Claude Code | [Guide](packages/python/claude_code/README.md) | [Guide](packages/js/claude-code/README.md) | Stop hook and local transcripts |
 | Codex CLI | [Guide](packages/python/codex/README.md) | [Guide](packages/js/codex/README.md) | Turn-complete notify callback and local rollout transcripts |
-| Antigravity | [Development guide](ANTIGRAVITY.md) | [Development guide](ANTIGRAVITY.md) | Development branch; not released on npm or PyPI |
+| Antigravity | [Guide](packages/python/antigravity/README.md) | [Guide](packages/js/antigravity/README.md) | PreInvocation and Stop hooks with local transcripts |
 
-Antigravity is implemented on [moisisv/antigravity](https://github.com/Anosys-AI/anosys-sdk/tree/moisisv/antigravity), not on main. It captures agent activity, tool calls, commands, files, and duration. Token usage and cost are unavailable. See the [source installation instructions](ANTIGRAVITY.md).
+Antigravity captures agent activity, tool calls, commands, files, and duration. Its hook inputs and local transcripts do not expose token usage or cost. See the [Antigravity setup guide](ANTIGRAVITY.md).
 
 ## Published packages
 
@@ -34,7 +34,8 @@ Python packages require Python 3.10 or later. JavaScript packages declare Node.j
 | [anosys-sdk-anthropic](packages/python/anthropic/) | 1.0.0 | `pip install anosys-sdk-anthropic` |
 | [anosys-sdk-claude-agents](packages/python/claude_agents/) | 1.0.0 | `pip install anosys-sdk-claude-agents` |
 | [anosys-claude-code](packages/python/claude_code/) | 0.2.9 | `pip install anosys-claude-code` |
-| [anosys-codex](packages/python/codex/) | 0.1.0 | `pip install anosys-codex` |
+| [anosys-codex](packages/python/codex/) | 0.1.1 | `pip install anosys-codex` |
+| [anosys-antigravity](packages/python/antigravity/) | 0.1.0 | `pip install anosys-antigravity` |
 
 ### JavaScript
 
@@ -46,6 +47,7 @@ Python packages require Python 3.10 or later. JavaScript packages declare Node.j
 | [anosys-sdk-claude-agents](packages/js/claude-agents/) | 1.0.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
 | [anosys-sdk-claude-code](packages/js/claude-code/) | 0.2.6 | `npx -y anosys-sdk-claude-code install` |
 | [anosys-sdk-codex](packages/js/codex/) | 0.1.0 | `npm install -g anosys-sdk-codex` |
+| [anosys-sdk-antigravity](packages/js/antigravity/) | 0.1.0 | `npm install -g anosys-sdk-antigravity` |
 
 ## Getting started
 
@@ -152,13 +154,24 @@ npm install -g anosys-sdk-codex
 anosys-codex install
 ```
 
-Choose one language implementation per tool to avoid duplicate collection. Read the [Python Codex setup note](packages/python/codex/README.md#notification-command-for-version-010) before using version 0.1.0: its notification command needs an explicit module invocation. Codex notify callbacks are separate from lifecycle hooks listed by /hooks. Restart Codex after changing its configuration.
+Antigravity:
+
+```bash
+pip install anosys-antigravity
+anosys-antigravity install
+
+# Or use the JavaScript integration
+npm install -g anosys-sdk-antigravity
+anosys-antigravity install
+```
+
+Choose one language implementation per tool to avoid duplicate collection. Python Codex 0.1.1 accepts the turn-completion notification argument and applies the saved redaction setting. Users of 0.1.0 should upgrade. Codex notify callbacks are separate from lifecycle hooks listed by /hooks. Restart each coding tool after changing its configuration.
 
 ## Content controls and encryption
 
 Content capture is enabled by default in the Anthropic and Claude Agent SDK integrations. Set capture_content=False in Python or captureContent: false in JavaScript to omit conversation and tool content from those integrations. Coding-tool installers offer --redaction to replace supported content fields; this is field masking, not automatic detection of every kind of personal data.
 
-Published SDKs support opt-in encryption of selected string fields before telemetry is sent:
+The OpenAI, Anthropic, Claude Agents, Claude Code, and Codex integrations support opt-in encryption of selected string fields before telemetry is sent:
 
 ```bash
 export ANOSYS_ENCRYPTION_KEY="your-secret-passphrase"
@@ -168,7 +181,7 @@ export ANOSYS_ENCRYPTED_COLUMNS="llm_input,llm_output,cvs199"
 
 The implementation uses SHA-256 key derivation, AES-256-CBC, a fixed zero IV, PKCS#7 padding, and Base64 ciphertext prefixed with enc:. It encrypts selected strings, not the complete record. Non-string values are skipped, and untargeted fields remain visible. This format is deterministic and does not authenticate ciphertext. Keep the passphrase outside source control and configure browser decryption separately.
 
-See [content controls](DATA_CONTROLS.md) for coverage, default columns, environment configuration, and limitations. The unreleased Antigravity branch does not include this encryption implementation.
+See [content controls](DATA_CONTROLS.md) for coverage, default columns, environment configuration, and limitations. Antigravity 0.1.0 supports content redaction but does not implement selected-field encryption.
 
 ## Examples and references
 
@@ -183,7 +196,8 @@ See [content controls](DATA_CONTROLS.md) for coverage, default columns, environm
 - [Claude Code variables](CLAUDE_CODE_VARIABLES.md)
 - [Column mappings](MAPPINGS.md)
 - [Core decorators and custom logging](packages/python/core/README.md)
-- [Antigravity development status](ANTIGRAVITY.md)
+- [Antigravity setup](ANTIGRAVITY.md)
+- [Antigravity variables](ANTIGRAVITY_VARIABLES.md)
 
 ## Development
 
@@ -213,8 +227,10 @@ scripts/release.sh <component> <new-version>
 | claude-code-js | anosys-sdk-claude-code | npm |
 | codex | anosys-codex | PyPI |
 | codex-js | anosys-sdk-codex | npm |
+| antigravity | anosys-antigravity | PyPI |
+| antigravity-js | anosys-sdk-antigravity | npm |
 
-The script updates the manifest and asks before committing, tagging, and pushing. Tags use <component>-v<version> and trigger the corresponding GitHub Actions workflow. Antigravity has no release component on main yet. Review package guides and this version table when publishing a release.
+The script updates the manifest and asks before committing, tagging, and pushing. Tags use <component>-v<version> and trigger the corresponding GitHub Actions workflow. Review package guides and this version table when publishing a release.
 
 ## License
 

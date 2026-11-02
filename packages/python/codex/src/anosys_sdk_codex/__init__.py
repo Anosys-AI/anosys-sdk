@@ -23,7 +23,7 @@ from anosys_sdk_codex.encryption import (
 try:
     __version__ = version("anosys-codex")
 except PackageNotFoundError:
-    __version__ = "0.1.0"
+    __version__ = "0.1.1"
 
 __all__ = [
     "transform_codex_turn",

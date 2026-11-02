@@ -7,6 +7,7 @@ on:
       - "openai-agents-js-v*"
       - "claude-code-js-v*"
       - "codex-js-v*"
+      - "antigravity-js-v*"
       - "anthropic-js-v*"
       - "claude-agents-js-v*"
   workflow_dispatch:
@@ -37,6 +38,7 @@ jobs:
             openai-agents-js-v*)  dir="packages/js/openai-agents" ;;
             claude-code-js-v*)    dir="packages/js/claude-code" ;;
             codex-js-v*)          dir="packages/js/codex" ;;
+            antigravity-js-v*)    dir="packages/js/antigravity" ;;
             anthropic-js-v*)      dir="packages/js/anthropic" ;;
             claude-agents-js-v*)  dir="packages/js/claude-agents" ;;
             *)                    echo "Unknown tag prefix: $tag" >&2; exit 1 ;;

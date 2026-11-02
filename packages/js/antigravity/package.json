@@ -1,0 +1,38 @@
+{
+  "name": "anosys-sdk-antigravity",
+  "version": "0.1.0",
+  "description": "AnoSys observability hook for Google Antigravity CLI/IDE — automatic instrumentation and logging",
+  "author": "AnoSys <support@anosys.ai>",
+  "license": "Apache-2.0",
+  "homepage": "https://anosys.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anosys-ai/anosys-sdk.git"
+  },
+  "main": "src/hookRunner.js",
+  "exports": {
+    ".": "./src/hookRunner.js"
+  },
+  "bin": {
+    "anosys-antigravity": "src/cli.js"
+  },
+  "files": [
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "anosys",
+    "antigravity",
+    "gemini",
+    "observability",
+    "monitoring",
+    "logging",
+    "llm",
+    "hooks"
+  ],
+  "scripts": {
+    "test": "node --test"
+  }
+}

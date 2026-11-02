@@ -21,31 +21,21 @@ anosys-codex install --api-key "your-cc-endpoint-key" --redaction --auto-update 
 
 API-key validation produces a warning on failure; it does not prevent installation. Verify the endpoint key and delivery independently.
 
-## Notification command for version 0.1.0
+## Notification command
 
-The installed CLI's run subcommand does not accept the JSON argument Codex appends to notify commands. After installation, replace its notify entry with a direct module invocation.
-
-Find the Python interpreter containing the package:
-
-```bash
-python -c "import sys; print(sys.executable)"
-```
-
-Place that absolute path at the beginning of the user-level config.toml, before any section headers:
+Version 0.1.1 accepts the JSON argument that Codex appends to the notification command. The registered configuration is:
 
 ```toml
-notify = [
-  "/absolute/path/to/python",
-  "-m",
-  "anosys_sdk_codex.hook_runner",
-]
+notify = ["anosys-codex", "run"]
 ```
 
-Use the interpreter from the installation environment so Codex can run the callback without activating that environment. Preserve any existing notifier configuration separately: Codex notify specifies a single executable and its arguments, and the installer can replace an existing notify entry.
+Place notify at the top level of the user-level config.toml, before section headers. If the executable is installed in a virtual environment, use its absolute path so Codex can invoke it without activating that environment.
 
-Restart Codex and complete a CLI turn. Check $CODEX_HOME/state/anosys_hook.log for execution and delivery errors. The status command checks the installer's expected registration; it may report the manual module command as unregistered and does not test network delivery.
+Restart Codex and complete a CLI turn. Check $CODEX_HOME/state/anosys_hook.log for callback execution and delivery errors. The status command checks registration, not network delivery.
 
-This callback is separate from the lifecycle hooks displayed by /hooks. See the [official Codex notification documentation](https://learn.chatgpt.com/docs/config-file/config-advanced#notifications).
+Upgrade from version 0.1.0 with pip install --upgrade anosys-codex. Existing direct module notifications remain supported; the default CLI command no longer needs the old workaround. Saved redaction settings are now applied when mapping each turn.
+
+The notify callback is separate from lifecycle hooks displayed by /hooks. See the [official Codex notification documentation](https://learn.chatgpt.com/docs/config-file/config-advanced#notifications). Preserve existing notification integrations separately: the installer can replace an existing notify command.
 
 ## Runtime behavior
 
@@ -66,7 +56,7 @@ Token usage and cost depend on the transcript fields and the package's embedded 
 | ANOSYS_HOOK_DRY_RUN | true to skip network submission |
 | CODEX_HOME | Codex configuration, session, and state directory |
 
-In version 0.1.0, the mapper reads REDACTION at import time, before the runner loads anosys-env.sh. Set REDACTION in the process environment when relying on redaction, rather than assuming the saved installer choice alone is sufficient.
+Version 0.1.1 reads the active REDACTION setting when mapping each turn, including settings loaded from anosys-env.sh.
 
 See [content controls](../../../DATA_CONTROLS.md) for encryption and redaction limitations. Dry-run mode is a network diagnostic; it does not confirm server ingestion.
 
@@ -75,7 +65,7 @@ See [content controls](../../../DATA_CONTROLS.md) for encryption and redaction l
 - install: configure the ingestion key and notification entry.
 - status: inspect expected registration and the environment file.
 - uninstall: remove the installer's recognized notification entry and environment file. Remove a manually configured module entry yourself.
-- run: installer-facing entry point; use the module invocation above for version 0.1.0 notifications.
+- run: receives the Codex notification JSON and executes the turn-completion handler.
 
 ## License
 

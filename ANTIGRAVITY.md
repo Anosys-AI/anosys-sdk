@@ -1,45 +1,70 @@
 # Antigravity integration
 
-## Availability
+Collect Google Antigravity agent turns, tool calls, commands, changed files, model activity, and duration. The integration uses PreInvocation and Stop hooks and reads the local transcript identified by the hook event.
 
-The Python and JavaScript integrations are implemented on the [moisisv/antigravity branch](https://github.com/Anosys-AI/anosys-sdk/tree/moisisv/antigravity). They are not merged into main, and `anosys-antigravity` and `anosys-sdk-antigravity` are not currently published to PyPI or npm.
-
-Use a separate checkout to evaluate the integration. Registry installation commands will not work until packages are published.
-
-## Install from source
-
-```bash
-git clone --branch moisisv/antigravity --single-branch \
-  https://github.com/Anosys-AI/anosys-sdk.git anosys-antigravity-dev
-cd anosys-antigravity-dev
-```
+## Installation
 
 Choose one implementation.
 
 ### Python
 
+Requires Python 3.10 or later.
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e packages/python/antigravity
+pip install anosys-antigravity
 anosys-antigravity install
 anosys-antigravity status
 ```
 
 ### JavaScript
 
+The package declares Node.js 18 or later. Install the executable persistently so Antigravity can invoke it after setup.
+
 ```bash
-npm install -g ./packages/js/antigravity
+npm install -g anosys-sdk-antigravity
 anosys-antigravity install
 anosys-antigravity status
 ```
 
-Use an AnoSys **Claude Code & Codex CLI (CC)** endpoint key from [integration options](https://console.anosys.ai/collect/integrationoptions). The installer supports `--api-key`, `--redaction`, and `--workspace`. Keep the installed executable available to the Antigravity process. A Python virtual environment may require an absolute executable path in the hook configuration when the environment is inactive.
+The npm package is named anosys-sdk-antigravity; its executable is anosys-antigravity. Choose one language implementation per installation.
 
-## Collection and limitations
+Use an AnoSys **Claude Code & Codex CLI (CC)** endpoint key from [integration options](https://console.anosys.ai/collect/integrationoptions). The installer validates the key and warns on failure; a successful installation message alone does not confirm delivery.
 
-The branch registers `PreInvocation` and `Stop` handlers in `~/.gemini/config/hooks.json`, or `.agents/hooks.json` with `--workspace`. It records agent turns, prompts, responses, reasoning when available, tool activity, commands, changed paths, and duration. Test the hook configuration against the Antigravity version being used.
+## Configuration
 
-Antigravity does not expose token counters through the hook inputs and transcripts handled by this implementation. Token fields are emitted as zero; treat them as unavailable, not as zero consumption. Do not use them to report token spend or cost. Content redaction is available; the branch does not include the encryption modules present in the released SDK packages.
+```bash
+anosys-antigravity install --api-key "your-cc-endpoint-key" --redaction --yes
+```
 
-Read the branch's [Python guide](https://github.com/Anosys-AI/anosys-sdk/blob/moisisv/antigravity/packages/python/antigravity/README.md) and [JavaScript guide](https://github.com/Anosys-AI/anosys-sdk/blob/moisisv/antigravity/packages/js/antigravity/README.md) for implementation-specific options.
+For project-specific installation, add --workspace. The installer writes hooks and credentials to:
+
+| Scope | Hook configuration | Credentials and settings |
+| --- | --- | --- |
+| Global | ~/.gemini/config/hooks.json | ~/.gemini/config/anosys-env.json |
+| Workspace | .agents/hooks.json | .agents/anosys-env.json |
+
+The runner searches the current working directory and its parents for the nearest workspace configuration, then fills missing values from the global configuration. Explicit ANOSYS_HOOK_APIKEY, ANOSYS_HOOK_ENDPOINT_URL, and REDACTION environment variables take precedence over saved values.
+
+The command supports --endpoint-url, --redaction, --no-redaction, --auto-update, and --no-auto-update. For Python virtual environments or Node version managers, ensure the hook executable remains available to Antigravity or use an absolute path in the hook configuration.
+
+## Verify delivery
+
+Restart Antigravity, complete a turn, and inspect ~/.gemini/config/state/anosys_hook.log. Failed submissions are buffered in pending_records.jsonl in the same state directory and retried later. The status command checks configuration, not network delivery.
+
+Use ANOSYS_HOOK_DRY_RUN=true for synthetic-event diagnostics without network submission. The run handler is called by Antigravity; it normally should not be invoked manually.
+
+## Commands
+
+```bash
+anosys-antigravity install
+anosys-antigravity status
+anosys-antigravity uninstall
+```
+
+For workspace installations, pass --workspace to status and uninstall as well as install.
+
+## Data coverage and limitations
+
+The integration captures prompts, responses, available reasoning blocks, tool input/output, IDE context when present, settings changes, and execution duration. Token counters are not exposed in the hook inputs and transcripts handled by version 0.1.0. Emitted zero token fields mean **unavailable**, not zero consumption. Token spend and cost cannot be inferred from those fields.
+
+Content redaction is optional and disabled by default. Version 0.1.0 does not implement selected-field encryption. Read [content controls](DATA_CONTROLS.md) and the [Antigravity variables reference](ANTIGRAVITY_VARIABLES.md) before collecting sensitive data.

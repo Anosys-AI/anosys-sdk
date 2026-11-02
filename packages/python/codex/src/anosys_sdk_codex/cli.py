@@ -90,9 +90,9 @@ def cmd_install(args: argparse.Namespace) -> None:
             print(f"  Logs API key: {masked}")
         print(f"  Redaction: {'enabled' if redaction else 'disabled'}")
         print("\n✅ Codex hook installed successfully.")
-        print("\n⚠️  IMPORTANT (Codex Security Trust):")
-        print("   In your next Codex CLI session, run the '/hooks' command")
-        print(f"   and approve the '{HOOK_COMMAND}' entry to allow tracing.\n")
+        print("\nRestart Codex CLI to load the notification command.")
+        print("   The notify callback is separate from lifecycle hooks listed by /hooks.")
+        print("   Verify callback execution and delivery in ~/.codex/state/anosys_hook.log.\n")
     else:
         print("\n================================================================")
         print("Add the following to your ~/.codex/config.toml file:")
@@ -186,6 +186,7 @@ def main(argv: list[str] | None = None) -> None:
     p_status.set_defaults(func=cmd_status)
 
     p_run = subparsers.add_parser("run", help="Run the hook (invoked by Codex notify)")
+    p_run.add_argument("notification", nargs="?", help="Codex notification JSON")
     p_run.set_defaults(func=cmd_run)
 
     args = parser.parse_args(argv)

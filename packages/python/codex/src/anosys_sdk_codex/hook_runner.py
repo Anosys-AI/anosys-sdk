@@ -130,7 +130,7 @@ def post_records_batch(payloads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "anosys-codex-hook/0.1.0",
+        "User-Agent": "anosys-codex-hook/0.1.1",
     }
     if API_KEY:
         headers["anosys-apikey"] = API_KEY
