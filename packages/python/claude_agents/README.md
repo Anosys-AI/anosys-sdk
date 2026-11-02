@@ -1,11 +1,10 @@
 # AnoSys SDK for Claude Agents
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-
 Automatically trace [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview) runs and send them to [AnoSys](https://anosys.ai): agents, tools, subagents, tokens and cost.
 
 ## Installation
+
+Requires Python 3.10 or later.
 
 ```bash
 pip install anosys-sdk-claude-agents
@@ -21,7 +20,6 @@ from anosys_sdk_claude_agents import AnosysClaudeAgentsLogger
 AnosysClaudeAgentsLogger()
 
 from claude_agent_sdk import ClaudeAgentOptions, query
-
 
 async def main():
     options = ClaudeAgentOptions(allowed_tools=["Bash", "Read"])
@@ -81,3 +79,7 @@ Records are tagged `cvs200 = "ClaudeAgentsTelemetry"` and use the same columns a
 ## License
 
 Apache 2.0
+
+## Content controls
+
+See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, redaction, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.

@@ -111,13 +111,13 @@
 
 | Field | Python hooks.py | JS hooks.js | Notes |
 |---|---|---|---|
-| `gen_ai.request.tool_choice` | ✅ | ✅ | From invocation params |
-| `events` | ✅ | ✅ | Span events JSON |
-| `raw` | ✅ | ✅ | Full span JSON |
-| `user_context` | ❌ | ✅ | Only in JS |
-| `llm_model_name` | ❌ | ✅ | Only in JS |
-| `llm_token_count` | ❌ | ✅ | Only in JS (backward compat) |
-| `llm_invocation_parameters` | ❌ | ✅ (conditionally) | Only in JS |
+| `gen_ai.request.tool_choice` | Yes | Yes | From invocation params |
+| `events` | Yes | Yes | Span events JSON |
+| `raw` | Yes | Yes | Full span JSON |
+| `user_context` | No | Yes | Only in JS |
+| `llm_model_name` | No | Yes | Only in JS |
+| `llm_token_count` | No | Yes | Only in JS (backward compat) |
+| `llm_invocation_parameters` | No | Yes (conditionally) | Only in JS |
 | `from_source` | `openAI_Python_Telemetry` | `openAI_Traces` | Different source tags |
 
 ---
@@ -163,12 +163,12 @@ Both Python and JS populate via `reassign()` through `AGENTS_KEY_MAPPING`:
 
 | Field | Python | JS | Notes |
 |---|---|---|---|
-| Full gen_ai.* semantic conventions | ✅ (45+ fields) | ❌ (only system + model) | Python is much more complete |
-| Legacy llm_* fields | ✅ | ❌ | Only Python extracts these |
-| `raw` (cvs199) | ✅ | ✅ | Both capture full span |
-| `user_context` | ❌ | ✅ | Only JS |
+| Full gen_ai.* semantic conventions | Yes (45+ fields) | No (only system + model) | Python is much more complete |
+| Legacy llm_* fields | Yes | No | Only Python extracts these |
+| `raw` (cvs199) | Yes | Yes | Both capture full span |
+| `user_context` | No | Yes | Only JS |
 | `from_source` | `openAI_Agents_Telemetry` | `openAI_Agents_Telemetry` | Aligned |
-| Usage extraction in span2json | ❌ | ✅ | JS extracts gen_ai_usage_* from spanData.usage |
+| Usage extraction in span2json | No | Yes | JS extracts gen_ai_usage_* from spanData.usage |
 
 ---
 
@@ -507,17 +507,17 @@ The SDK performs strict type coercion (Double, Boolean, JSON) before sending dat
 
 ## Findings
 
-### ✅ Aligned across Python & JS
+### Aligned across Python & JS
 
-- All `otel_*` fields ✅
-- All `gen_ai.*` semantic convention keys ✅
-- Agents input/output mappings aligned to `llm_input`/`llm_output` ✅
-- Agents usage/tools/config aligned to `llm_*` columns ✅
-- Dynamic allocation starting indices (`cvs100`, `cvn3`, `cvb1`) ✅
-- `user_context` and `llm_model_name` aligned ✅
-- Source-specific validation tables implemented in both languages ✅
+- All `otel_*` fields
+- All `gen_ai.*` semantic convention keys
+- Agents input/output mappings aligned to `llm_input`/`llm_output`
+- Agents usage/tools/config aligned to `llm_*` columns
+- Dynamic allocation starting indices (`cvs100`, `cvn3`, `cvb1`)
+- `user_context` and `llm_model_name` aligned
+- Source-specific validation tables implemented in both languages
 
-### 📝 Duplicate CVS Slots (Multiple keys → same column)
+### Duplicate CVS Slots (Multiple keys → same column)
 
 | CVS Variable | Mapped by keys | Risk |
 |---|---|---|

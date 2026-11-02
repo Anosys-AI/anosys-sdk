@@ -60,3 +60,7 @@ new AnosysOpenAILogger({
 | `ANOSYS_API_URL` | No | Override logging endpoint |
 | `ANOSYS_RESOLVER_URL` | No | Override API key resolver |
 | `ANOSYS_LOG_LEVEL` | No | `debug` / `info` / `warn` / `error` / `silent` (default: `warn`) |
+
+## Content controls
+
+See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, redaction, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.

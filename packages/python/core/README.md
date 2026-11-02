@@ -4,6 +4,8 @@ Core utilities for the AnoSys SDK - shared functionality for all AnoSys integrat
 
 ## Installation
 
+Requires Python 3.10 or later.
+
 ```bash
 pip install anosys-sdk-core
 ```
@@ -17,6 +19,7 @@ from anosys_sdk_core import anosys_logger, anosys_raw_logger, setup_api
 import os
 
 os.environ["ANOSYS_API_KEY"] = "your-api-key"
+setup_api()
 
 # Decorator for automatic logging
 @anosys_logger(source="my_app")
@@ -35,6 +38,10 @@ anosys_raw_logger({
 })
 ```
 
+## Shared telemetry mapping
+
+Core 1.1.0 adds `extract_genai_span_info` and `CLAUDE_KEY_MAPPING` for Anthropic and Claude Agent SDK spans. It also provides client-side field encryption shared by the Python integrations.
+
 ## API Reference
 
 - `anosys_logger(source=None)` - Decorator to log function calls
@@ -44,3 +51,7 @@ anosys_raw_logger({
 ## License
 
 Apache 2.0
+
+## Content controls
+
+See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, redaction, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.

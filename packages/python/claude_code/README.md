@@ -1,4 +1,4 @@
-# anosys-sdk-claude-code
+# anosys-claude-code
 
 AnoSys observability and analytics hook for Anthropic's Claude Code.
 
@@ -6,10 +6,12 @@ This package automatically captures Claude Code's telemetry, session turns, cont
 
 ## Installation
 
+Requires Python 3.10 or later.
+
 You can install the package via `pip` or your favorite Python package manager:
 
 ```bash
-pip install anosys-sdk-claude-code
+pip install anosys-claude-code
 ```
 
 After installing the package, run the setup wizard to configure the hook:
@@ -21,7 +23,7 @@ anosys-claude-code install
 The installer will prompt you for:
 1. **AnoSys API Key for logs**: Your ingestion API key from the AnoSys Console.
 2. **AnoSys API Key for OTEL (optional)**: Your OpenTelemetry ingestion API key from the AnoSys Console.
-3. **Content Redaction**: If enabled, all conversation content (prompts, answers, thinking) will be redacted and replaced with `REDACTED` before being sent. Only metadata and tokens will be tracked.
+3. **Content redaction**: Replaces supported conversation fields before export. Review the [content-controls reference](../../../DATA_CONTROLS.md) for coverage and limitations.
 
 ### Headless Installation
 
@@ -57,11 +59,15 @@ anosys-claude-code uninstall
 ```
 
 ### `run`
-This command is executed automatically by Claude Code when a session ends. You generally do not need to run this manually:
+This command is executed automatically by Claude Code when a turn completes. You generally do not need to run this manually:
 ```bash
 anosys-claude-code run
 ```
 
 ## How it works
 
-When installed, this package registers a `Stop` hook in `~/.claude/settings.json` using the `{"owner": "anosys"}` tag. When a Claude Code session concludes, the hook is invoked. It scans your local Claude transcripts (`~/.claude/projects/`), incrementally maps any new messages or subagent events using the AnoSys schemas, calculates accurate pricing, applies optional PII redaction, and batches the results to your AnoSys workspace.
+When installed, this package registers a `Stop` hook in `~/.claude/settings.json` using the `{"owner": "anosys"}` tag. When Claude Code finishes a turn, the hook is invoked. It scans your local Claude transcripts (`~/.claude/projects/`), incrementally maps any new messages or subagent events using the AnoSys schemas, estimates cost using the package's pricing table, applies optional content redaction, and batches the results to your AnoSys workspace.
+
+## Content controls
+
+See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, redaction, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.

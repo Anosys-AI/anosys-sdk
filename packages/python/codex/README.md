@@ -1,115 +1,82 @@
-# anosys-codex (Python)
+# anosys-codex
 
-AnoSys observability and analytics hook for OpenAI Codex CLI.
+Python integration for Codex CLI turn-completion telemetry. It reads local rollout transcripts, maps messages and tool calls to AnoSys fields, and reports available token counters and estimated cost.
 
-This package automatically captures Codex CLI's telemetry, agent turns, tool calls (`shell`, `apply_patch`, Code Mode custom tools, `web_search`), token usage breakdowns (prompt, completion, cache read/write, reasoning tokens), and estimated API costs, sending them directly to your AnoSys workspace.
+Requires Python 3.10 or later. This package uses the Codex notify callback; it does not register lifecycle hooks under /hooks.
 
-It integrates seamlessly with Codex CLI's native `notify` hook mechanism.
-
----
-
-## Installation
+## Install and configure
 
 ```bash
 pip install anosys-codex
-```
-
-After installing the package, run the setup wizard to configure the hook:
-
-```bash
 anosys-codex install
 ```
 
-The installer will prompt you for:
-1. **AnoSys API Key for logs**: Your ingestion API key from the [AnoSys Console](https://console.anosys.ai/collect/integrationoptions).
-   > **Pixel Type Requirement**: This key must belong to a **`CC` (Claude Code / Codex CLI)** pixel. The installer automatically validates the key against `https://console.anosys.ai/api/resolveapikeys` to ensure it resolves to a `/cc/` endpoint. Keys belonging to `T` (OTEL) or Web Traffic (`a`/`g`) pixels are rejected with a warning.
-2. **Content Redaction**: If enabled, sensitive conversation content (prompts, answers, code, tool inputs/outputs) will be redacted and replaced with `[REDACTED]`. Only metadata and token statistics will be tracked.
-3. **Automatic Config Update**: Confirms whether to automatically write `notify = ["anosys-codex", "run"]` to `~/.codex/config.toml` (and creates a `.bak` backup first).
+The installer asks for an ingestion key from an AnoSys Claude Code & Codex CLI (CC) endpoint, content redaction, and permission to update the user-level Codex configuration. It backs up the configuration and writes the ingestion key and redaction choice to $CODEX_HOME/anosys-env.sh. CODEX_HOME defaults to ~/.codex.
 
----
+For non-interactive setup:
 
-## Non-Interactive / Headless Installation
-
-For CI/CD pipelines, Docker containers, devcontainer setups, or non-interactive dotfiles:
-
-### Using the `-y` / `--yes` flag (Recommended):
 ```bash
-anosys-codex install --api-key "your_logs_api_key" -y
+anosys-codex install --api-key "your-cc-endpoint-key" --redaction --auto-update --yes
 ```
 
-### Using environment variables:
+API-key validation produces a warning on failure; it does not prevent installation. Verify the endpoint key and delivery independently.
+
+## Notification command for version 0.1.0
+
+The installed CLI's run subcommand does not accept the JSON argument Codex appends to notify commands. After installation, replace its notify entry with a direct module invocation.
+
+Find the Python interpreter containing the package:
+
 ```bash
-export ANOSYS_API_KEY="your_logs_api_key"
-anosys-codex install -y
+python -c "import sys; print(sys.executable)"
 ```
 
-### Using explicit granular flags:
-```bash
-anosys-codex install \
-  --api-key "your_logs_api_key" \
-  --auto-update \
-  --no-redaction
+Place that absolute path at the beginning of the user-level config.toml, before any section headers:
+
+```toml
+notify = [
+  "/absolute/path/to/python",
+  "-m",
+  "anosys_sdk_codex.hook_runner",
+]
 ```
 
-> **Important (Codex Security Trust)**:
-> Codex requires explicit user approval for unmanaged external notify hooks. After running `install`, start a Codex CLI session, type `/hooks`, and select `approve` / `trust` for the `anosys-codex run` hook entry.
+Use the interpreter from the installation environment so Codex can run the callback without activating that environment. Preserve any existing notifier configuration separately: Codex notify specifies a single executable and its arguments, and the installer can replace an existing notify entry.
 
----
+Restart Codex and complete a CLI turn. Check $CODEX_HOME/state/anosys_hook.log for execution and delivery errors. The status command checks the installer's expected registration; it may report the manual module command as unregistered and does not test network delivery.
 
-## CLI Commands
+This callback is separate from the lifecycle hooks displayed by /hooks. See the [official Codex notification documentation](https://learn.chatgpt.com/docs/config-file/config-advanced#notifications).
 
-The CLI safely manages `~/.codex/config.toml` and creates automatic timestamped backups (`config.toml.<TIMESTAMP>.bak`) before applying any modifications.
+## Runtime behavior
 
-### `status`
-Check the current installation and registration status of the hook:
-```bash
-anosys-codex status
-```
+The runner finds a rollout file under $CODEX_HOME/sessions, maps the completed turn, and posts batches to https://api.anosys.ai/ingestion. Failed records are buffered in $CODEX_HOME/state/pending_records.jsonl and retried on later invocations.
 
-### `install`
-Installs or updates the notify hook in `~/.codex/config.toml` and creates `~/.codex/anosys-env.sh`:
-```bash
-anosys-codex install [options]
+Token usage and cost depend on the transcript fields and the package's embedded pricing table. Treat cost as an estimate. This package targets local Codex CLI transcripts; do not assume that a desktop or cloud session invokes the same callback.
 
-Options:
-  --api-key <key>             AnoSys logs API key
-  -y, --yes                   Skip interactive prompts (non-interactive mode)
-  --redaction                 Enable content redaction
-  --no-redaction              Disable content redaction
-  --auto-update               Automatically update ~/.codex/config.toml
-  --no-auto-update            Print manual setup instructions instead of modifying config
-```
+## Environment variables
 
-### `uninstall`
-Safely removes the AnoSys notify hook entry from `~/.codex/config.toml` and deletes `~/.codex/anosys-env.sh`:
-```bash
-anosys-codex uninstall
-```
+| Variable | Purpose |
+| --- | --- |
+| ANOSYS_HOOK_APIKEY | Runtime ingestion key; also loaded from anosys-env.sh |
+| ANOSYS_API_KEY | Accepted by the installer as a source for the saved ingestion key |
+| ANOSYS_HOOK_ENDPOINT_URL | Ingestion URL override |
+| REDACTION | true to mask supported content fields |
+| ANOSYS_ENCRYPTION_KEY | Enable selected-field encryption |
+| ANOSYS_ENCRYPTED_COLUMNS | Override the default encrypted columns |
+| ANOSYS_HOOK_DRY_RUN | true to skip network submission |
+| CODEX_HOME | Codex configuration, session, and state directory |
 
-### `run`
-Executed automatically by the Codex CLI on turn-complete notify events. You do not need to invoke this manually:
-```bash
-anosys-codex run
-```
+In version 0.1.0, the mapper reads REDACTION at import time, before the runner loads anosys-env.sh. Set REDACTION in the process environment when relying on redaction, rather than assuming the saved installer choice alone is sufficient.
 
----
+See [content controls](../../../DATA_CONTROLS.md) for encryption and redaction limitations. Dry-run mode is a network diagnostic; it does not confirm server ingestion.
 
-## How It Works
+## Commands
 
-1. When a Codex turn completes, Codex CLI triggers `notify = ["anosys-codex", "run"]` defined in `~/.codex/config.toml`.
-2. The hook runner receives the session thread ID and locates the session's rollout transcript at `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<session_id>.jsonl`.
-3. It incrementally extracts user prompts, assistant messages, model details, token counts (including cached inputs and reasoning tokens), and tool calls.
-4. It maps the turn into the AnoSys schema (`cvs200: 'CodexHook'`), estimates USD cost using OpenAI's model pricing table, applies optional PII redaction, and batches the payload to `https://api.anosys.ai/ingestion`.
-5. If network connectivity is temporarily unavailable, failed records are buffered locally in `~/.codex/state/pending_records.jsonl` and automatically replayed on subsequent runs.
+- install: configure the ingestion key and notification entry.
+- status: inspect expected registration and the environment file.
+- uninstall: remove the installer's recognized notification entry and environment file. Remove a manually configured module entry yourself.
+- run: installer-facing entry point; use the module invocation above for version 0.1.0 notifications.
 
----
+## License
 
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `ANOSYS_HOOK_APIKEY` / `ANOSYS_API_KEY` | AnoSys ingestion API key |
-| `ANOSYS_HOOK_ENDPOINT_URL` | Override default ingestion URL (`https://api.anosys.ai/ingestion`) |
-| `REDACTION` / `ANOSYS_REDACT_CONTENT` | Set to `"true"` to redact prompts, code, and tool outputs |
-| `ANOSYS_HOOK_DRY_RUN` | Set to `"true"` to log payloads to stderr without sending to network |
-| `CODEX_HOME` | Custom directory for Codex config and sessions (defaults to `~/.codex`) |
+Apache License 2.0.

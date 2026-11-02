@@ -1,19 +1,17 @@
 # AnoSys SDK for Anthropic
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-
 Automatically capture and send Anthropic (Claude) API calls to [AnoSys](https://anosys.ai) for monitoring, analytics, and observability.
 
 ## Features
 
-✨ **Native Instrumentation** - Uses the OpenTelemetry spans the Anthropic SDK emits itself; no third-party instrumentor  
-✨ **Streaming Support** - `messages.stream()` and `stream=True` calls are captured with final usage  
-✨ **OpenTelemetry Semantic Conventions** - Follows Gen AI standards, same columns as the OpenAI integration  
-✨ **Prompt Caching & Thinking** - Cache read/write tokens and extended thinking are tracked  
-✨ **Zero Configuration** - Works out of the box with just your API key  
+- **Native Instrumentation** - Uses the OpenTelemetry spans the Anthropic SDK emits itself; no third-party instrumentor
+- **Streaming Support** - `messages.stream()` and `stream=True` calls are captured with final usage
+- **OpenTelemetry Semantic Conventions** - Follows Gen AI standards, same columns as the OpenAI integration
+- **Prompt caching and thinking** - Cache read/write tokens and available extended-thinking content are tracked
 
 ## Installation
+
+Requires Python 3.10 or later.
 
 ```bash
 pip install anosys-sdk-anthropic
@@ -34,7 +32,7 @@ os.environ["ANOSYS_API_KEY"] = "your-anosys-key"
 # Initialize (do once at startup, before creating clients)
 AnosysAnthropicLogger()
 
-# Use Anthropic normally - all calls are automatically logged
+# Use Anthropic normally - instrumented calls are logged
 client = anthropic.Anthropic()
 
 message = client.messages.create(
@@ -90,3 +88,7 @@ Records are tagged `cvs200 = "AnthropicTelemetry"`. See [MAPPINGS.md](../../../M
 ## License
 
 Apache 2.0
+
+## Content controls
+
+See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, redaction, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.

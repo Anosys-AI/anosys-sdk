@@ -1,19 +1,17 @@
 # AnoSys SDK for OpenAI
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
-
 Automatically capture and send OpenAI API calls to [AnoSys](https://anosys.ai) for monitoring, analytics, and observability.
 
 ## Features
 
-✨ **Automatic OpenAI Instrumentation** - Captures all OpenAI API calls via OpenTelemetry  
-✨ **Streaming Support** - Detects and logs streaming responses  
-✨ **OpenTelemetry Semantic Conventions** - Follows Gen AI standards  
-✨ **Error Tracking** - Captures exceptions with full stack traces  
-✨ **Zero Configuration** - Works out of the box with just your API key  
+- **Automatic OpenAI Instrumentation** - Captures instrumented OpenAI API calls via OpenTelemetry
+- **Streaming Support** - Detects and logs streaming responses
+- **OpenTelemetry Semantic Conventions** - Follows Gen AI standards
+- **Error Tracking** - Captures exceptions with full stack traces
 
 ## Installation
+
+Requires Python 3.10 or later.
 
 ```bash
 pip install anosys-sdk-openai
@@ -32,7 +30,7 @@ os.environ["ANOSYS_API_KEY"] = "your-anosys-key"
 # Initialize (do once at startup)
 AnosysOpenAILogger()
 
-# Use OpenAI normally - all calls are automatically logged
+# Use OpenAI normally - instrumented calls are logged
 client = OpenAI()
 
 response = client.chat.completions.create(
@@ -97,3 +95,7 @@ Following [OpenTelemetry Gen AI standards](https://opentelemetry.io/docs/specs/s
 ## License
 
 Apache 2.0
+
+## Content controls
+
+See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, redaction, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.
