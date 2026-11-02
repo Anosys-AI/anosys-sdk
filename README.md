@@ -7,7 +7,7 @@
 
 Official SDKs for integrating with [AnoSys](https://anosys.ai) — AI observability, monitoring, and analytics platform.
 
-Add a few lines of code and every LLM call, agent run, Claude Code, and OpenAI Codex session is automatically captured and sent to your AnoSys workspace.
+Add a few lines of code and every LLM call (OpenAI, Anthropic), agent run (OpenAI Agents, Claude Agent SDK), Claude Code, and OpenAI Codex session is automatically captured and sent to your AnoSys workspace.
 
 ---
 
@@ -17,9 +17,11 @@ Add a few lines of code and every LLM call, agent run, Claude Code, and OpenAI C
 
 | Package | Version | Description | Install |
 |---------|---------|-------------|---------|
-| [`anosys-sdk-core`](./packages/python/core/) | 1.0.13 | Shared core — config, HTTP client, decorators, data models | `pip install anosys-sdk-core` |
+| [`anosys-sdk-core`](./packages/python/core/) | 1.1.0 | Shared core — config, HTTP client, decorators, data models | `pip install anosys-sdk-core` |
 | [`anosys-sdk-openai`](./packages/python/openai/) | 1.0.13 | OpenAI SDK instrumentation via OpenTelemetry | `pip install anosys-sdk-openai` |
 | [`anosys-sdk-openai-agents`](./packages/python/openai_agents/) | 1.0.12 | OpenAI Agents SDK tracing (TracingProcessor) | `pip install anosys-sdk-openai-agents` |
+| [`anosys-sdk-anthropic`](./packages/python/anthropic/) | 1.0.0 | Anthropic (Claude) SDK tracing via its native OpenTelemetry spans | `pip install anosys-sdk-anthropic` |
+| [`anosys-sdk-claude-agents`](./packages/python/claude_agents/) | 1.0.0 | Claude Agent SDK tracing (agent, tool and subagent spans) | `pip install anosys-sdk-claude-agents` |
 | [`anosys-claude-code`](./packages/python/claude_code/) | 0.2.8 | Claude Code observability hook & CLI | `pip install anosys-claude-code` |
 | [`anosys-codex`](./packages/python/codex/) | 0.1.0 | OpenAI Codex CLI observability hook & CLI | `pip install anosys-codex` |
 
@@ -29,6 +31,8 @@ Add a few lines of code and every LLM call, agent run, Claude Code, and OpenAI C
 |---------|---------|-------------|---------|
 | [`anosys-sdk-openai`](./packages/js/openai/) | 1.0.11 | OpenAI SDK instrumentation via OpenTelemetry | `npm install anosys-sdk-openai` |
 | [`anosys-sdk-openai-agents`](./packages/js/openai-agents/) | 1.0.11 | OpenAI Agents SDK tracing (`addTracingProcessor`) | `npm install anosys-sdk-openai-agents` |
+| [`anosys-sdk-anthropic`](./packages/js/anthropic/) | 1.0.0 | Anthropic (Claude) SDK tracing via its native OpenTelemetry spans | `npm install anosys-sdk-anthropic` |
+| [`anosys-sdk-claude-agents`](./packages/js/claude-agents/) | 1.0.0 | Claude Agent SDK tracing (`wrapQuery`) | `npm install anosys-sdk-claude-agents` |
 | [`anosys-sdk-claude-code`](./packages/js/claude-code/) | 0.2.5 | Claude Code observability hook & CLI | `npx anosys-sdk-claude-code install` |
 | [`anosys-sdk-codex`](./packages/js/codex/) | 0.1.0 | OpenAI Codex CLI observability hook & CLI | `npx anosys-sdk-codex install` |
 
@@ -122,6 +126,67 @@ addTracingProcessor(logger);
 
 const agent = new Agent({ name: 'my-agent', instructions: 'You are helpful.' });
 const result = await run(agent, 'Hello');
+```
+
+---
+
+### Anthropic (Claude) — Python
+
+```python
+import anthropic
+from anosys_sdk_anthropic import AnosysAnthropicLogger
+
+AnosysAnthropicLogger()  # once at startup, before creating clients
+
+client = anthropic.Anthropic()
+message = client.messages.create(
+    model="claude-sonnet-5-5",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+```
+
+### Anthropic (Claude) — JavaScript
+
+```javascript
+import Anthropic from '@anthropic-ai/sdk';
+import { AnosysAnthropicLogger } from 'anosys-sdk-anthropic';
+
+new AnosysAnthropicLogger(); // once at startup, before creating clients
+
+const client = new Anthropic();
+await client.messages.create({
+  model: 'claude-sonnet-5-5',
+  max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Hello!' }],
+});
+```
+
+### Claude Agent SDK — Python
+
+```python
+from anosys_sdk_claude_agents import AnosysClaudeAgentsLogger
+
+AnosysClaudeAgentsLogger()  # instruments query() and ClaudeSDKClient
+
+from claude_agent_sdk import query
+
+async for message in query(prompt="List the files in this folder"):
+    print(message)
+```
+
+### Claude Agent SDK — JavaScript
+
+```javascript
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import { AnosysClaudeAgentsLogger, wrapQuery } from 'anosys-sdk-claude-agents';
+
+new AnosysClaudeAgentsLogger();
+const tracedQuery = wrapQuery(query);
+
+for await (const message of tracedQuery({ prompt: 'List the files in this folder' })) {
+  console.log(message);
+}
 ```
 
 ---
@@ -275,11 +340,15 @@ anosys-sdk/
 │   │   ├── core/               # anosys-sdk-core
 │   │   ├── openai/             # anosys-sdk-openai
 │   │   ├── openai_agents/      # anosys-sdk-openai-agents
+│   │   ├── anthropic/          # anosys-sdk-anthropic
+│   │   ├── claude_agents/      # anosys-sdk-claude-agents
 │   │   ├── claude_code/        # anosys-claude-code
 │   │   └── codex/              # anosys-codex
 │   └── js/
 │       ├── openai/             # anosys-sdk-openai (npm)
 │       ├── openai-agents/      # anosys-sdk-openai-agents (npm)
+│       ├── anthropic/          # anosys-sdk-anthropic (npm)
+│       ├── claude-agents/      # anosys-sdk-claude-agents (npm)
 │       ├── claude-code/        # anosys-sdk-claude-code (npm)
 │       └── codex/              # anosys-sdk-codex (npm)
 ├── examples/                   # Jupyter notebook demos

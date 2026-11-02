@@ -1,0 +1,336 @@
+/**
+ * OpenTelemetry GenAI semantic-convention span extraction for AnoSys.
+ *
+ * JS port of Python `anosys_sdk_core/genai.py`: both produce the same keys for
+ * the same span. The Anthropic SDK emits these spans natively, and the AnoSys
+ * Claude Agents integration emits them for agent and tool spans.
+ *
+ * The input is the `to_json()` span shape (see `spanToJson`): name, context,
+ * parent_id, start_time, end_time, status, attributes (flat), events, resource.
+ */
+
+import { assign, reassign, CLAUDE_KEY_MAPPING, CLAUDE_STARTING_INDICES } from './mapping.js';
+
+// gen_ai.operation.name -> AnoSys span kind (gen_ai.span.kind / otel_kind)
+export const OPERATION_SPAN_KINDS = {
+  chat: 'LLM',
+  text_completion: 'LLM',
+  generate_content: 'LLM',
+  embeddings: 'EMBEDDING',
+  invoke_agent: 'AGENT',
+  create_agent: 'AGENT',
+  execute_tool: 'TOOL',
+};
+
+// Request parameters copied 1:1 to gen_ai.request.* (and llm_invocation_parameters)
+const REQUEST_PARAMETERS = [
+  'max_tokens', 'temperature', 'top_p', 'top_k', 'stop_sequences', 'seed',
+  'frequency_penalty', 'presence_penalty', 'choice.count', 'tool_choice',
+];
+
+const STATUS_CODES = { 0: 'UNSET', 1: 'OK', 2: 'ERROR' };
+const SPAN_KINDS = { 0: 'INTERNAL', 1: 'SERVER', 2: 'CLIENT', 3: 'PRODUCER', 4: 'CONSUMER' };
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function toTimestamp(dtStr) {
+  if (!dtStr) return null;
+  const ms = new Date(dtStr).getTime();
+  return Number.isNaN(ms) ? null : Math.floor(ms);
+}
+
+function hrTimeToIso(hrTime) {
+  if (!Array.isArray(hrTime)) return null;
+  const ms = Number(hrTime[0]) * 1e3 + Number(hrTime[1]) / 1e6;
+  return new Date(ms).toISOString();
+}
+
+function toStrOrNull(val) {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'object') {
+    try { return JSON.stringify(val); } catch { return String(val); }
+  }
+  return String(val);
+}
+
+function parseJson(value) {
+  if (typeof value === 'string' && /^\s*[[{]/.test(value)) {
+    try { return JSON.parse(value); } catch { return value; }
+  }
+  return value;
+}
+
+function toNumber(value) {
+  if (value === null || value === undefined || typeof value === 'boolean') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Convert an OTel ReadableSpan to the shape of Python's `ReadableSpan.to_json()`,
+ * so both languages feed the extractor the same structure.
+ */
+export function spanToJson(span) {
+  const ctx = typeof span.spanContext === 'function' ? span.spanContext() : (span.context ?? {});
+  const parentId = span.parentSpanContext?.spanId ?? span.parentSpanId ?? null;
+  const statusCode = span.status?.code ?? 0;
+  return {
+    name: span.name,
+    context: {
+      trace_id: ctx.traceId ? `0x${ctx.traceId}` : null,
+      span_id: ctx.spanId ? `0x${ctx.spanId}` : null,
+      trace_state: ctx.traceState ? ctx.traceState.serialize() : '[]',
+    },
+    kind: `SpanKind.${SPAN_KINDS[span.kind] ?? 'INTERNAL'}`,
+    parent_id: parentId ? `0x${parentId}` : null,
+    start_time: hrTimeToIso(span.startTime),
+    end_time: hrTimeToIso(span.endTime),
+    status: span.status?.message
+      ? { status_code: STATUS_CODES[statusCode], description: span.status.message }
+      : { status_code: STATUS_CODES[statusCode] },
+    attributes: { ...(span.attributes ?? {}) },
+    events: (span.events ?? []).map(e => ({
+      name: e.name,
+      timestamp: hrTimeToIso(e.time),
+      attributes: { ...(e.attributes ?? {}) },
+    })),
+    links: [],
+    resource: { attributes: { ...(span.resource?.attributes ?? {}) }, schema_url: '' },
+  };
+}
+
+function partText(part) {
+  const type = part.type;
+  if (type === 'text' || type === 'reasoning') {
+    const content = part.content;
+    return type === 'reasoning' && content ? `[Thinking] ${content}` : content;
+  }
+  if (type === 'tool_call') {
+    const args = typeof part.arguments === 'object' ? JSON.stringify(part.arguments) : part.arguments;
+    return `[Tool Call: ${part.name}] ${args ?? ''}`.trimEnd();
+  }
+  if (type === 'tool_call_response') {
+    const resp = typeof part.response === 'object' ? JSON.stringify(part.response) : part.response;
+    return `[Tool Result] ${resp ?? ''}`.trimEnd();
+  }
+  return typeof part.content === 'string' ? part.content : null;
+}
+
+/**
+ * Flatten GenAI messages into a readable string ("Role: text" blocks).
+ * Accepts the parts-based convention and the classic {role, content} shape.
+ */
+export function flattenMessages(messages) {
+  messages = parseJson(messages);
+  if (!messages || (Array.isArray(messages) && messages.length === 0)) return null;
+  if (typeof messages === 'string') return messages;
+  if (!Array.isArray(messages)) return String(messages);
+
+  const blocks = [];
+  for (const message of messages) {
+    if (!message || typeof message !== 'object') continue;
+    const role = message.role;
+    let text;
+    if (Array.isArray(message.parts)) {
+      text = message.parts.filter(p => p && typeof p === 'object').map(partText).filter(Boolean).join('\n');
+    } else {
+      text = typeof message.content === 'string' ? message.content : toStrOrNull(message.content);
+    }
+    if (text) {
+      const label = role ? `${role.charAt(0).toUpperCase()}${role.slice(1).toLowerCase()}: ` : '';
+      blocks.push(`${label}${text}`);
+    }
+  }
+  return blocks.length ? blocks.join('\n\n') : null;
+}
+
+function systemText(systemInstructions) {
+  systemInstructions = parseJson(systemInstructions);
+  if (Array.isArray(systemInstructions)) {
+    const texts = systemInstructions.filter(p => p && p.content).map(p => p.content);
+    return texts.length ? texts.join('\n') : null;
+  }
+  return toStrOrNull(systemInstructions);
+}
+
+function hasReasoning(messages) {
+  messages = parseJson(messages);
+  if (!Array.isArray(messages)) return false;
+  return messages.some(m => Array.isArray(m?.parts) && m.parts.some(p => p?.type === 'reasoning'));
+}
+
+// ── Main span extraction ──────────────────────────────────────────────────────
+
+/**
+ * Extract and transform a GenAI semantic-convention span into AnoSys format.
+ *
+ * @param {object} span  `to_json()`-shaped span (use `spanToJson` for a ReadableSpan)
+ * @param {object} opts  { fromSource, provider, keyMapping, startingIndices }
+ */
+export function extractGenAiSpanInfo(span, {
+  fromSource,
+  provider = 'anthropic',
+  keyMapping = CLAUDE_KEY_MAPPING,
+  startingIndices = CLAUDE_STARTING_INDICES,
+} = {}) {
+  const variables = {};
+  const keyToCvs = { ...keyMapping };
+  const attributes = { ...(span.attributes ?? {}) };
+  const resourceAttrs = span.resource?.attributes ?? {};
+  const context = span.context ?? {};
+
+  // Top-level metadata
+  assign(variables, 'otel_record_type', 'AnoSys Trace');
+  assign(variables, 'custom_mapping', JSON.stringify(keyToCvs, null, 4));
+  assign(variables, 'otel_observed_timestamp', new Date().toISOString());
+  assign(variables, 'name', toStrOrNull(span.name));
+  assign(variables, 'trace_id', toStrOrNull(context.trace_id));
+  assign(variables, 'span_id', toStrOrNull(context.span_id));
+  assign(variables, 'trace_state', toStrOrNull(context.trace_state) || null);
+  assign(variables, 'parent_id', toStrOrNull(span.parent_id));
+  assign(variables, 'start_time', toStrOrNull(span.start_time));
+  assign(variables, 'end_time', toStrOrNull(span.end_time));
+
+  const startTs = toTimestamp(span.start_time);
+  const endTs = toTimestamp(span.end_time);
+  assign(variables, 'cvn1', startTs);
+  assign(variables, 'cvn2', endTs);
+  if (startTs != null && endTs != null) assign(variables, 'otel_duration_ms', endTs - startTs);
+
+  // Status
+  const status = span.status ?? {};
+  if (Object.keys(status).length) {
+    assign(variables, 'status', toStrOrNull(status));
+    if (status.status_code != null) {
+      assign(variables, 'status_code', STATUS_CODES[status.status_code] ?? String(status.status_code));
+    }
+  }
+
+  // Gen AI - System & operation
+  const providerName = attributes['gen_ai.provider.name'] ?? attributes['gen_ai.system'] ?? provider;
+  const operation = attributes['gen_ai.operation.name'];
+  assign(variables, 'gen_ai.system', providerName);
+  assign(variables, 'gen_ai.provider.name', providerName);
+  assign(variables, 'gen_ai.operation.name', toStrOrNull(operation));
+
+  const kindVal = operation ? (OPERATION_SPAN_KINDS[operation] ?? null) : null;
+  assign(variables, 'gen_ai.span.kind', kindVal);
+  assign(variables, 'kind', kindVal);
+
+  assign(variables, 'server.address', attributes['server.address'] ?? resourceAttrs['server.address']);
+  assign(variables, 'server.port', attributes['server.port'] ?? resourceAttrs['server.port']);
+  assign(variables, 'error.type', toStrOrNull(attributes['error.type']));
+  assign(variables, 'service.name', resourceAttrs['service.name'] ?? 'unknown_service');
+  assign(variables, 'attributes', attributes);
+
+  // Request configuration
+  const model = attributes['gen_ai.request.model'];
+  assign(variables, 'gen_ai.request.model', toStrOrNull(model));
+  const invocationParams = {};
+  if (model) invocationParams.model = model;
+  for (const param of REQUEST_PARAMETERS) {
+    let value = attributes[`gen_ai.request.${param}`];
+    if (value === null || value === undefined) continue;
+    value = parseJson(value);
+    invocationParams[param] = value;
+    assign(variables, `gen_ai.request.${param}`, param === 'tool_choice' ? toStrOrNull(value) : value);
+  }
+
+  // Response
+  const responseId = attributes['gen_ai.response.id'];
+  let finishReasons = parseJson(attributes['gen_ai.response.finish_reasons']);
+  if ((!finishReasons || finishReasons.length === 0) && attributes['anthropic.message.stop_reason']) {
+    finishReasons = [attributes['anthropic.message.stop_reason']];
+  }
+  if (typeof finishReasons === 'string') finishReasons = [finishReasons];
+  assign(variables, 'gen_ai.response.model', toStrOrNull(attributes['gen_ai.response.model']));
+  assign(variables, 'gen_ai.response.id', toStrOrNull(responseId));
+  assign(variables, 'gen_ai.response.finish_reasons', finishReasons?.length ? [...finishReasons] : null);
+  assign(variables, 'gen_ai.output.type', toStrOrNull(attributes['gen_ai.output.type']));
+  assign(variables, 'resp_id', toStrOrNull(responseId));
+
+  // Usage. gen_ai.usage.input_tokens is the full prompt (cache reads/writes
+  // included), matching the OpenAI meaning of prompt tokens.
+  const inputTokens = toNumber(attributes['gen_ai.usage.input_tokens']);
+  const outputTokens = toNumber(attributes['gen_ai.usage.output_tokens']);
+  let totalTokens = toNumber(attributes['gen_ai.usage.total_tokens']);
+  const cacheRead = toNumber(attributes['gen_ai.usage.cache_read.input_tokens']);
+  const cacheCreation = toNumber(
+    attributes['gen_ai.usage.cache_creation.input_tokens'] ?? attributes['gen_ai.usage.cache_write.input_tokens'],
+  );
+  const reasoningTokens = toNumber(attributes['gen_ai.usage.reasoning.output_tokens']);
+  if (totalTokens == null && inputTokens != null && outputTokens != null) totalTokens = inputTokens + outputTokens;
+  const cost = toNumber(attributes['gen_ai.usage.cost']);
+
+  assign(variables, 'gen_ai.usage.input_tokens', inputTokens);
+  assign(variables, 'gen_ai.usage.output_tokens', outputTokens);
+  assign(variables, 'gen_ai.usage.total_tokens', totalTokens);
+  assign(variables, 'gen_ai.usage.cache_read.input_tokens', cacheRead);
+  assign(variables, 'gen_ai.usage.cache_creation.input_tokens', cacheCreation);
+  assign(variables, 'gen_ai.usage.cost', cost);
+
+  const tokenCount = Object.fromEntries([
+    ['input_tokens', inputTokens],
+    ['output_tokens', outputTokens],
+    ['total_tokens', totalTokens],
+    ['cache_read_input_tokens', cacheRead],
+    ['cache_creation_input_tokens', cacheCreation],
+    ['reasoning_output_tokens', reasoningTokens],
+  ].filter(([, v]) => v != null));
+  assign(variables, 'llm_token_count', Object.keys(tokenCount).length ? tokenCount : null);
+
+  // Content
+  const inputMessages = parseJson(attributes['gen_ai.input.messages']);
+  const outputMessages = parseJson(attributes['gen_ai.output.messages']);
+  const systemInstructions = parseJson(attributes['gen_ai.system_instructions']);
+  const toolDefinitions = parseJson(attributes['gen_ai.tool.definitions']);
+  assign(variables, 'gen_ai.input.messages', inputMessages);
+  assign(variables, 'gen_ai.output.messages', outputMessages);
+  assign(variables, 'gen_ai.system_instructions', systemInstructions);
+  assign(variables, 'gen_ai.tool.definitions', toolDefinitions);
+  if (hasReasoning(outputMessages)) assign(variables, 'has_thinking', true);
+
+  // Agents
+  assign(variables, 'gen_ai.agent.id', toStrOrNull(attributes['gen_ai.agent.id']));
+  assign(variables, 'gen_ai.agent.name', toStrOrNull(attributes['gen_ai.agent.name']));
+  assign(variables, 'gen_ai.agent.description', toStrOrNull(attributes['gen_ai.agent.description']));
+  assign(variables, 'gen_ai.conversation.id', toStrOrNull(attributes['gen_ai.conversation.id']));
+  if (kindVal === 'AGENT') assign(variables, 'is_agent', true);
+
+  // Legacy LLM fields
+  const sysText = systemText(systemInstructions);
+  assign(variables, 'llm_model', toStrOrNull(model ?? attributes['gen_ai.response.model']));
+  assign(variables, 'llm_system', sysText);
+  assign(variables, 'llm_tools', toolDefinitions);
+  assign(variables, 'llm_invocation_parameters', Object.keys(invocationParams).length ? invocationParams : null);
+
+  let inputVal;
+  let outputVal;
+  if (kindVal === 'TOOL') {
+    // Tool spans: arguments in, result out (same as OpenAI Agents function spans)
+    inputVal = toStrOrNull(parseJson(attributes['gen_ai.tool.call.arguments']));
+    outputVal = toStrOrNull(parseJson(
+      attributes['gen_ai.tool.call.result'] ?? attributes['anthropic.tool_result.content'],
+    ));
+  } else {
+    const inputParts = [];
+    if (sysText) inputParts.push(`System: ${sysText}`);
+    const flattenedInput = flattenMessages(inputMessages);
+    if (flattenedInput) inputParts.push(flattenedInput);
+    inputVal = inputParts.length ? inputParts.join('\n\n') : null;
+    outputVal = flattenMessages(outputMessages);
+  }
+  assign(variables, 'llm_input', inputVal);
+  assign(variables, 'llm_output', outputVal);
+
+  // Resource, source, streaming, events, raw
+  assign(variables, 'otel_resource', JSON.stringify(resourceAttrs));
+  assign(variables, 'from_source', fromSource);
+  if (attributes['gen_ai.request.stream'] || attributes['anthropic.request.stream']) {
+    assign(variables, 'is_streaming', true);
+  }
+  if (span.events?.length) assign(variables, 'events', JSON.stringify(span.events));
+  assign(variables, 'raw', JSON.stringify(span));
+
+  return reassign(variables, keyToCvs, { ...startingIndices });
+}

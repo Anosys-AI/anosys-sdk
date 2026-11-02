@@ -5,7 +5,9 @@
     "claude-code",
     "openai",
     "openai-agents",
-    "codex"
+    "codex",
+    "anthropic",
+    "claude-agents"
   ],
   "engines": {
     "node": ">=18.0.0"
