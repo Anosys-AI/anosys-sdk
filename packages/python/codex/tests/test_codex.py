@@ -3,7 +3,6 @@ import tempfile
 from pathlib import Path
 
 from anosys_sdk_codex.installer import (
-    HOOK_COMMAND,
     backup,
     has_anosys_hook,
     load_toml,
@@ -93,23 +92,6 @@ def test_transform_codex_turn():
     assert "cvs199" in mapped
 
 
-def test_transform_codex_turn_redaction():
-    turn = {
-        "turn_id": "turn-999",
-        "model": "o3-mini",
-        "user_prompt": "Secret API password is ABC",
-        "assistant_output": "Got your password ABC",
-        "tokens": {"input_tokens": 10, "output_tokens": 10},
-        "tool_calls": [{"tool": "shell", "args": "echo secret", "output": "secret"}],
-    }
-
-    mapped = transform_codex_turn(turn, session_id="session-sec", turn_id="turn-999", redact=True)
-
-    assert mapped["userPrompt"] == "[REDACTED]"
-    assert mapped["assistantText"] == "[REDACTED]"
-    assert "[REDACTED]" in mapped["cvs199"]
-
-
 def test_installer_config_lifecycle():
     with tempfile.TemporaryDirectory() as tmpdir:
         config_path = Path(tmpdir) / "config.toml"
@@ -119,7 +101,7 @@ def test_installer_config_lifecycle():
         config_path.write_text('[desktop]\nfollowUpQueueMode = "steer"\n\n[plugins."browser@openai-bundled"]\nenabled = true\n', encoding="utf-8")
 
         # 1. Update config
-        updated = update_codex_config(HOOK_COMMAND, path=config_path)
+        updated = update_codex_config(path=config_path)
         assert updated is True
         assert config_path.is_file()
 
@@ -129,10 +111,10 @@ def test_installer_config_lifecycle():
 
         data = load_toml(config_path)
         assert has_anosys_hook(data) is True
-        assert "anosys-codex" in data["notify"]
+        assert data["notify"][1:] == ["-m", "anosys_sdk_codex.hook_runner"]
 
         # 2. Idempotent check
-        updated_again = update_codex_config(HOOK_COMMAND, path=config_path)
+        updated_again = update_codex_config(path=config_path)
         assert updated_again is False
 
         # 3. Backup
@@ -140,11 +122,12 @@ def test_installer_config_lifecycle():
         assert bk is not None and bk.is_file()
 
         # 4. Update env
-        update_codex_env(api_key="test-api-key", redaction=True, path=env_path)
+        update_codex_env(api_key="test-api-key", path=env_path)
         assert env_path.is_file()
         env_content = env_path.read_text(encoding="utf-8")
         assert "test-api-key" in env_content
-        assert 'REDACTION="true"' in env_content
+        assert "REDACTION" not in env_content
+        assert (env_path.stat().st_mode & 0o777) == 0o600
 
         # 5. Remove config
         removed = remove_codex_config(config_path)
@@ -244,24 +227,3 @@ def test_validate_api_key_cc_pixel():
         assert validate_api_key("t-key", "cc") is False
 
 
-def test_transform_codex_turn_encryption():
-    import os
-    from unittest.mock import patch
-    from anosys_sdk_codex.encryption import ANOSYS_ENCRYPTION_PREFIX, decrypt, derive_256_bit_key
-
-    turn = {
-        "model": "gpt-4o",
-        "user_prompt": "Codex secret query",
-        "assistant_output": "Codex completion text",
-    }
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "codex-secret"}):
-        result = transform_codex_turn(turn, session_id="s1", turn_id="t1")
-        assert result["user_prompt"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["assistant_text"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["cvs4"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["cvs5"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-
-        key = derive_256_bit_key("codex-secret")
-        assert decrypt(result["user_prompt"], key) == "Codex secret query"
-        assert decrypt(result["assistant_text"], key) == "Codex completion text"

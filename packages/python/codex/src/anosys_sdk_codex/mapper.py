@@ -10,11 +10,19 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from anosys_sdk_codex.encryption import encrypt_payload
 
-INTEGRATION_VERSION = "0.1.1"
+from anosys_sdk_core.privacy import BASE_METADATA_FIELDS
+
+INTEGRATION_VERSION = "0.2.0"
 OS_USER = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
-REDACTION = os.environ.get("REDACTION", "false").lower() == "true"
+
+# Fields sent at the `metadata` level: the shared allowlist plus the Codex
+# CV columns that hold the same metadata. Everything else (prompts, answers,
+# commands, written paths, the raw event log in cvs199) is `full`-only.
+METADATA_FIELDS = BASE_METADATA_FIELDS | {
+    "cvs1", "cvs2", "cvs9", "cvs12", "cvs19", "cvs32", "cvs33",
+    "cvn1", "cvn2", "cvn3", "cvn4", "cvn5", "cvn6", "cvn7",
+}
 
 OPENAI_PRICING: Dict[str, Dict[str, float]] = {
     "gpt-4o": {
@@ -116,11 +124,7 @@ def transform_codex_turn(
     session_id: str,
     turn_id: str,
     incremental_tokens: Optional[Dict[str, float]] = None,
-    redact: bool | None = None,
 ) -> Dict[str, Any]:
-    # The runner loads saved settings after package imports; read the active
-    # environment here rather than relying on the import-time constant.
-    do_redact = os.environ.get("REDACTION", "false").lower() == "true" if redact is None else redact
 
     model = turn.get("model") or "unknown"
     provider = turn.get("model_provider") or "openai"
@@ -129,10 +133,6 @@ def transform_codex_turn(
 
     user_prompt = turn.get("user_prompt") or ""
     assistant_text = turn.get("assistant_output") or ""
-
-    if do_redact:
-        user_prompt = "[REDACTED]"
-        assistant_text = "[REDACTED]"
 
     tokens = turn.get("tokens") or {}
     input_tokens = int(tokens.get("input_tokens", 0))
@@ -159,9 +159,6 @@ def transform_codex_turn(
     tool_calls_clean = []
     for tc in tool_calls:
         clean_entry = dict(tc)
-        if do_redact:
-            clean_entry["args"] = "[REDACTED]"
-            clean_entry["output"] = "[REDACTED]"
         tool_calls_clean.append(clean_entry)
 
     tool_durations = [
@@ -179,19 +176,7 @@ def transform_codex_turn(
         "events": [],
     }
 
-    orig_prompt = str(turn.get("user_prompt") or "")
-    orig_assistant = str(turn.get("assistant_output") or "")
     raw_to_serialize = raw_data
-    if do_redact:
-        try:
-            raw_str = json.dumps(raw_data, default=str)
-            if orig_prompt:
-                raw_str = raw_str.replace(orig_prompt, "[REDACTED]")
-            if orig_assistant:
-                raw_str = raw_str.replace(orig_assistant, "[REDACTED]")
-            raw_to_serialize = json.loads(raw_str)
-        except Exception:
-            raw_to_serialize = raw_data
 
     raw_perm = turn.get("permission_mode")
     if isinstance(raw_perm, dict):
@@ -276,5 +261,5 @@ def transform_codex_turn(
         "cvs200": "CodexHook",
     }
 
-    res = {k: v for k, v in payload.items() if v is not None}
-    return encrypt_payload(res)
+    # Collection level, secret scrubbing and encryption are applied by the hook runner
+    return {k: v for k, v in payload.items() if v is not None}

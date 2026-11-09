@@ -9,7 +9,7 @@ except ImportError:
 
 from anosys_sdk_codex.installer import update_codex_config, update_codex_env
 from anosys_sdk_codex.mapper import transform_codex_turn
-from anosys_sdk_codex.encryption import (
+from anosys_sdk_core.encryption import (
     ANOSYS_ENCRYPTION_PREFIX,
     DEFAULT_ENCRYPTED_COLUMNS,
     derive_256_bit_key,
