@@ -42,9 +42,15 @@ in that project's root. A project file can only lower the level, never raise it.
 
 `full` is used only when `~/.anosys/consent.json` (readable only by you) records
 acceptance of this exact policy version. If the version changes, collection falls
-back to `metadata` until you accept again. Every record carries a `consent` field (stored in column `cvs198`),
-`full;2026-11-09` or `metadata;none`, so the level a record was collected
-under is always known.
+back to `metadata` until you accept again. Every record carries its level in
+column `cvs198`: `full;2026-11-09` or `metadata;none`, so the level a record was
+collected under is always known. `full;<version>` appears only when that version
+was accepted.
+
+Records from the application SDKs (OpenAI, OpenAI Agents, Anthropic, Claude Agent
+SDK, decorators) carry `full;app` or `metadata;app` instead: their level is the
+developer's choice for their own application, not a policy acceptance, so they never
+read the consent file and never claim one. See [DATA_CONTROLS.md](DATA_CONTROLS.md).
 
 Precedence, strongest first: `ANOSYS_DISABLE=1`, an explicit flag, a project
 `.anosys` file (lower only), the consent file, `ANOSYS_COLLECTION_LEVEL`, the
@@ -98,4 +104,4 @@ AnoSys workspace agreement.
 
 | Version | Change |
 | --- | --- |
-| 2026-11-09 | First version: metadata by default, consent for full content, `consent` field on every record. |
+| 2026-11-09 | First version: metadata by default, consent for full content, collection level in `cvs198` on every record. |

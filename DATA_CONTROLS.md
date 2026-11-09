@@ -30,11 +30,42 @@ The same commands exist for `anosys-codex` and `anosys-antigravity`. Other switc
 | `ANOSYS_COLLECTION_LEVEL=off\|metadata\|full` | Level for environments without the consent file; `full` still needs consent |
 | `ANOSYS_CONSENT_FILE` | Location of the consent file (default `~/.anosys/consent.json`) |
 
-Every hook record carries `consent` (`full;<policy version>` or `<level>;none`), stored in `cvs198`.
+Every hook record carries its level in `cvs198` (`full;<policy version>` or `<level>;none`).
 
 At `metadata` only allow-listed fields leave the machine; a new upstream field is
 excluded until it is added to the list. At `full`, credential-shaped strings are
 replaced with `[SECRET]` on a best-effort basis.
+
+## Collection levels for the application SDKs
+
+The OpenAI, OpenAI Agents, Anthropic and Claude Agent SDK integrations (and the
+decorators) use the same three levels, set once for the whole process:
+
+```bash
+export ANOSYS_COLLECTION_LEVEL=metadata   # or full / off
+```
+
+or `level=metadata` in a project `.anosys` file. Precedence, strongest first:
+
+1. `ANOSYS_DISABLE=1` sends nothing.
+2. A project `.anosys` file is a ceiling: it can lower the level, never raise it, even over code.
+3. The explicit argument: `capture_content` / `captureContent`, or the OpenAI Agents
+   `capture_inputs` / `capture_outputs` / `capture_parameters` (all False means metadata).
+4. `ANOSYS_COLLECTION_LEVEL`.
+5. Default `full`. The developer instruments their own application, and the per-user
+   consent file of the hooks is not read (it does not exist in servers and containers).
+
+At `metadata` only numbers, booleans and a list of descriptive columns (ids, span
+names, models, operation, status, agent names and handoffs, source) are sent;
+prompts, completions, messages, tool arguments and results, raw spans, attribute
+blobs and dynamically mapped attributes are dropped before encryption and sending.
+`off` sends nothing and does not set up instrumentation. Records say `full;app` or
+`metadata;app` in `cvs198`.
+
+The OpenAI Agents flags `OPENAI_AGENTS_DONT_LOG_MODEL_DATA` / `_TOOL_DATA` only
+control that SDK's own debug logging, not traces; the AnoSys level above controls
+what AnoSys receives. `pii_redaction=True` redacts e-mail addresses, phone numbers
+and similar patterns in captured content.
 
 ## Request size and retries
 
