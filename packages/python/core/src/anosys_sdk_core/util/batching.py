@@ -5,6 +5,7 @@ Provides functions to transform data into the CVS format expected by the AnoSys 
 """
 
 import json
+import logging
 from typing import Any, Dict, Optional, Union
 
 from anosys_sdk_core.models import (
@@ -12,6 +13,11 @@ from anosys_sdk_core.models import (
     OTEL_AI_VALID_TYPES,
     CLAUDE_VALID_TYPES
 )
+
+logger = logging.getLogger(__name__)
+
+# Attributes dropped because their type's columns were used up (warned once each)
+_DROPPED_KEYS: set = set()
 
 
 def _get_type_key(value: Any) -> str:
@@ -34,6 +40,29 @@ def _get_type_key(value: Any) -> str:
         return "string"
     else:
         return "string"
+
+
+# Custom-variable columns that exist in every AnoSys schema
+SLOT_LIMITS = {"cvs": 200, "cvn": 200, "cvb": 100}
+# Fixed meaning (consent, raw record, source tag): never handed to a dynamic key
+RESERVED_SLOTS = frozenset({"cvs198", "cvs199", "cvs200"})
+
+
+def _allocate_slot(prefix: str, start: int, used: set) -> Optional[str]:
+    """
+    The first free ``prefix<N>`` column from ``start``, or None when the type's
+    columns are used up. ``used`` holds every column already taken by a fixed
+    or earlier dynamic key and is updated.
+    """
+    index = max(1, int(start))
+    limit = SLOT_LIMITS.get(prefix, 200)
+    while index <= limit:
+        slot = f"{prefix}{index}"
+        if slot not in used and slot not in RESERVED_SLOTS:
+            used.add(slot)
+            return slot
+        index += 1
+    return None
 
 
 def _get_prefix_and_index(value_type: str) -> tuple:
@@ -145,6 +174,9 @@ def reassign(
             valid_types = OTEL_AI_VALID_TYPES
     
     indices = (starting_indices or DEFAULT_STARTING_INDICES).copy()
+    # Columns already taken: a new key never shares a column with another key,
+    # whether that key is fixed, reserved, or was allocated in an earlier call.
+    used = set(key_to_cvs.values())
     
     for key, value in data.items():
         if value is None:
@@ -155,8 +187,14 @@ def reassign(
         
         # Get or assign CVS variable name
         if key not in key_to_cvs:
-            key_to_cvs[key] = f"{prefix}{indices[index_key]}"
-            indices[index_key] += 1
+            slot = _allocate_slot(prefix, indices[index_key], used)
+            if slot is None:
+                if key not in _DROPPED_KEYS:
+                    _DROPPED_KEYS.add(key)
+                    logger.warning("No free %s column for attribute %r; it is not sent", prefix, key)
+                continue
+            key_to_cvs[key] = slot
+            indices[index_key] = int(slot[3:]) + 1
         
         cvs_var = key_to_cvs[key]
         

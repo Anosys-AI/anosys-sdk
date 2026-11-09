@@ -1,3 +1,4 @@
+import { allocateSlot, warnDropped } from 'anosys-sdk-core';
 // ── Shared base mapping (mirrors Python BASE_KEY_MAPPING) ────────────────────
 
 export const DEFAULT_STARTING_INDICES = { string: 100, number: 3, bool: 1 };
@@ -141,6 +142,9 @@ export function assign(variables, key, value) {
 export function reassign(data, keyToCvs = AGENTS_KEY_MAPPING, startingIndices = null, validTypes = null) {
   const indices = { ...AGENTS_STARTING_INDICES, ...(startingIndices ?? {}) };
   const result = {};
+  // Columns already taken: a new attribute never shares a column with another one
+  const used = new Set(Object.values(keyToCvs));
+  const assigned = {};
   const sourceData = typeof data === 'string' ? (() => { try { return JSON.parse(data); } catch { return {}; } })() : data;
 
   // Detect source and use appropriate valid types if not provided
@@ -152,11 +156,14 @@ export function reassign(data, keyToCvs = AGENTS_KEY_MAPPING, startingIndices = 
   for (const [key, rawValue] of Object.entries(sourceData)) {
     if (rawValue === null || rawValue === undefined) continue;
 
-    const cvsVar = keyToCvs[key] || (() => {
-      const typeKey = getTypeKey(rawValue);
-      const [prefix, indexKey] = getPrefixAndIndexKey(typeKey);
-      return `${prefix}${indices[indexKey]++}`;
-    })();
+    let cvsVar = keyToCvs[key] || assigned[key];
+    if (!cvsVar) {
+      const [prefix, indexKey] = getPrefixAndIndexKey(getTypeKey(rawValue));
+      cvsVar = allocateSlot(prefix, indices[indexKey], used);
+      if (!cvsVar) { warnDropped(key, prefix); continue; }
+      assigned[key] = cvsVar;
+      indices[indexKey] = Number(cvsVar.slice(3)) + 1;
+    }
 
     const expectedType = validTypes[cvsVar] || validTypes[key];
 
