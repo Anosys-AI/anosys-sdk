@@ -45,6 +45,7 @@ from anosys_sdk_core.transport import (
     deliver,
     fit_record,
     max_batch_bytes,
+    post_record,
     send_records,
 )
 
@@ -102,6 +103,7 @@ __all__ = [
     "fit_record",
     "max_batch_bytes",
     "send_records",
+    "post_record",
     "encrypt",
     "decrypt",
     "get_encryption_key",

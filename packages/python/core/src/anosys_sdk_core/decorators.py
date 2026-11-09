@@ -18,6 +18,7 @@ import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.transport import post_record
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
 from anosys_sdk_core.util.json import to_json_fallback, to_str_or_none
 from anosys_sdk_core.util.batching import assign, reassign
@@ -112,8 +113,10 @@ def _log_payload(
     try:
         mapped_data = reassign(variables, _key_to_cvs, _starting_indices)
         mapped_data = encrypt_payload(mapped_data)
-        response = requests.post(_log_api_url, json=mapped_data, timeout=5)
-        response.raise_for_status()
+        # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
+        response = post_record(_log_api_url, mapped_data, timeout=5)
+        if response is not None:
+            response.raise_for_status()
         logger.debug("Logged successfully")
     except Exception as e:
         logger.error("POST failed: %s", e)
@@ -261,9 +264,11 @@ def anosys_raw_logger(data: Optional[Dict[str, Any]] = None) -> Optional[request
         # Raw data capture - ALWAYS mandatory
         if "raw" not in data:
             data["raw"] = json.dumps(data, default=to_json_fallback)
-        mapped_data = reassign(data, _key_to_cvs, _starting_indices)
-        response = requests.post(_log_api_url, json=mapped_data, timeout=5)
-        response.raise_for_status()
+        mapped_data = encrypt_payload(reassign(data, _key_to_cvs, _starting_indices))
+        # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
+        response = post_record(_log_api_url, mapped_data, timeout=5)
+        if response is not None:
+            response.raise_for_status()
         logger.debug("Raw logger: data logged successfully")
         return response
     except Exception as err:

@@ -28,6 +28,7 @@ import requests
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.transport import post_record
 from anosys_sdk_claude_agents.hooks import extract_span_info
 from anosys_sdk_claude_agents.mapping import CLAUDE_AGENTS_SCOPE
 from anosys_sdk_claude_agents.tracer import AgentRunTracer
@@ -84,8 +85,10 @@ class AnosysHttpExporter(SpanExporter):
                 logger.debug("Exporting span from: %s | Name: %s", data.get("cvs200"), data.get("otel_name"))
 
                 data = encrypt_payload(data)
-                response = requests.post(_log_api_url, json=data, timeout=5)
-                response.raise_for_status()
+                # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
+                response = post_record(_log_api_url, data, timeout=5)
+                if response is not None:
+                    response.raise_for_status()
 
             except requests.exceptions.HTTPError as e:
                 logger.error("HTTP export failed (%s): %s", e.response.status_code, e)

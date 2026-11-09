@@ -29,6 +29,7 @@ from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.context import clean_contextvars
 from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.transport import post_record
 from anosys_sdk_openai_agents.mapping import span2json, extract_otel_span_info
 from anosys_sdk_openai_agents.utils import safe_serialize, clean_nulls
 
@@ -60,8 +61,10 @@ class AnosysHttpExporter(SpanExporter):
                 cleaned_data = clean_nulls(data)
                 encrypted_data = encrypt_payload(cleaned_data)
                 
-                response = requests.post(_log_api_url, json=encrypted_data, timeout=5)
-                response.raise_for_status()
+                # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
+                response = post_record(_log_api_url, encrypted_data, timeout=5)
+                if response is not None:
+                    response.raise_for_status()
                 logger.info(f"[ANOSYS]✅ Successfully sent to backend: {span_source} | {span_name}")
                 
             except requests.exceptions.HTTPError as e:
@@ -247,8 +250,10 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             transformed = span2json(payload)
             cleaned_transformed = clean_nulls(transformed)
             encrypted_transformed = encrypt_payload(cleaned_transformed)
-            response = requests.post(self.log_api_url, json=encrypted_transformed, timeout=5)
-            response.raise_for_status()
+            # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
+            response = post_record(self.log_api_url, encrypted_transformed, timeout=5)
+            if response is not None:
+                response.raise_for_status()
             
         except Exception as e:
             logger.error("Error logging trace: %s", e)

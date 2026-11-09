@@ -215,7 +215,7 @@ def test_streaming_aggregator_handles_empty_delta():
 def test_openai_encryption_exports():
     import os
     from unittest.mock import patch
-    from anosys_sdk_openai import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_256_bit_key, decrypt
+    from anosys_sdk_openai import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_keys, decrypt
 
     with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "openai-key"}):
         payload = {
@@ -230,5 +230,5 @@ def test_openai_encryption_exports():
         assert encrypted["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
         assert encrypted["session_id"] == "sess-xyz"
 
-        key = derive_256_bit_key("openai-key")
+        key = derive_keys("openai-key")
         assert decrypt(encrypted["llm_input"], key) == "What is Python?"

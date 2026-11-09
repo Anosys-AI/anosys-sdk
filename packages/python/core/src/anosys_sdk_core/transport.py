@@ -56,6 +56,10 @@ def json_size(value: Any) -> int:
 
 # ── single record ─────────────────────────────────────────────────────────────
 
+def _is_encrypted(value: str) -> bool:
+    return value.startswith("enc2:") or value.startswith('"enc2:')
+
+
 def fit_record(record: Dict[str, Any], limit: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """
     Return ``record`` if it fits in one request, a truncated copy if
@@ -80,6 +84,10 @@ def fit_record(record: Dict[str, Any], limit: Optional[int] = None) -> Optional[
         value = result[key]
         original = len(value.encode("utf-8"))
         mark = TRUNCATION_MARK.format(size=original)
+        if _is_encrypted(value):
+            # a cut ciphertext cannot be decrypted: replace the whole value
+            result[key] = mark.lstrip(".")
+            continue
         keep = max(0, len(value) - excess - len(mark) - 64)
         result[key] = value[:keep] + mark
     if json_size([result]) <= target:
@@ -108,6 +116,22 @@ def chunk_records(records: List[Dict[str, Any]], limit: Optional[int] = None) ->
     if current:
         chunks.append(current)
     return chunks
+
+
+def post_record(url: str, record: Dict[str, Any], timeout: float = 5,
+                headers: Optional[Dict[str, str]] = None, post: Optional[Callable] = None):
+    """
+    POST one already-encrypted record, fitted under the size limit. Returns
+    the response, or None when the record had to be dropped. Used by the
+    application SDKs, which send one span or call per request.
+    """
+    fitted = fit_record(record)
+    if fitted is None:
+        return None
+    if post is None:
+        import requests
+        post = requests.post
+    return post(url, json=fitted, timeout=timeout, headers=headers)
 
 
 # ── failure classification ────────────────────────────────────────────────────

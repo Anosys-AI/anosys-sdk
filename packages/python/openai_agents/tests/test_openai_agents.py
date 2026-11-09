@@ -259,7 +259,7 @@ def test_agents_starting_indices_valid():
 def test_openai_agents_encryption_exports():
     import os
     from unittest.mock import patch
-    from anosys_sdk_openai_agents import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_256_bit_key, decrypt
+    from anosys_sdk_openai_agents import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_keys, decrypt
 
     with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "agents-key"}):
         payload = {
@@ -274,5 +274,5 @@ def test_openai_agents_encryption_exports():
         assert encrypted["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
         assert encrypted["otel_name"] == "MyAgent"
 
-        key = derive_256_bit_key("agents-key")
+        key = derive_keys("agents-key")
         assert decrypt(encrypted["llm_input"], key) == "agent prompt"

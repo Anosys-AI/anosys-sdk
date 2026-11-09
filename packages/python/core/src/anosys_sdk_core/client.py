@@ -11,6 +11,7 @@ import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.transport import post_record
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +57,9 @@ class AnosysClient:
         """
         try:
             payload = encrypt_payload(data)
-            response = requests.post(
-                self.api_url,
-                json=payload,
-                timeout=self.timeout
-            )
+            response = post_record(self.api_url, payload, timeout=self.timeout)
+            if response is None:
+                return None
             response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:

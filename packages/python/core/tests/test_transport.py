@@ -141,3 +141,27 @@ def test_attempts_cap_bounds_queue(tmp_path):
     for turn in range(10):
         deliver("u", [{"turn": turn}], queue, marker, post=FakePost(*([500] * 20)))
     assert len(queue.load()) <= 3
+
+
+def test_encrypted_value_is_replaced_whole_not_cut(monkeypatch):
+    from anosys_sdk_core.encryption import derive_keys, encrypt, decrypt
+    keys = derive_keys("pass", "ws")
+    big = encrypt("x" * 5000, keys)
+    small = encrypt("keep me", keys)
+    out = fit_record({"cvs199": big, "user_prompt": small}, limit=3000)
+    assert out["cvs199"].startswith("[truncated: original")
+    assert decrypt(out["user_prompt"], keys) == "keep me"
+
+
+def test_post_record_fits_and_posts():
+    from anosys_sdk_core.transport import post_record
+    calls = []
+    post = lambda url, json, timeout, headers: calls.append(json) or "ok"
+    assert post_record("u", {"cvs199": "y" * 5000, "a": 1}, post=post) == "ok"
+    import os
+    os.environ["ANOSYS_MAX_BATCH_BYTES"] = "2048"
+    try:
+        assert post_record("u", {"cvs199": "y" * 5000, "a": 1}, post=post) == "ok"
+        assert "truncated" in calls[-1]["cvs199"] and calls[-1]["a"] == 1
+    finally:
+        del os.environ["ANOSYS_MAX_BATCH_BYTES"]
