@@ -245,7 +245,7 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         },
     }
     
-    from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
+    from anosys_sdk_core.privacy import FULL, METADATA, consent_value
     dont_log = os.getenv("OPENAI_AGENTS_DONT_LOG_MODEL_DATA") == "True"
     c_val = consent_value(METADATA if dont_log else FULL)
 

@@ -85,7 +85,7 @@ class AnosysHttpExporter(SpanExporter):
                 logger.debug("Exporting span from: %s | Name: %s", data.get("cvs200"), data.get("otel_name"))
 
                 from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
-                level = FULL if _capture_content else METADATA
+                level = FULL if _run_settings["capture_content"] else METADATA
                 val = consent_value(level)
                 data[CONSENT_FIELD] = val
                 data[CONSENT_COLUMN] = val

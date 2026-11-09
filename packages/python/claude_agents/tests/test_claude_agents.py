@@ -150,3 +150,14 @@ def test_wrap_query_is_idempotent():
 
     wrapped = instrumentor.wrap_query(fake_query)
     assert instrumentor.wrap_query(wrapped) is wrapped
+
+
+def test_http_exporter_posts_spans_with_consent(exporter, monkeypatch):
+    """Regression: the exporter must not fail on every span (it referenced an undefined name)."""
+    posted = []
+    monkeypatch.setattr(instrumentor, "post_record", lambda url, data, timeout=5: posted.append(data))
+    monkeypatch.setattr(instrumentor, "_log_api_url", "https://example.invalid/ingest")
+    _run(exporter, WIRE_RUN)
+    instrumentor.AnosysHttpExporter().export(exporter.get_finished_spans())
+    assert posted, "no span was exported"
+    assert all(p.get("cvs198", "").startswith(("full;", "metadata;")) for p in posted)
