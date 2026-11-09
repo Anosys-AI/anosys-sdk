@@ -143,7 +143,11 @@ def load_state() -> dict:
 
 
 def save_state(state: dict):
-    STATE_FILE.write_text(json.dumps(state, indent=2), encoding='utf-8')
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(json.dumps(state, indent=2), encoding='utf-8')
+    except OSError as e:
+        log.warning("Could not save hook state (%s)", type(e).__name__)
 
 
 def session_transcripts(primary: 'TranscriptInfo') -> List['TranscriptInfo']:

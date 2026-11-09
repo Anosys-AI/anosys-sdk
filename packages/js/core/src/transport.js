@@ -115,18 +115,24 @@ async function defaultPost(url, body, headers, timeout) {
  * POST records in size-limited batches.
  * Resolves to { sent, retryable, pause } — pause is 401/403 when collection should stop.
  */
-async function sendRecords(url, records, { headers = {}, timeout = 15, limit = null, post = defaultPost } = {}) {
+async function sendRecords(url, records, { headers = {}, timeout = 15, limit = null, post = defaultPost, deadline = null } = {}) {
+  // `deadline` (a Date.now() value) bounds the total time; after a timeout or connection
+  // error the remaining chunks are not attempted (they would wait out the same timeout).
   let sent = 0;
   const retryable = [];
   let pause = null;
+  let unreachable = false;
   for (const chunk of chunkRecords(records, limit)) {
     if (pause !== null) break;
+    const remaining = deadline === null ? null : (deadline - Date.now()) / 1000;
+    if (unreachable || (remaining !== null && remaining < 0.5)) { retryable.push(...chunk); continue; }
     let status;
     try {
-      ({ status } = await post(url, chunk, headers, timeout));
+      ({ status } = await post(url, chunk, headers, remaining === null ? timeout : Math.min(timeout, remaining)));
     } catch (e) {
       log.warn(`Ingestion unreachable (${e.name || 'Error'}); ${chunk.length} record(s) kept for retry`);
       retryable.push(...chunk);
+      unreachable = true;
       continue;
     }
     if (status < 300) {
@@ -215,9 +221,59 @@ class PendingQueue {
   }
 }
 
-/** Send queued retries plus `records`; requeue only what is retryable. Resolves to the count accepted. */
+/** Seconds a hook may spend sending (ANOSYS_HOOK_TIME_BUDGET, default 20). */
+function hookTimeBudget() {
+  const v = Number(process.env.ANOSYS_HOOK_TIME_BUDGET ?? 20);
+  return Number.isFinite(v) && v > 0 ? v : 20;
+}
+
+const LOCK_STALE_MS = 120000;
+
+/** Exclusive lock file next to the queue (stale locks are broken); false when not acquired. */
+async function acquireQueueLock(queuePath, waitMs = 2000) {
+  const lock = `${queuePath}.lock`;
+  const until = Date.now() + waitMs;
+  for (;;) {
+    try {
+      fs.mkdirSync(require('node:path').dirname(lock), { recursive: true });
+      fs.writeFileSync(lock, String(process.pid), { flag: 'wx', mode: 0o600 });
+      return () => { try { fs.unlinkSync(lock); } catch { /* ignore */ } };
+    } catch (e) {
+      if (e.code !== 'EEXIST') return null; // read-only or full disk: run without the queue
+      try {
+        if (Date.now() - fs.statSync(lock).mtimeMs > LOCK_STALE_MS) { fs.unlinkSync(lock); continue; }
+      } catch { /* raced with the owner */ }
+      if (Date.now() >= until) return null;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+}
+
+/**
+ * Send queued retries plus `records`; requeue only what is retryable. The whole call
+ * takes at most `options.budget` seconds (ANOSYS_HOOK_TIME_BUDGET, default 20); what is
+ * not sent in time stays queued. Concurrent hook runs are serialised on a lock file; a
+ * run that cannot get it sends only its new records. Resolves to the count accepted.
+ */
 async function deliver(url, records, queue, pauseMarker, options = {}) {
   if (isPaused(pauseMarker)) return 0;
+  const { budget = hookTimeBudget(), ...rest } = options;
+  const opts = { ...rest, deadline: Date.now() + budget * 1000 };
+  const release = await acquireQueueLock(queue.path);
+  if (!release) {
+    const res = await sendRecords(url, records, opts);
+    if (res.pause) pauseCollection(pauseMarker, res.pause);
+    if (res.retryable.length) log.warn(`Queue busy (another hook run); ${res.retryable.length} record(s) not kept for retry`);
+    return res.sent;
+  }
+  try {
+    return await deliverLocked(url, records, queue, pauseMarker, opts);
+  } finally {
+    release();
+  }
+}
+
+async function deliverLocked(url, records, queue, pauseMarker, options) {
   const pending = queue.load();
   let sent = 0;
   const stillPending = [];
@@ -240,6 +296,7 @@ async function deliver(url, records, queue, pauseMarker, options = {}) {
 
 module.exports = {
   postRecord,
+  hookTimeBudget,
   DEFAULT_MAX_BATCH_BYTES,
   PERMANENT_STATUS,
   isPermanent,

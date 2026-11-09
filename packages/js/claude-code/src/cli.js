@@ -15,7 +15,7 @@
 'use strict';
 
 const readline = require('readline');
-const { cmdPrivacy, cmdPurge, effectiveLevel, printDoctor } = require('anosys-sdk-core');
+const { cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, runHookSafely } = require('anosys-sdk-core');
 const {
   SETTINGS_PATH,
   loadSettings,
@@ -223,8 +223,11 @@ async function cmdStatus() {
 }
 
 async function cmdRun() {
-  const { main } = require('./hookRunner');
-  await main();
+  // The hook must never break Claude Code: any failure is swallowed (logged by type)
+  await runHookSafely(async () => {
+    const { main } = require('./hookRunner');
+    await main();
+  });
 }
 
 async function main() {

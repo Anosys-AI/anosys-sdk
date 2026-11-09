@@ -168,3 +168,63 @@ def test_post_record_fits_and_posts():
         assert "truncated" in calls[-1]["cvs199"] and calls[-1]["a"] == 1
     finally:
         del os.environ["ANOSYS_MAX_BATCH_BYTES"]
+
+
+# ── reliability: time budget, unreachable ingestion, concurrent runs ─────────
+
+def test_unreachable_ingestion_does_not_wait_per_chunk(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANOSYS_MAX_BATCH_BYTES", "2048")
+    calls = []
+
+    def down(url, json, headers, timeout):
+        calls.append(timeout)
+        raise ConnectionError("down")
+
+    records = [{"cvs199": "x" * 1500} for _ in range(5)]   # one chunk each
+    sent, retry, pause = send_records("u", records, post=down)
+    assert sent == 0 and len(retry) == 5 and len(calls) == 1   # gave up after the first failure
+
+
+def test_deadline_bounds_total_time(tmp_path, monkeypatch):
+    import time as _time
+    monkeypatch.setenv("ANOSYS_MAX_BATCH_BYTES", "2048")
+
+    def slow(url, json, headers, timeout):
+        _time.sleep(0.3)
+        return Response(200)
+
+    records = [{"cvs199": "x" * 1500} for _ in range(10)]
+    start = _time.monotonic()
+    sent, retry, _ = send_records("u", records, post=slow, deadline=_time.monotonic() + 1.0)
+    assert _time.monotonic() - start < 1.5
+    assert sent + len(retry) == 10 and retry
+
+
+def test_concurrent_run_without_lock_leaves_queue_alone(tmp_path):
+    queue = PendingQueue(tmp_path / "pending.jsonl")
+    queue.save(PendingQueue.entries_for([{"old": 1}]))
+    (tmp_path / "pending.jsonl.lock").write_text("other run")    # another hook holds the queue
+
+    def fail(url, json, headers, timeout):
+        return Response(503)
+
+    sent = deliver("u", [{"new": 1}], queue, tmp_path / "pause.json", post=fail, budget=1)
+    assert sent == 0
+    assert [e["record"] for e in queue.load()] == [{"old": 1}]   # untouched, not overwritten
+
+
+def test_stale_lock_is_broken(tmp_path):
+    import os
+    queue = PendingQueue(tmp_path / "pending.jsonl")
+    lock = tmp_path / "pending.jsonl.lock"
+    lock.write_text("crashed run")
+    old = lock.stat().st_mtime - 3600
+    os.utime(lock, (old, old))
+    sent = deliver("u", [{"new": 1}], queue, tmp_path / "pause.json", post=lambda *a, **k: Response(200), budget=1)
+    assert sent == 1 and not lock.exists()
+
+
+def test_corrupt_queue_is_ignored(tmp_path):
+    path = tmp_path / "pending.jsonl"
+    path.write_text("not json\n{\"also\": broken\n")
+    assert PendingQueue(path).load() == []

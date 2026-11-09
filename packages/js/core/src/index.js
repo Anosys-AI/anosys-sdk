@@ -61,6 +61,7 @@ exports.createHookLog = hookCli.createHookLog;
 exports.cmdPrivacy = hookCli.cmdPrivacy;
 exports.cmdPurge = hookCli.cmdPurge;
 exports.printDoctor = hookCli.printDoctor;
+exports.runHookSafely = hookCli.runHookSafely;
 const capture = require('./capture.js');
 exports.APP_METADATA_STRING_COLUMNS = capture.APP_METADATA_STRING_COLUMNS;
 exports.resolveAppLevel = capture.resolveAppLevel;

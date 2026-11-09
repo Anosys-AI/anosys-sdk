@@ -156,25 +156,46 @@ def setup_hook_logging(log_file: Path, name: str) -> logging.Logger:
     Hook log: INFO level, rotated at 5 MB (2 backups), file mode 0600.
     Hooks must log ids, sizes and status codes only, never payloads or input.
     """
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    if not log_file.exists():
-        fd = os.open(log_file, os.O_CREAT | os.O_WRONLY, stat.S_IRUSR | stat.S_IWUSR)
-        os.close(fd)
-    try:
-        os.chmod(log_file, stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:
-        pass
     logger = logging.getLogger(name)
-    if not logger.handlers:
-        handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=2, encoding="utf-8")
-        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-        # core helpers log through their own loggers; send them to the same file
-        for core in ("anosys_sdk_core.transport", "anosys_sdk_core.encryption"):
-            logging.getLogger(core).addHandler(handler)
-            logging.getLogger(core).setLevel(logging.INFO)
+    if logger.handlers:
+        return logger
+    try:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        if not log_file.exists():
+            fd = os.open(log_file, os.O_CREAT | os.O_WRONLY, stat.S_IRUSR | stat.S_IWUSR)
+            os.close(fd)
+        try:
+            os.chmod(log_file, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
+        handler: logging.Handler = logging.handlers.RotatingFileHandler(
+            log_file, maxBytes=5_000_000, backupCount=2, encoding="utf-8")
+    except OSError:
+        # read-only home, full disk, ...: the hook still runs, without a log
+        handler = logging.NullHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False  # never echo hook logs to the host tool's console
+    # core helpers log through their own loggers; send them to the same file
+    for core in ("anosys_sdk_core.transport", "anosys_sdk_core.encryption"):
+        logging.getLogger(core).addHandler(handler)
+        logging.getLogger(core).setLevel(logging.INFO)
     return logger
+
+
+def run_hook_safely(fn, logger: Optional[logging.Logger] = None) -> None:
+    """
+    Run a hook body so that it can never break the host tool: any exception is
+    logged by type only and swallowed (the hook exits 0 and prints nothing).
+    """
+    try:
+        fn()
+    except Exception as e:  # noqa: BLE001 - the host tool must never see a hook failure
+        try:
+            (logger or logging.getLogger("anosys_hook")).error("Hook failed (%s)", type(e).__name__)
+        except Exception:
+            pass
 
 
 def which(name: str) -> Optional[str]:

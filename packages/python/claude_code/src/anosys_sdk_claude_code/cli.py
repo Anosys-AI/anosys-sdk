@@ -202,8 +202,9 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> None:
-    from anosys_sdk_claude_code.hook_runner import main
-    asyncio.run(main())
+    from anosys_sdk_core.hook_cli import run_hook_safely
+    from anosys_sdk_claude_code.hook_runner import log, main
+    run_hook_safely(lambda: asyncio.run(main()), log)
 
 
 def _purge_paths():

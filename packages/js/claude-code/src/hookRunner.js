@@ -53,7 +53,7 @@ const CONTENT_FIELDS = [
 // ---------------------------------------------------------------------------
 // Logging (mirrors Python's logging.basicConfig → file + stderr)
 // ---------------------------------------------------------------------------
-fs.mkdirSync(STATE_DIR, { recursive: true });
+try { fs.mkdirSync(STATE_DIR, { recursive: true }); } catch { /* read-only home: run without state */ }
 
 // The hook log records ids, sizes and status codes only, never prompts or payloads.
 const writeLog = createHookLog(LOG_FILE);
@@ -196,7 +196,12 @@ function loadState() {
 }
 
 function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  } catch (e) {
+    log.warning('Could not save hook state (%s)', e.code || e.name);
+  }
 }
 
 /**
@@ -549,7 +554,7 @@ async function main(options = {}) {
 if (require.main === module) {
   main()
     .catch(e => {
-      log.error('Unhandled exception: %s', e.stack || e);
+      log.error('Unhandled exception (%s)', e.code || e.name);
     })
     .finally(() => {
       process.exit(0);

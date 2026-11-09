@@ -239,9 +239,14 @@ def send_records(
     timeout: float = 15,
     limit: Optional[int] = None,
     post: Optional[Callable[..., Any]] = None,
+    deadline: Optional[float] = None,
 ) -> Tuple[int, List[Dict[str, Any]], Optional[int]]:
     """
     POST records in size-limited batches.
+
+    ``deadline`` (a ``time.monotonic()`` value) bounds the total time: chunks not
+    sent by then are returned as retryable. After a timeout or connection error
+    the remaining chunks are not attempted (they would wait out the same timeout).
 
     Returns:
         (sent, retryable, pause_status): the number of records accepted, the
@@ -255,15 +260,22 @@ def send_records(
     sent = 0
     retryable: List[Dict[str, Any]] = []
     pause: Optional[int] = None
+    unreachable = False
     for chunk in chunk_records(records, limit):
         if pause is not None:
             break  # the key is rejected; don't send (or queue) the rest
+        remaining = None if deadline is None else deadline - time.monotonic()
+        if unreachable or (remaining is not None and remaining < 0.5):
+            retryable.extend(chunk)  # out of time, or ingestion is down: keep for later
+            continue
         try:
-            response = post(url, json=chunk, headers=headers or {}, timeout=timeout)
+            request_timeout = timeout if remaining is None else min(timeout, remaining)
+            response = post(url, json=chunk, headers=headers or {}, timeout=request_timeout)
             status = getattr(response, "status_code", 200)
         except Exception as e:  # timeout, connection error
             logger.warning("Ingestion unreachable (%s); %d record(s) kept for retry", type(e).__name__, len(chunk))
             retryable.extend(chunk)
+            unreachable = True
             continue
         if status < 300:
             sent += len(chunk)
@@ -303,7 +315,7 @@ def is_paused(marker: Path) -> bool:
 
 def _write_private(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")  # unique per process
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(content)
@@ -402,9 +414,16 @@ def deliver(
     headers: Optional[Dict[str, str]] = None,
     timeout: float = 15,
     post: Optional[Callable[..., Any]] = None,
+    budget: Optional[float] = None,
 ) -> int:
     """
     Send queued retries plus ``records``; requeue only what is retryable.
+
+    The whole call takes at most ``budget`` seconds (ANOSYS_HOOK_TIME_BUDGET,
+    default 20), so a hook never holds up the coding tool for long; what is not
+    sent in time stays queued. Runs of several hooks at once are serialised on a
+    lock file; a run that cannot get the lock sends only its new records and
+    leaves the queue to the other run.
 
     Returns the number of records accepted. Does nothing while paused.
     """
@@ -412,11 +431,75 @@ def deliver(
         logger.info("Collection paused after an authorization error; nothing sent")
         return 0
 
+    deadline = time.monotonic() + (hook_time_budget() if budget is None else budget)
+    with _QueueLock(queue.path) as locked:
+        if not locked:
+            ok, retry, pause = send_records(url, records, headers, timeout, post=post, deadline=deadline)
+            if pause:
+                pause_collection(pause_marker, pause)
+            if retry:
+                logger.warning("Queue busy (another hook run); %d record(s) not kept for retry", len(retry))
+            return ok
+        return _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline)
+
+
+def hook_time_budget() -> float:
+    """Seconds a hook may spend sending (ANOSYS_HOOK_TIME_BUDGET, default 20)."""
+    try:
+        value = float(os.environ.get("ANOSYS_HOOK_TIME_BUDGET", 20))
+        return value if value > 0 else 20.0
+    except ValueError:
+        return 20.0
+
+
+class _QueueLock:
+    """Exclusive lock file next to the queue; stale locks (> 120 s) are broken."""
+
+    STALE_SECONDS = 120
+
+    def __init__(self, queue_path: Path, wait: float = 2.0):
+        self.path = Path(str(queue_path) + ".lock")
+        self.wait = wait
+        self.held = False
+
+    def __enter__(self) -> bool:
+        deadline = time.monotonic() + self.wait
+        while True:
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, stat.S_IRUSR | stat.S_IWUSR)
+                os.write(fd, str(os.getpid()).encode())
+                os.close(fd)
+                self.held = True
+                return True
+            except FileExistsError:
+                try:
+                    if time.time() - self.path.stat().st_mtime > self.STALE_SECONDS:
+                        self.path.unlink()
+                        continue
+                except OSError:
+                    pass
+                if time.monotonic() >= deadline:
+                    return False
+                time.sleep(0.05)
+            except OSError:
+                return False  # read-only or full disk: run without the queue
+
+    def __exit__(self, *exc) -> None:
+        if self.held:
+            try:
+                self.path.unlink()
+            except OSError:
+                pass
+
+
+def _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline) -> int:
     pending = queue.load()
     sent = 0
     still_pending: List[Dict[str, Any]] = []
     if pending:
-        ok, retry, pause = send_records(url, [e["record"] for e in pending], headers, timeout, post=post)
+        ok, retry, pause = send_records(url, [e["record"] for e in pending], headers, timeout, post=post,
+                                        deadline=deadline)
         sent += ok
         if pause:
             pause_collection(pause_marker, pause)
@@ -427,7 +510,7 @@ def deliver(
             still_pending.extend(PendingQueue.entries_for([record], by_id.get(id(record))))
 
     if records:
-        ok, retry, pause = send_records(url, records, headers, timeout, post=post)
+        ok, retry, pause = send_records(url, records, headers, timeout, post=post, deadline=deadline)
         sent += ok
         if pause:
             pause_collection(pause_marker, pause)

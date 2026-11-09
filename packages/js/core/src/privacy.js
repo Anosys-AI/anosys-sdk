@@ -43,7 +43,7 @@ function normalize(level) {
 /** Write a file readable only by the current user (0600). */
 function writePrivateFile(file, content) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
+  const tmp = `${file}.${process.pid}.tmp`; // unique per process
   fs.writeFileSync(tmp, content, { encoding: 'utf8', mode: 0o600 });
   fs.chmodSync(tmp, 0o600);
   fs.renameSync(tmp, file);

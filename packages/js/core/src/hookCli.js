@@ -155,7 +155,17 @@ function printDoctor(tool, executables, activeHook, files) {
   console.log('');
 }
 
+/** Run a hook body so it can never break the host tool: errors are swallowed (logged by type). */
+async function runHookSafely(fn, writeLog = null) {
+  try {
+    await fn();
+  } catch (e) {
+    try { writeLog?.('ERROR', `Hook failed (${e?.code || e?.name || 'Error'})`); } catch { /* ignore */ }
+  }
+}
+
 module.exports = {
+  runHookSafely,
   POLICY_SUMMARY,
   createHookLog,
   cmdPrivacy,

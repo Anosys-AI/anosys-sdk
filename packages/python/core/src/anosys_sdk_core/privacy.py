@@ -105,7 +105,7 @@ def write_consent(level: str, method: str, accept_policy: Optional[str] = None) 
 def write_private_file(path: Path, content: str) -> None:
     """Write a file readable only by the current user (0600)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")  # unique per process
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(content)

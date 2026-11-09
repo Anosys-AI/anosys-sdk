@@ -120,3 +120,59 @@ describe('encrypted values and single-record posts', () => {
     }
   });
 });
+
+describe('reliability: time budget, unreachable ingestion, concurrent runs', () => {
+  it('stops after the first connection failure instead of waiting per chunk', async () => {
+    process.env.ANOSYS_MAX_BATCH_BYTES = '2048';
+    let calls = 0;
+    const down = async () => { calls++; throw Object.assign(new Error('down'), { name: 'TypeError' }); };
+    const records = Array.from({ length: 5 }, () => ({ cvs199: 'x'.repeat(1500) }));
+    const res = await sendRecords('u', records, { post: down });
+    delete process.env.ANOSYS_MAX_BATCH_BYTES;
+    assert.equal(res.sent, 0);
+    assert.equal(res.retryable.length, 5);
+    assert.equal(calls, 1);
+  });
+
+  it('bounds the total time with a deadline', async () => {
+    process.env.ANOSYS_MAX_BATCH_BYTES = '2048';
+    const slow = async () => { await new Promise((r) => setTimeout(r, 300)); return { status: 200 }; };
+    const records = Array.from({ length: 10 }, () => ({ cvs199: 'x'.repeat(1500) }));
+    const start = Date.now();
+    const res = await sendRecords('u', records, { post: slow, deadline: Date.now() + 1000 });
+    delete process.env.ANOSYS_MAX_BATCH_BYTES;
+    assert.ok(Date.now() - start < 1500);
+    assert.equal(res.sent + res.retryable.length, 10);
+    assert.ok(res.retryable.length > 0);
+  });
+
+  it('a run that cannot lock the queue leaves it untouched', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-lock-'));
+    const queue = new PendingQueue(path.join(dir, 'pending.jsonl'));
+    queue.save(PendingQueue.entriesFor([{ old: 1 }]));
+    fs.writeFileSync(path.join(dir, 'pending.jsonl.lock'), 'other run');
+    const sent = await deliver('u', [{ new: 1 }], queue, path.join(dir, 'pause.json'),
+      { post: async () => ({ status: 503 }), budget: 1 });
+    assert.equal(sent, 0);
+    assert.deepEqual(queue.load().map((e) => e.record), [{ old: 1 }]);
+  });
+
+  it('breaks a stale lock', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-lock-'));
+    const queue = new PendingQueue(path.join(dir, 'pending.jsonl'));
+    const lock = path.join(dir, 'pending.jsonl.lock');
+    fs.writeFileSync(lock, 'crashed');
+    const old = (Date.now() - 3600 * 1000) / 1000;
+    fs.utimesSync(lock, old, old);
+    const sent = await deliver('u', [{ new: 1 }], queue, path.join(dir, 'pause.json'),
+      { post: async () => ({ status: 200 }), budget: 1 });
+    assert.equal(sent, 1);
+    assert.equal(fs.existsSync(lock), false);
+  });
+
+  it('ignores a corrupt queue file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-q-'));
+    fs.writeFileSync(path.join(dir, 'q.jsonl'), 'not json\n{"broken"\n');
+    assert.deepEqual(new PendingQueue(path.join(dir, 'q.jsonl')).load(), []);
+  });
+});
