@@ -94,3 +94,7 @@ exports.flushAppRecords = sender.flushAppRecords;
 exports.setSenderPostForTests = sender.setSenderPostForTests;
 const decorators = require('./decorators.js');
 exports.createDecorators = decorators.createDecorators;
+const spans = require('./spans.js');
+exports.spanToJson = spans.spanToJson;
+exports.hrTimeToIso = spans.hrTimeToIso;
+exports.scopeName = spans.scopeName;

@@ -37,6 +37,6 @@
     "anosys-sdk-core": "^2.0.0"
   },
   "scripts": {
-    "test": "node --test test/basic.test.js"
+    "test": "node --test test/basic.test.js test/package.test.js"
   }
 }

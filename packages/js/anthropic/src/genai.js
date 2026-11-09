@@ -29,7 +29,6 @@ const REQUEST_PARAMETERS = [
 ];
 
 const STATUS_CODES = { 0: 'UNSET', 1: 'OK', 2: 'ERROR' };
-const SPAN_KINDS = { 0: 'INTERNAL', 1: 'SERVER', 2: 'CLIENT', 3: 'PRODUCER', 4: 'CONSUMER' };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,11 +38,6 @@ function toTimestamp(dtStr) {
   return Number.isNaN(ms) ? null : Math.floor(ms);
 }
 
-function hrTimeToIso(hrTime) {
-  if (!Array.isArray(hrTime)) return null;
-  const ms = Number(hrTime[0]) * 1e3 + Number(hrTime[1]) / 1e6;
-  return new Date(ms).toISOString();
-}
 
 function toStrOrNull(val) {
   if (val === null || val === undefined) return null;
@@ -70,34 +64,8 @@ function toNumber(value) {
  * Convert an OTel ReadableSpan to the shape of Python's `ReadableSpan.to_json()`,
  * so both languages feed the extractor the same structure.
  */
-export function spanToJson(span) {
-  const ctx = typeof span.spanContext === 'function' ? span.spanContext() : (span.context ?? {});
-  const parentId = span.parentSpanContext?.spanId ?? span.parentSpanId ?? null;
-  const statusCode = span.status?.code ?? 0;
-  return {
-    name: span.name,
-    context: {
-      trace_id: ctx.traceId ? `0x${ctx.traceId}` : null,
-      span_id: ctx.spanId ? `0x${ctx.spanId}` : null,
-      trace_state: ctx.traceState ? ctx.traceState.serialize() : '[]',
-    },
-    kind: `SpanKind.${SPAN_KINDS[span.kind] ?? 'INTERNAL'}`,
-    parent_id: parentId ? `0x${parentId}` : null,
-    start_time: hrTimeToIso(span.startTime),
-    end_time: hrTimeToIso(span.endTime),
-    status: span.status?.message
-      ? { status_code: STATUS_CODES[statusCode], description: span.status.message }
-      : { status_code: STATUS_CODES[statusCode] },
-    attributes: { ...(span.attributes ?? {}) },
-    events: (span.events ?? []).map(e => ({
-      name: e.name,
-      timestamp: hrTimeToIso(e.time),
-      attributes: { ...(e.attributes ?? {}) },
-    })),
-    links: [],
-    resource: { attributes: { ...(span.resource?.attributes ?? {}) }, schema_url: '' },
-  };
-}
+// One implementation in anosys-sdk-core (no circular serialisation of SDK 2.x spans)
+export { spanToJson } from 'anosys-sdk-core';
 
 function partText(part) {
   const type = part.type;

@@ -9,6 +9,7 @@ import {
   OTEL_AI_VALID_TYPES,
   assign,
   reassign as coreReassign,
+  spanToJson,
 } from 'anosys-sdk-core';
 
 export { AGENTS_KEY_MAPPING, BASE_KEY_MAPPING, CLAUDE_VALID_TYPES, DEFAULT_STARTING_INDICES, OTEL_AI_VALID_TYPES, assign };
@@ -235,7 +236,8 @@ export function extractOtelSpanInfo(span) {
   assign(variables, 'from_source', 'openAI_Agents_Telemetry');
 
   // Raw data capture - ALWAYS mandatory
-  assign(variables, 'raw', JSON.stringify(span));
+  // spanToJson reads fields only: SDK 2.x spans reference their processors (circular)
+  assign(variables, 'raw', JSON.stringify(spanToJson(span)));
 
   return reassign(variables, keyToCvs, { ...AGENTS_STARTING_INDICES });
 }

@@ -6,7 +6,7 @@ import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { spanToJson } from './genai.js';
 import { extractSpanInfo, isAnthropicSpan } from './hooks.js';
-import { FULL, OFF, prepareAppRecord, resolveAppLevel, sendAppRecord } from 'anosys-sdk-core';
+import { FULL, OFF, prepareAppRecord, resolveAppLevel, scopeName, sendAppRecord } from 'anosys-sdk-core';
 
 // Read by the Anthropic SDK when a client is constructed
 export const CONTENT_MODE_ENV = 'ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE';
@@ -19,9 +19,6 @@ let _captureContent = true;
 let _captureLevel = 'full'; // set by AnosysAnthropicLogger (see anosys-sdk-core capture.js)
 let _hub = null;
 
-function scopeName(span) {
-  return span.instrumentationScope?.name ?? span.instrumentationLibrary?.name ?? '';
-}
 
 // ── OTel HTTP exporter ────────────────────────────────────────────────────────
 
@@ -35,9 +32,11 @@ export class AnosysHttpExporter {
     acceptsSpan = isAnthropicSpan,
     extract = extractSpanInfo,
     getLevel = () => _captureLevel,
+    getUrl = () => _logApiUrl,
   } = {}) {
     this._getUserContext = getUserContext ?? (() => null);
     this._getLevel = getLevel;
+    this._getUrl = getUrl;
     this._acceptsSpan = acceptsSpan;
     this._extract = extract;
   }
@@ -72,7 +71,7 @@ export class AnosysHttpExporter {
         if (!payloadToSend) continue;
         await _logApiUrlReady;
         // size-limited, in the background: never blocks the instrumented call
-        sendAppRecord(_logApiUrl, payloadToSend);
+        sendAppRecord(this._getUrl(), payloadToSend);
       } catch (e) {
         if (e.response) {
           log.error('HTTP export failed (%d): %s', e.response.status, e.message);

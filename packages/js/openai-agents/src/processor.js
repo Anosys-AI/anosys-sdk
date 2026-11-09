@@ -19,8 +19,15 @@ let _captureLevel = 'full'; // set by AnosysOpenAIAgentsLogger (see anosys-sdk-c
 // ── OTel HTTP exporter ────────────────────────────────────────────────────────
 
 export class AnosysHttpExporter {
-  constructor(getUserContext = null) {
+  /**
+   * @param {Function} [getUserContext]
+   * @param {object}   [opts] `getLevel` / `getUrl` override the module's level and endpoint
+   *   (used by tests and by hosts that manage several exporters).
+   */
+  constructor(getUserContext = null, { getLevel = () => _captureLevel, getUrl = () => _logApiUrl } = {}) {
     this._getUserContext = getUserContext ?? (() => null);
+    this._getLevel = getLevel;
+    this._getUrl = getUrl;
   }
 
   async export(spans, resultCallback) {
@@ -34,10 +41,10 @@ export class AnosysHttpExporter {
         log.debug('Exporting span from: %s | Name: %s', spanSource, spanName);
 
         // Level filtering, cvs198 and encryption in one place
-        const payloadToSend = prepareAppRecord(cleaned, _captureLevel, AGENTS_METADATA_COLUMNS);
+        const payloadToSend = prepareAppRecord(cleaned, this._getLevel(), AGENTS_METADATA_COLUMNS);
         if (!payloadToSend) continue;
         // size-limited, in the background: never blocks the instrumented call
-        sendAppRecord(_logApiUrl, payloadToSend);
+        sendAppRecord(this._getUrl(), payloadToSend);
         log.debug('Successfully sent: %s | %s', spanSource, spanName);
 
       } catch (e) {

@@ -6,23 +6,28 @@ import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai';
 import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { extractSpanInfo } from './hooks.js';
-import { OFF, prepareAppRecord, resolveAppLevel, sendAppRecord } from 'anosys-sdk-core';
+import { OFF, prepareAppRecord, resolveAppLevel, sendAppRecord, spanToJson } from 'anosys-sdk-core';
 
 let _logApiUrl = null; // set by setupTracing; null = nothing is sent
 let _tracingInitialized = false;
 let _captureLevel = 'full'; // set by AnosysOpenAILogger (see anosys-sdk-core capture.js)
 
 export class AnosysHttpExporter {
-  constructor(getUserContext = null) {
+  /**
+   * @param {Function} [getUserContext]
+   * @param {object}   [opts] `getLevel` / `getUrl` override the module's level and endpoint
+   *   (used by tests and by hosts that manage several exporters).
+   */
+  constructor(getUserContext = null, { getLevel = () => _captureLevel, getUrl = () => _logApiUrl } = {}) {
     this._getUserContext = getUserContext ?? (() => null);
+    this._getLevel = getLevel;
+    this._getUrl = getUrl;
   }
 
   async export(spans, resultCallback) {
     for (const span of spans) {
       try {
-        const spanJson = JSON.parse(JSON.stringify(span, (_, v) =>
-          typeof v === 'bigint' ? Number(v) : v
-        ));
+        const spanJson = spanToJson(span);
         const data = extractSpanInfo(spanJson);
 
         // Attach user context if available
@@ -41,10 +46,10 @@ export class AnosysHttpExporter {
         log.debug('Exporting span from: %s | Name: %s', spanSource, spanName);
 
         // Level filtering, cvs198 and encryption in one place
-        const payloadToSend = prepareAppRecord(data, _captureLevel);
+        const payloadToSend = prepareAppRecord(data, this._getLevel());
         if (!payloadToSend) continue;
         // size-limited, in the background: never blocks the instrumented call
-        sendAppRecord(_logApiUrl, payloadToSend);
+        sendAppRecord(this._getUrl(), payloadToSend);
 
       } catch (e) {
         if (e.response) {
