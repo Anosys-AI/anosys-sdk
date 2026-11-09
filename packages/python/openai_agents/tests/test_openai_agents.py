@@ -276,3 +276,60 @@ def test_openai_agents_encryption_exports():
 
         key = derive_keys("agents-key")
         assert decrypt(encrypted["llm_input"], key) == "agent prompt"
+
+
+# ── unified capture control ─────────────────────────────────────────────────
+
+def _processor(monkeypatch, level, **attrs):
+    from anosys_sdk_openai_agents import processor as proc
+    posted = []
+    monkeypatch.setattr(proc, "post_record", lambda url, data, timeout=5: posted.append(data))
+    monkeypatch.setattr(proc, "_capture_level", level)
+    monkeypatch.delenv("ANOSYS_ENCRYPTION_KEY", raising=False)
+    p = object.__new__(proc.AnosysOpenAIAgentsLogger)
+    p.log_api_url = "https://example.invalid"
+    p.get_user_context = lambda: None
+    p.capture_inputs = attrs.get("capture_inputs", True)
+    p.capture_outputs = attrs.get("capture_outputs", True)
+    p.pii_redaction = attrs.get("pii_redaction", False)
+    return p, posted
+
+
+FUNCTION_SPAN = {
+    "span_data": {"type": "function", "name": "lookup", "input": "email bob@example.com", "output": "result text"},
+    "trace_id": "t1", "span_id": "s1", "source": "on_span_end",
+}
+
+
+def test_processor_metadata_sends_no_content(monkeypatch):
+    p, posted = _processor(monkeypatch, "metadata")
+    p._log_summary(FUNCTION_SPAN)
+    body = json.dumps(posted[0])
+    assert posted[0]["cvs198"] == "metadata;app"
+    assert "bob@example.com" not in body and "result text" not in body and "cvs199" not in posted[0]
+
+
+def test_processor_full_is_labelled_app_not_policy(monkeypatch):
+    p, posted = _processor(monkeypatch, "full")
+    p._log_summary(FUNCTION_SPAN)
+    assert posted[0]["cvs198"] == "full;app" and "result text" in posted[0]["llm_output"]
+
+
+def test_processor_honours_capture_flags_and_pii_redaction(monkeypatch):
+    p, posted = _processor(monkeypatch, "full", capture_outputs=False, pii_redaction=True)
+    p._log_summary(FUNCTION_SPAN)
+    assert "llm_output" not in posted[0]
+    assert "bob@example.com" not in posted[0]["llm_input"]
+
+
+def test_processor_off_sends_nothing(monkeypatch):
+    p, posted = _processor(monkeypatch, "off")
+    p._log_summary(FUNCTION_SPAN)
+    assert posted == []
+
+
+def test_logger_flags_resolve_one_level(monkeypatch, tmp_path):
+    from anosys_sdk_core.capture import resolve_app_level
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANOSYS_COLLECTION_LEVEL", raising=False)
+    assert resolve_app_level(any([False, False])) == ("metadata", "argument")

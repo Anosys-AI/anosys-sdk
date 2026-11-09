@@ -22,8 +22,10 @@ const RANK = { off: 0, metadata: 1, full: 2 };
 
 const POLICY_VERSION = '2026-11-09';
 const POLICY_URL = 'https://github.com/anosys-ai/anosys-sdk/blob/main/PRIVACY.md';
-const CONSENT_FIELD = 'consent';
+// Every record carries its collection level and accepted policy version in
+// cvs198, a column present in every AnoSys schema (no migration needed).
 const CONSENT_COLUMN = 'cvs198';
+const CONSENT_FIELD = CONSENT_COLUMN; // older name, same column
 const PROJECT_FILE = '.anosys';
 
 function consentPath() {
@@ -182,25 +184,23 @@ function filterFields(record, level, metadataFields) {
     const allowed = metadataFields instanceof Set ? metadataFields : new Set(metadataFields);
     result = Object.fromEntries(Object.entries(record).filter(([k]) => allowed.has(k)));
   }
-  const val = consentValue(level);
-  result[CONSENT_FIELD] = val;
-  result[CONSENT_COLUMN] = val;
+  delete result.consent;
+  result[CONSENT_COLUMN] = consentValue(level);
   return result;
 }
 
-/** Ensure record contains both consent and cvs198 with the active policy version. */
+/** Set cvs198 for a hook record (level from effectiveLevel when omitted). */
 function attachConsent(record, level = null) {
-  if (!level) {
-    const res = effectiveLevel();
-    level = res.level;
-  }
-  const val = consentValue(level);
-  record[CONSENT_FIELD] = val;
-  record[CONSENT_COLUMN] = val;
+  if (!level) level = effectiveLevel().level;
+  delete record.consent;
+  record[CONSENT_COLUMN] = consentValue(level);
   return record;
 }
 
 module.exports = {
+  RANK,
+  normalize,
+  projectLevel,
   OFF,
   METADATA,
   FULL,

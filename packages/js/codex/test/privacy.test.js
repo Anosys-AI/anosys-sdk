@@ -32,7 +32,7 @@ const METADATA_KEYS = [
   'input_tokens', 'output_tokens', 'total_tokens', 'cache_read', 'cache_creation', 'reasoning_tokens',
   'cost_estimate', 'incremental_input', 'incremental_output', 'incremental_total', 'incremental_cost',
   'incremental_cache_read', 'incremental_cache_creation', 'tool_count', 'has_thinking',
-  'integration_version', 'os_user', 'consent', 'cvs198',
+  'integration_version', 'os_user', 'cvs198',
   'cvs1', 'cvs2', 'cvs9', 'cvs12', 'cvs19', 'cvs32', 'cvs33', 'cvn1', 'cvn2', 'cvn3', 'cvn4', 'cvn5', 'cvn7',
   'cvs200',
 ].sort();
@@ -58,7 +58,7 @@ test('metadata is the default and sends no content (same keys as Python)', () =>
   reset();
   const record = hookRunner.prepareRecord(mapped(), METADATA);
   assert.deepEqual(Object.keys(record).sort(), METADATA_KEYS);
-  assert.equal(record.consent, 'metadata;none');
+  assert.equal(record.cvs198, 'metadata;none');
   assert.equal(record.cvs198, 'metadata;none');
   for (const k of CONTENT_KEYS) assert.ok(!(k in record));
 });
@@ -66,7 +66,7 @@ test('metadata is the default and sends no content (same keys as Python)', () =>
 test('off sends nothing; full keeps content and scrubs secrets', () => {
   assert.deepEqual(hookRunner.prepareRecord(mapped(), OFF), {});
   const record = hookRunner.prepareRecord(mapped(), FULL);
-  assert.equal(record.consent, `full;${POLICY_VERSION}`);
+  assert.equal(record.cvs198, `full;${POLICY_VERSION}`);
   assert.ok(record.user_prompt.includes('[SECRET]') && !record.user_prompt.includes('sk-proj-abcdef'));
   assert.ok(!record.cvs199.includes('sk-proj-abcdef'));
 });
@@ -88,7 +88,7 @@ test('a turn is sent at metadata; level off sends nothing', async () => {
   let post = fakePost(200);
   await hookRunner.run(['run', event('t1')], { post });
   assert.equal(post.bodies.length, 1);
-  assert.equal(post.bodies[0][0].consent, 'metadata;none');
+  assert.equal(post.bodies[0][0].cvs198, 'metadata;none');
   assert.ok(!('user_prompt' in post.bodies[0][0]));
   writeConsent(OFF, 'test');
   post = fakePost();

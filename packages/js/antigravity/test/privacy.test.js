@@ -37,7 +37,7 @@ const mapped = () => transformAntigravityTurn(TURN, 's1', 's1_0', { workspacePat
 test('metadata by default sends no content', () => {
   const out = hookRunner.prepareRecord(mapped(), METADATA);
   for (const k of CONTENT) assert.ok(!(k in out), k);
-  assert.equal(out.consent, 'metadata;none');
+  assert.equal(out.cvs198, 'metadata;none');
   assert.equal(out.cvs198, 'metadata;none');
   assert.equal(out.model, 'gemini-3-pro');
   const text = JSON.stringify(out);
@@ -47,7 +47,7 @@ test('metadata by default sends no content', () => {
 test('off sends nothing and full scrubs secrets', () => {
   assert.deepEqual(hookRunner.prepareRecord(mapped(), OFF), {});
   const out = hookRunner.prepareRecord(mapped(), FULL);
-  assert.equal(out.consent, `full;${POLICY_VERSION}`);
+  assert.equal(out.cvs198, `full;${POLICY_VERSION}`);
   assert.ok(!out.user_prompt.includes('ghp_abcdef') && out.user_prompt.includes('[SECRET]'));
 });
 

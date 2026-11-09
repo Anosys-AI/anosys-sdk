@@ -1,8 +1,7 @@
 import axios from 'axios';
 import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
 import { reassign, AGENTS_KEY_MAPPING, AGENTS_STARTING_INDICES } from './mapping.js';
-import { encryptPayload } from './encryption.js';
-import { fitRecord } from 'anosys-sdk-core';
+import { currentAppLevel, fitRecord, prepareAppRecord } from 'anosys-sdk-core';
 
 let _logApiUrl = DEFAULT_API_URL;
 let _keyToCvs = { ...AGENTS_KEY_MAPPING };
@@ -53,7 +52,9 @@ async function logPayload(source, args, output, errorInfo, callerInfo) {
 
   try {
     const mapped = reassign(variables, _keyToCvs, { ..._startingIndices });
-    const payloadToSend = encryptPayload(mapped);
+    // Level filtering, cvs198 and encryption in one place (null when collection is off)
+    const payloadToSend = prepareAppRecord(mapped, currentAppLevel().level);
+    if (!payloadToSend) return;
     // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
     const fitted = fitRecord(payloadToSend);
     if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });
@@ -85,7 +86,9 @@ export function anosysLogger(source = null) {
 export async function anosysRawLogger(data = {}) {
   try {
     const mapped = reassign(data, _keyToCvs, { ..._startingIndices });
-    const payloadToSend = encryptPayload(mapped);
+    // Level filtering, cvs198 and encryption in one place (null when collection is off)
+    const payloadToSend = prepareAppRecord(mapped, currentAppLevel().level);
+    if (!payloadToSend) return;
     // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
     const fitted = fitRecord(payloadToSend);
     if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });

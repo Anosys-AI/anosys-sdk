@@ -161,3 +161,22 @@ def test_http_exporter_posts_spans_with_consent(exporter, monkeypatch):
     instrumentor.AnosysHttpExporter().export(exporter.get_finished_spans())
     assert posted, "no span was exported"
     assert all(p.get("cvs198", "").startswith(("full;", "metadata;")) for p in posted)
+
+
+def test_http_exporter_metadata_level_sends_no_content(exporter, monkeypatch):
+    posted = []
+    monkeypatch.setattr(instrumentor, "post_record", lambda url, data, timeout=5: posted.append(data))
+    monkeypatch.setitem(instrumentor._run_settings, "level", "metadata")
+    _run(exporter, WIRE_RUN)
+    instrumentor.AnosysHttpExporter().export(exporter.get_finished_spans())
+    body = json.dumps(posted)
+    assert posted and all(p["cvs198"] == "metadata;app" for p in posted)
+    assert "List files" not in body and "a.txt" not in body and "found" not in body
+
+
+def test_logger_level_follows_environment(monkeypatch, tmp_path):
+    from anosys_sdk_core.capture import resolve_app_level
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANOSYS_COLLECTION_LEVEL", "metadata")
+    assert resolve_app_level(None)[0] == "metadata"
+    assert resolve_app_level(True)[0] == "full"

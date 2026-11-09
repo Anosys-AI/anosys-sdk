@@ -27,7 +27,8 @@ import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
+from anosys_sdk_core.privacy import FULL, OFF
 from anosys_sdk_core.transport import post_record
 from anosys_sdk_claude_agents.hooks import extract_span_info
 from anosys_sdk_claude_agents.mapping import CLAUDE_AGENTS_SCOPE
@@ -40,7 +41,7 @@ _lock = threading.Lock()
 _tracing_initialized = False
 _log_api_url = "https://www.anosys.ai"
 _tracer: Optional[trace.Tracer] = None
-_run_settings = {"capture_content": True, "emit_llm_spans": False, "agent_name": None}
+_run_settings = {"capture_content": True, "emit_llm_spans": False, "agent_name": None, "level": "full"}
 _originals: dict = {}
 
 
@@ -84,13 +85,10 @@ class AnosysHttpExporter(SpanExporter):
 
                 logger.debug("Exporting span from: %s | Name: %s", data.get("cvs200"), data.get("otel_name"))
 
-                from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
-                level = FULL if _run_settings["capture_content"] else METADATA
-                val = consent_value(level)
-                data[CONSENT_FIELD] = val
-                data[CONSENT_COLUMN] = val
-
-                data = encrypt_payload(data)
+                # Level filtering, cvs198 and encryption in one place
+                data = prepare_app_record(data, _run_settings["level"])
+                if data is None:
+                    continue
                 # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
                 response = post_record(_log_api_url, data, timeout=5)
                 if response is not None:
@@ -305,7 +303,7 @@ class AnosysClaudeAgentsLogger:
         self,
         get_user_context: Optional[Callable] = None,
         agent_name: Optional[str] = None,
-        capture_content: bool = True,
+        capture_content: Optional[bool] = None,
         emit_llm_spans: bool = False,
         use_batch_processor: bool = False,
     ):
@@ -315,7 +313,9 @@ class AnosysClaudeAgentsLogger:
         Args:
             get_user_context: Optional function that returns user context dict
             agent_name: Name recorded as gen_ai.agent.name (default: "claude_agent")
-            capture_content: If True, record prompts, results and tool input/output (default: True)
+            capture_content: True to record prompts, results and tool input/output, False for
+                metadata only. None (default) follows ANOSYS_COLLECTION_LEVEL and a project
+                ``.anosys`` file (see anosys_sdk_core.capture); full otherwise.
             emit_llm_spans: If True, also emit one chat span per assistant response.
                 Usage totals stay on the agent span; chat spans carry per-call usage.
             use_batch_processor: If True, use BatchSpanProcessor
@@ -328,14 +328,18 @@ class AnosysClaudeAgentsLogger:
         # Optional user context function
         self.get_user_context = get_user_context or (lambda: None)
 
+        level, source = resolve_app_level(capture_content)
+        self.capture_level = level
+        logger.info("AnoSys Claude Agents collection level: %s (%s)", level, source)
         _run_settings.update(
-            capture_content=capture_content,
+            level=level,
+            capture_content=level == FULL,
             emit_llm_spans=emit_llm_spans,
             agent_name=agent_name,
         )
 
         # Initialize tracing if not already done
-        if not _tracing_initialized:
+        if not _tracing_initialized and level != OFF:
             setup_api(self.log_api_url)
             setup_tracing(
                 self.log_api_url,

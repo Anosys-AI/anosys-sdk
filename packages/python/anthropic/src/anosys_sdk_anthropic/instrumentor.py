@@ -25,7 +25,8 @@ import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
+from anosys_sdk_core.privacy import FULL, OFF
 from anosys_sdk_core.transport import post_record
 from anosys_sdk_anthropic.hooks import extract_span_info
 from anosys_sdk_anthropic.mapping import ANTHROPIC_SCOPE_PREFIX, CLAUDE_AGENTS_SCOPE
@@ -37,6 +38,7 @@ _lock = threading.Lock()
 _tracing_initialized = False
 _log_api_url = "https://www.anosys.ai"
 _capture_content = True
+_capture_level = "full"  # set by AnosysAnthropicLogger (see anosys_sdk_core.capture)
 
 # Read by the Anthropic SDK when a client is constructed
 CONTENT_MODE_ENV = "ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE"
@@ -95,13 +97,10 @@ class AnosysHttpExporter(SpanExporter):
 
                 logger.debug("Exporting span from: %s | Name: %s", data.get("cvs200"), data.get("otel_name"))
 
-                from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
-                level = FULL if _capture_content else METADATA
-                val = consent_value(level)
-                data[CONSENT_FIELD] = val
-                data[CONSENT_COLUMN] = val
-
-                data = encrypt_payload(data)
+                # Level filtering, cvs198 and encryption in one place
+                data = prepare_app_record(data, _capture_level)
+                if data is None:
+                    continue
                 # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
                 response = post_record(_log_api_url, data, timeout=5)
                 if response is not None:
@@ -196,7 +195,7 @@ class AnosysAnthropicLogger:
     def __init__(
         self,
         get_user_context: Optional[Callable] = None,
-        capture_content: bool = True,
+        capture_content: Optional[bool] = None,
         use_batch_processor: bool = False,
     ):
         """
@@ -204,14 +203,21 @@ class AnosysAnthropicLogger:
 
         Args:
             get_user_context: Optional function that returns user context dict
-            capture_content: If True, record prompts and completions (default: True).
+            capture_content: True to record prompts and completions, False for
+                metadata only. None (default) follows ANOSYS_COLLECTION_LEVEL and a
+                project ``.anosys`` file (see anosys_sdk_core.capture); full otherwise.
                 Applies to clients created afterwards that are given no
                 ``open_telemetry`` option of their own.
             use_batch_processor: If True, use BatchSpanProcessor
         """
-        global _tracing_initialized, _capture_content
+        global _tracing_initialized, _capture_content, _capture_level
 
-        _capture_content = capture_content
+        _capture_level, source = resolve_app_level(capture_content)
+        _capture_content = _capture_level == FULL
+        self.capture_level = _capture_level
+        logger.info("AnoSys Anthropic collection level: %s (%s)", _capture_level, source)
+        if _capture_level == OFF:
+            return
 
         # Resolve API URL
         self.log_api_url = resolve_api_key()
@@ -220,7 +226,7 @@ class AnosysAnthropicLogger:
         self.get_user_context = get_user_context or (lambda: None)
 
         # The SDK records metadata only unless content mode is requested
-        if capture_content and os.getenv(CONTENT_MODE_ENV) is None:
+        if _capture_content and os.getenv(CONTENT_MODE_ENV) is None:
             os.environ[CONTENT_MODE_ENV] = "content"
 
         # Initialize tracing if not already done

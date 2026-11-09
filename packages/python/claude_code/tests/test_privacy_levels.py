@@ -39,7 +39,7 @@ def isolated(monkeypatch, tmp_path):
 @pytest.mark.parametrize("record", [USER, ASSISTANT])
 def test_metadata_sends_no_content(record):
     out = hook_runner.prepare_record(transform_record(record), METADATA)
-    assert out["consent"] == "metadata;none"
+    assert out["cvs198"] == "metadata;none" and "consent" not in out
     assert not CONTENT_KEYS & set(out)
     assert {"session_id", "event_id", "timestamp", "cvs200"} <= set(out)
     assert "sk-ant" not in json.dumps(out) and "secret file" not in json.dumps(out)
@@ -56,14 +56,14 @@ def test_legacy_cv_layout_metadata(monkeypatch):
     out = hook_runner.prepare_record(transform_record(ASSISTANT), METADATA)
     for content_col in ("cvs4", "cvs5", "cvs26", "cvs41", "cvs199"):
         assert content_col not in out
-    assert set(out) - {"consent", "cvs198", "timestamp", "user_timestamp", "event_id", "event_type",
+    assert set(out) - {"cvs198", "timestamp", "user_timestamp", "event_id", "event_type",
                        "event_source_name", "debug", "cvs200"} <= CV_METADATA_FIELDS
 
 
 def test_off_and_full():
     assert hook_runner.prepare_record(transform_record(USER), OFF) == {}
     out = hook_runner.prepare_record(transform_record(USER), FULL)
-    assert out["consent"] == f"full;{POLICY_VERSION}"
+    assert out["cvs198"] == f"full;{POLICY_VERSION}"
     assert "[SECRET]" in out["user_prompt"] and "sk-ant-api03" not in out["user_prompt"]
     assert "sk-ant-api03" not in out["cvs199"]
 

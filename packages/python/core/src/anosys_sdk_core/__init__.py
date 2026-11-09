@@ -28,6 +28,15 @@ from anosys_sdk_core.encryption import (
     encrypt_payload,
 )
 
+from anosys_sdk_core.capture import (
+    APP_METADATA_STRING_COLUMNS,
+    app_consent_value,
+    current_app_level,
+    finalize_app_record,
+    prepare_app_record,
+    resolve_app_level,
+    strip_content,
+)
 from anosys_sdk_core.privacy import (
     OFF,
     METADATA,
@@ -95,6 +104,13 @@ __all__ = [
     "METADATA",
     "FULL",
     "POLICY_VERSION",
+    "APP_METADATA_STRING_COLUMNS",
+    "app_consent_value",
+    "current_app_level",
+    "finalize_app_record",
+    "prepare_app_record",
+    "resolve_app_level",
+    "strip_content",
     "CONSENT_FIELD",
     "CONSENT_COLUMN",
     "attach_consent",

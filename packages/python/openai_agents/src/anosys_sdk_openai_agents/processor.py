@@ -6,7 +6,6 @@ interface to capture agent traces and send them to AnoSys.
 """
 
 import json
-import os
 import threading
 import logging
 from datetime import datetime
@@ -28,7 +27,8 @@ from agents import TracingProcessor
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.context import clean_contextvars
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
+from anosys_sdk_core.privacy import FULL, OFF
 from anosys_sdk_core.transport import post_record
 from anosys_sdk_openai_agents.mapping import span2json, extract_otel_span_info
 from anosys_sdk_openai_agents.utils import safe_serialize, clean_nulls
@@ -40,6 +40,20 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _tracing_initialized = False
 _log_api_url = "https://www.anosys.ai"
+_capture_level = "full"  # set by AnosysOpenAIAgentsLogger (see anosys_sdk_core.capture)
+
+# Agents-specific descriptive columns kept at ``metadata`` (agent hierarchy and
+# handoff paths, model, response ids); see span2json / extract_otel_span_info.
+AGENTS_METADATA_COLUMNS = frozenset({
+    "cvs62",  # handoff targets (agent names)
+    "cvs64",  # agent output type
+    "cvs68",  # guardrail triggered
+    "cvs69",  # model
+    "cvs77",  # response id
+    "cvs78",  # handoff from agent
+    "cvs79",  # handoff to agent
+    "llm_token_count",  # usage numbers (JSON)
+})
 
 
 class AnosysHttpExporter(SpanExporter):
@@ -59,13 +73,10 @@ class AnosysHttpExporter(SpanExporter):
                 
                 # Remove null values and empty containers
                 cleaned_data = clean_nulls(data)
-                from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
-                dont_log = os.getenv("OPENAI_AGENTS_DONT_LOG_MODEL_DATA") == "True"
-                level = METADATA if dont_log else FULL
-                val = consent_value(level)
-                cleaned_data[CONSENT_FIELD] = val
-                cleaned_data[CONSENT_COLUMN] = val
-                encrypted_data = encrypt_payload(cleaned_data)
+                # Level filtering, cvs198 and encryption in one place
+                encrypted_data = prepare_app_record(cleaned_data, _capture_level, AGENTS_METADATA_COLUMNS)
+                if encrypted_data is None:
+                    continue
                 
                 # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
                 response = post_record(_log_api_url, encrypted_data, timeout=5)
@@ -79,10 +90,6 @@ class AnosysHttpExporter(SpanExporter):
                     logger.error(f"[ANOSYS]❌ Response: {e.response.text[:500]}")
                 except Exception:
                     pass
-                try:
-                    logger.error(f"[ANOSYS]❌ Data: {json.dumps(data, indent=2)}")
-                except Exception:
-                    pass
             except Exception as e:
                 logger.error(f"[ANOSYS]❌ Export failed (Unexpected): {e}")
         
@@ -91,6 +98,26 @@ class AnosysHttpExporter(SpanExporter):
     def shutdown(self):
         """Shutdown the exporter."""
         pass
+
+
+def _redact_content(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Redact PII patterns (emails, phone numbers ...) in content columns, not in ids."""
+    from anosys_sdk_core.capture import APP_METADATA_STRING_COLUMNS
+    from anosys_sdk_core.redaction import redact_string
+
+    keep = APP_METADATA_STRING_COLUMNS | AGENTS_METADATA_COLUMNS
+    return {k: (redact_string(v) if isinstance(v, str) and k not in keep else v) for k, v in record.items()}
+
+
+def _trace_config(pii_redaction: bool = False, **hide) -> TraceConfig:
+    """TraceConfig with ``pii_redaction`` when the installed traceai supports it."""
+    if pii_redaction:
+        try:
+            return TraceConfig(pii_redaction=True, **hide)
+        except TypeError:
+            logger.warning("[ANOSYS] pii_redaction is not supported by the installed "
+                           "traceai-openai-agents; upgrade it to redact PII")
+    return TraceConfig(**hide)
 
 
 def setup_tracing(
@@ -170,9 +197,9 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
     def __init__(
         self, 
         get_user_context: Optional[Callable] = None,
-        capture_inputs: bool = True,
-        capture_outputs: bool = True,
-        capture_parameters: bool = True,
+        capture_inputs: Optional[bool] = None,
+        capture_outputs: Optional[bool] = None,
+        capture_parameters: Optional[bool] = None,
         pii_redaction: bool = False,
         use_batch_processor: bool = False
     ):
@@ -181,42 +208,56 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
         
         Args:
             get_user_context: Optional function that returns user context dict
-            capture_inputs: If True, capture input values (default: True)
-            capture_outputs: If True, capture output values (default: True)
-            capture_parameters: If True, capture invocation parameters (default: True)
-            pii_redaction: If True, redact PII from captured values (default: False)
+            capture_inputs: If True, capture input values
+            capture_outputs: If True, capture output values
+            capture_parameters: If True, capture invocation parameters
+                Each defaults to None: follow ANOSYS_COLLECTION_LEVEL and a project
+                ``.anosys`` file (see anosys_sdk_core.capture); full otherwise. If all
+                three are False the level is metadata (no content is sent).
+            pii_redaction: If True, the instrumentation redacts PII (emails, phone
+                numbers ...) from captured values (default: False)
             use_batch_processor: If True, use BatchSpanProcessor
         """
-        global _tracing_initialized
-        
+        global _tracing_initialized, _capture_level
+
+        # One level for the whole integration. The explicit flags override it;
+        # turning every flag off means metadata. (OPENAI_AGENTS_DONT_LOG_* only
+        # control the Agents SDK's own debug logging, not traces, so they are not used.)
+        explicit = None
+        flags = [f for f in (capture_inputs, capture_outputs, capture_parameters) if f is not None]
+        if flags:
+            explicit = any(flags)
+        _capture_level, source = resolve_app_level(explicit)
+        is_full = _capture_level == FULL
+        self.capture_inputs = is_full if capture_inputs is None else (capture_inputs and is_full)
+        self.capture_outputs = is_full if capture_outputs is None else (capture_outputs and is_full)
+        self.capture_parameters = is_full if capture_parameters is None else (capture_parameters and is_full)
+        self.pii_redaction = pii_redaction
+        self.capture_level = _capture_level
+        logger.info("[ANOSYS] OpenAI Agents collection level: %s (%s)", _capture_level, source)
+
+        # Optional user context function
+        self.get_user_context = get_user_context or (lambda: None)
+        if _capture_level == OFF:
+            return
+
         # Resolve API URL
         self.log_api_url = resolve_api_key()
-        
-        # Ensure underlying SDK logging is enabled if capture is requested
-        if capture_inputs or capture_outputs:
-            if os.getenv("OPENAI_AGENTS_DONT_LOG_MODEL_DATA") is None:
-                os.environ["OPENAI_AGENTS_DONT_LOG_MODEL_DATA"] = "False"
-            if os.getenv("OPENAI_AGENTS_DONT_LOG_TOOL_DATA") is None:
-                os.environ["OPENAI_AGENTS_DONT_LOG_TOOL_DATA"] = "False"
-        
+
         # Initialize tracing
         if not _tracing_initialized:
             setup_api(self.log_api_url)
-            
-            # Create capture config
-            config = TraceConfig(
-                hide_inputs=not capture_inputs,
-                hide_outputs=not capture_outputs,
-                hide_llm_invocation_parameters=not capture_parameters,
+
+            config = _trace_config(
+                hide_inputs=not self.capture_inputs,
+                hide_outputs=not self.capture_outputs,
+                hide_llm_invocation_parameters=not self.capture_parameters,
+                pii_redaction=pii_redaction,
             )
             
             setup_tracing(self.log_api_url, use_batch_processor=use_batch_processor, config=config)
             _tracing_initialized = True
         
-        # Optional user context function
-        self.get_user_context = get_user_context or (lambda: None)
-        self.capture_inputs = capture_inputs
-        self.capture_outputs = capture_outputs
     
     def _get_user_context_safe(self) -> Optional[Dict[str, Any]]:
         """Safely get user context."""
@@ -257,13 +298,16 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             transformed = span2json(payload)
             cleaned_transformed = clean_nulls(transformed)
 
-            from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
-            level = FULL if (getattr(self, "capture_inputs", True) or getattr(self, "capture_outputs", True)) else METADATA
-            val = consent_value(level)
-            cleaned_transformed[CONSENT_FIELD] = val
-            cleaned_transformed[CONSENT_COLUMN] = val
-
-            encrypted_transformed = encrypt_payload(cleaned_transformed)
+            if getattr(self, "pii_redaction", False):
+                cleaned_transformed = _redact_content(cleaned_transformed)
+            if not getattr(self, "capture_inputs", True):
+                cleaned_transformed.pop("llm_input", None)
+            if not getattr(self, "capture_outputs", True):
+                cleaned_transformed.pop("llm_output", None)
+            # Level filtering (content dropped at metadata), cvs198 and encryption
+            encrypted_transformed = prepare_app_record(cleaned_transformed, _capture_level, AGENTS_METADATA_COLUMNS)
+            if encrypted_transformed is None:
+                return
             # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
             response = post_record(self.log_api_url, encrypted_transformed, timeout=5)
             if response is not None:

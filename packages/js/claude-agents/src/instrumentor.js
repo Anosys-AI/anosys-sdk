@@ -8,6 +8,7 @@ import {
   setupApi,
   log,
 } from 'anosys-sdk-anthropic';
+import { FULL, OFF, resolveAppLevel } from 'anosys-sdk-core';
 
 import { extractSpanInfo } from './hooks.js';
 import { CLAUDE_AGENTS_SCOPE } from './mapping.js';
@@ -15,7 +16,7 @@ import { AgentRunTracer } from './tracer.js';
 
 let _tracer = null;
 let _tracingInitialized = false;
-const _runSettings = { captureContent: true, emitLlmSpans: false, agentName: null };
+const _runSettings = { captureContent: true, emitLlmSpans: false, agentName: null, level: 'full' };
 
 export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext = null) {
   setLogApiUrl(apiUrl);
@@ -23,6 +24,7 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
     getUserContext,
     acceptsSpan: (name) => name === CLAUDE_AGENTS_SCOPE,
     extract: extractSpanInfo,
+    getLevel: () => _runSettings.level,
   });
   const provider = addSpanProcessor(createSpanProcessor(exporter, useBatchProcessor));
   _tracer = provider.getTracer(CLAUDE_AGENTS_SCOPE);
@@ -105,7 +107,9 @@ export class AnosysClaudeAgentsLogger {
    * @param {object}   [opts]
    * @param {Function} [opts.getUserContext]      Returns { session_id, token }
    * @param {string}   [opts.agentName]           gen_ai.agent.name (default "claude_agent")
-   * @param {boolean}  [opts.captureContent=true] Record prompts, results and tool input/output
+   * @param {boolean}  [opts.captureContent] true: record prompts, results and tool input/output;
+   *   false: metadata only. Omitted: follow ANOSYS_COLLECTION_LEVEL and a project `.anosys`
+   *   file; full otherwise.
    * @param {boolean}  [opts.emitLlmSpans=false]  Also emit one chat span per assistant response.
    *   Usage totals stay on the agent span; chat spans carry per-call usage.
    * @param {boolean}  [opts.useBatchProcessor=false]
@@ -113,13 +117,18 @@ export class AnosysClaudeAgentsLogger {
   constructor({
     getUserContext = null,
     agentName = null,
-    captureContent = true,
+    captureContent = null,
     emitLlmSpans = false,
     useBatchProcessor = false,
   } = {}) {
     this.getUserContext = getUserContext;
-    Object.assign(_runSettings, { captureContent, emitLlmSpans, agentName });
-    if (!_tracingInitialized) {
+    const { level, source } = resolveAppLevel(captureContent);
+    this.captureLevel = level;
+    log.info('AnoSys Claude Agents collection level: %s (%s)', level, source);
+    Object.assign(_runSettings, { level, captureContent: level === FULL, emitLlmSpans, agentName });
+    if (level === OFF) {
+      this.ready = Promise.resolve();
+    } else if (!_tracingInitialized) {
       _tracingInitialized = true;
       setupTracing(resolveApiKey(), useBatchProcessor, this.getUserContext);
       this.ready = this._init();

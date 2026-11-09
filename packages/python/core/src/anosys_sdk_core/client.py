@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 import requests
 
 from anosys_sdk_core.config import resolve_api_key
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import current_app_level, prepare_app_record
 from anosys_sdk_core.transport import post_record
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,9 @@ class AnosysClient:
             Response object on success, None on failure
         """
         try:
-            payload = encrypt_payload(data)
+            payload = prepare_app_record(data, current_app_level()[0])
+            if payload is None:
+                return None  # collection is off
             response = post_record(self.api_url, payload, timeout=self.timeout)
             if response is None:
                 return None

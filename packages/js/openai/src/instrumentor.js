@@ -7,11 +7,11 @@ import axios from 'axios';
 import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { extractSpanInfo } from './hooks.js';
-import { encryptPayload } from './encryption.js';
-import { fitRecord } from 'anosys-sdk-core';
+import { OFF, fitRecord, prepareAppRecord, resolveAppLevel } from 'anosys-sdk-core';
 
 let _logApiUrl = DEFAULT_API_URL;
 let _tracingInitialized = false;
+let _captureLevel = 'full'; // set by AnosysOpenAILogger (see anosys-sdk-core capture.js)
 
 export class AnosysHttpExporter {
   constructor(getUserContext = null) {
@@ -41,7 +41,9 @@ export class AnosysHttpExporter {
         const spanName   = data.otel_name ?? 'unknown';
         log.debug('Exporting span from: %s | Name: %s', spanSource, spanName);
 
-        const payloadToSend = encryptPayload(data);
+        // Level filtering, cvs198 and encryption in one place
+        const payloadToSend = prepareAppRecord(data, _captureLevel);
+        if (!payloadToSend) continue;
         // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
         const fitted = fitRecord(payloadToSend);
         if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });
@@ -93,13 +95,23 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
 }
 
 export class AnosysOpenAILogger {
-  constructor({ getUserContext = null } = {}) {
+  /**
+   * @param {object}   [opts]
+   * @param {Function} [opts.getUserContext]
+   * @param {boolean}  [opts.captureContent] true: send prompts and completions; false: metadata
+   *   only. Omitted: follow ANOSYS_COLLECTION_LEVEL and a project `.anosys` file; full otherwise.
+   */
+  constructor({ getUserContext = null, captureContent = null } = {}) {
     this.getUserContext = getUserContext;
+    const { level, source } = resolveAppLevel(captureContent);
+    _captureLevel = level;
+    this.captureLevel = level;
+    log.info('AnoSys OpenAI collection level: %s (%s)', level, source);
     this._init();
   }
 
   async _init() {
-    if (_tracingInitialized) return;
+    if (_tracingInitialized || _captureLevel === OFF) return;
     _tracingInitialized = true;
     this.logApiUrl = await resolveApiKey();
     await setupApi({ path: this.logApiUrl });

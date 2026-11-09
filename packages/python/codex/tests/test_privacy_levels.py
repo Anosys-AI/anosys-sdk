@@ -34,7 +34,7 @@ METADATA_KEYS = {
     "input_tokens", "output_tokens", "total_tokens", "cache_read", "cache_creation", "reasoning_tokens",
     "cost_estimate", "incremental_input", "incremental_output", "incremental_total", "incremental_cost",
     "incremental_cache_read", "incremental_cache_creation", "tool_count", "has_thinking",
-    "integration_version", "os_user", "consent", "cvs198",
+    "integration_version", "os_user", "cvs198",
     "cvs1", "cvs2", "cvs9", "cvs12", "cvs19", "cvs32", "cvs33", "cvn1", "cvn2", "cvn3", "cvn4", "cvn5", "cvn7",
     "cvs200",
 }
@@ -61,7 +61,7 @@ def mapped():
 def test_metadata_is_the_default_and_sends_no_content():
     record = hook_runner.prepare_record(mapped(), METADATA)
     assert set(record) == METADATA_KEYS
-    assert record["consent"] == "metadata;none"
+    assert record["cvs198"] == "metadata;none"
     assert record["cvs198"] == "metadata;none"
     assert not CONTENT_KEYS & set(record)
 
@@ -73,7 +73,7 @@ def test_off_sends_nothing():
 def test_full_keeps_content_and_scrubs_secrets():
     record = hook_runner.prepare_record(mapped(), FULL)
     assert CONTENT_KEYS <= set(record)
-    assert record["consent"] == f"full;{POLICY_VERSION}"
+    assert record["cvs198"] == f"full;{POLICY_VERSION}"
     assert "sk-proj-abcdef" not in record["user_prompt"] and "[SECRET]" in record["user_prompt"]
     assert "sk-proj-abcdef" not in record["cvs199"]
 
@@ -120,7 +120,7 @@ def test_turn_sent_at_metadata(monkeypatch):
     post = Post(200)
     run_turn(monkeypatch, post)
     (body,) = post.bodies
-    assert body[0]["consent"] == "metadata;none" and "user_prompt" not in body[0]
+    assert body[0]["cvs198"] == "metadata;none" and "user_prompt" not in body[0]
 
 
 def test_level_off_sends_nothing(monkeypatch):

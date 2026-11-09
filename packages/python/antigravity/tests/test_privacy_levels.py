@@ -38,14 +38,14 @@ def mapped():
 def test_metadata_default_sends_no_content():
     out = hook_runner.prepare_record(mapped(), METADATA)
     assert not CONTENT & set(out)
-    assert out["consent"] == "metadata;none" and out["cvs198"] == "metadata;none" and out["model"] == "gemini-3-pro"
+    assert "consent" not in out and out["cvs198"] == "metadata;none" and out["model"] == "gemini-3-pro"
     assert "ghp_" not in json.dumps(out) and "API_KEY" not in json.dumps(out)
 
 
 def test_off_and_full():
     assert hook_runner.prepare_record(mapped(), OFF) == {}
     out = hook_runner.prepare_record(mapped(), FULL)
-    assert out["consent"] == f"full;{POLICY_VERSION}"
+    assert out["cvs198"] == f"full;{POLICY_VERSION}"
     assert "ghp_abcdef" not in out["user_prompt"] and "[SECRET]" in out["user_prompt"]
 
 

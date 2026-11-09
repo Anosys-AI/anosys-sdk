@@ -23,7 +23,8 @@ import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
+from anosys_sdk_core.privacy import METADATA, OFF
 from anosys_sdk_core.transport import post_record
 from anosys_sdk_openai.hooks import extract_span_info
 
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _tracing_initialized = False
 _log_api_url = "https://www.anosys.ai"
+_capture_level = "full"  # set by AnosysOpenAILogger (see anosys_sdk_core.capture)
 
 
 class AnosysHttpExporter(SpanExporter):
@@ -74,10 +76,10 @@ class AnosysHttpExporter(SpanExporter):
                 span_name = data.get("otel_name") or "unknown"
                 logger.debug("Exporting span from: %s | Name: %s", span_source, span_name)
 
-                from anosys_sdk_core.privacy import attach_consent
-                data = attach_consent(data)
-
-                data = encrypt_payload(data)
+                # Level filtering, cvs198 and encryption in one place
+                data = prepare_app_record(data, _capture_level)
+                if data is None:
+                    continue
                 # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
                 response = post_record(_log_api_url, data, timeout=5)
                 if response is not None:
@@ -148,7 +150,15 @@ def setup_tracing(
         except Exception as e:
             logger.warning("Uninstrument warning: %s", e)
 
-        instrumentor.instrument(tracer_provider=trace_provider)
+        instrument_kwargs = {"tracer_provider": trace_provider}
+        if _capture_level == METADATA:
+            # Defense in depth: ask the instrumentation not to record content either
+            try:
+                from traceai_openai import TraceConfig
+                instrument_kwargs["config"] = TraceConfig(hide_inputs=True, hide_outputs=True)
+            except ImportError:
+                pass
+        instrumentor.instrument(**instrument_kwargs)
         logger.info("AnoSys instrumented OpenAI and OpenTelemetry traces")
 
 
@@ -166,14 +176,23 @@ class AnosysOpenAILogger:
         response = client.chat.completions.create(...)
     """
     
-    def __init__(self, get_user_context: Optional[Callable] = None):
+    def __init__(self, get_user_context: Optional[Callable] = None, capture_content: Optional[bool] = None):
         """
         Initialize the AnoSys OpenAI Logger.
         
         Args:
             get_user_context: Optional function that returns user context dict
+            capture_content: True to send prompts and completions, False for
+                metadata only. None (default) follows ANOSYS_COLLECTION_LEVEL and a
+                project ``.anosys`` file (see anosys_sdk_core.capture); full otherwise.
         """
-        global _tracing_initialized
+        global _tracing_initialized, _capture_level
+
+        _capture_level, source = resolve_app_level(capture_content)
+        self.capture_level = _capture_level
+        logger.info("AnoSys OpenAI collection level: %s (%s)", _capture_level, source)
+        if _capture_level == OFF:
+            return
         
         # Resolve API URL
         self.log_api_url = resolve_api_key()

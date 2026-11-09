@@ -47,8 +47,10 @@ _RANK = {OFF: 0, METADATA: 1, FULL: 2}
 POLICY_VERSION = "2026-11-09"
 POLICY_URL = "https://github.com/anosys-ai/anosys-sdk/blob/main/PRIVACY.md"
 
-CONSENT_FIELD = "consent"
+# Every record carries its collection level and accepted policy version in
+# cvs198, a column present in every AnoSys schema (no migration needed).
 CONSENT_COLUMN = "cvs198"
+CONSENT_FIELD = CONSENT_COLUMN  # older name, same column
 PROJECT_FILE = ".anosys"
 
 
@@ -235,7 +237,7 @@ def filter_fields(record: Dict[str, Any], level: str, metadata_fields: Iterable[
     Keep the fields allowed at ``level``.
 
     ``off`` keeps nothing, ``metadata`` keeps only ``metadata_fields`` and
-    ``full`` keeps everything. The consent field is set on every record.
+    ``full`` keeps everything. cvs198 is set on every record.
     """
     if level == OFF:
         return {}
@@ -244,20 +246,16 @@ def filter_fields(record: Dict[str, Any], level: str, metadata_fields: Iterable[
     else:
         allowed = set(metadata_fields)
         result = {k: v for k, v in record.items() if k in allowed}
-    val = consent_value(level)
-    result[CONSENT_FIELD] = val
-    result[CONSENT_COLUMN] = val
+    result.pop("consent", None)
+    result[CONSENT_COLUMN] = consent_value(level)
     return result
 
 
 def attach_consent(record: Dict[str, Any], level: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Ensure record contains both ``consent`` and ``cvs198`` with the appropriate level.
-    """
+    """Set cvs198 for a hook record (level from ``effective_level`` when omitted)."""
     if level is None:
         level, _ = effective_level()
-    val = consent_value(level)
-    record[CONSENT_FIELD] = val
-    record[CONSENT_COLUMN] = val
+    record.pop("consent", None)
+    record[CONSENT_COLUMN] = consent_value(level)
     return record
 

@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, Optional
 import requests
 
 from anosys_sdk_core.config import resolve_api_key
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import current_app_level, prepare_app_record
 from anosys_sdk_core.transport import post_record
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
 from anosys_sdk_core.util.json import to_json_fallback, to_str_or_none
@@ -111,8 +111,9 @@ def _log_payload(
     
     # Send log
     try:
-        mapped_data = reassign(variables, _key_to_cvs, _starting_indices)
-        mapped_data = encrypt_payload(mapped_data)
+        mapped_data = prepare_app_record(reassign(variables, _key_to_cvs, _starting_indices), current_app_level()[0])
+        if mapped_data is None:
+            return  # collection is off
         # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
         response = post_record(_log_api_url, mapped_data, timeout=5)
         if response is not None:
@@ -264,7 +265,9 @@ def anosys_raw_logger(data: Optional[Dict[str, Any]] = None) -> Optional[request
         # Raw data capture - ALWAYS mandatory
         if "raw" not in data:
             data["raw"] = json.dumps(data, default=to_json_fallback)
-        mapped_data = encrypt_payload(reassign(data, _key_to_cvs, _starting_indices))
+        mapped_data = prepare_app_record(reassign(data, _key_to_cvs, _starting_indices), current_app_level()[0])
+        if mapped_data is None:
+            return None  # collection is off
         # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
         response = post_record(_log_api_url, mapped_data, timeout=5)
         if response is not None:

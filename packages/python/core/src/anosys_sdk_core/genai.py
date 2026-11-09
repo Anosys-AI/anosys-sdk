@@ -348,13 +348,5 @@ def extract_genai_span_info(
         assign(variables, "events", json.dumps(span["events"], default=str))
     assign(variables, "raw", json.dumps(span, default=str))
 
-    from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, consent_value, effective_level
-    eff_level, _ = effective_level()
-    val = consent_value(eff_level)
-    assign(variables, CONSENT_FIELD, val)
-    assign(variables, CONSENT_COLUMN, val)
-
-    reassigned = reassign(variables, key_to_cvs, (starting_indices or CLAUDE_STARTING_INDICES).copy())
-    reassigned[CONSENT_FIELD] = val
-    reassigned[CONSENT_COLUMN] = val
-    return reassigned
+    # cvs198 (collection level) is set by the exporter, which knows what it sends
+    return reassign(variables, key_to_cvs, (starting_indices or CLAUDE_STARTING_INDICES).copy())

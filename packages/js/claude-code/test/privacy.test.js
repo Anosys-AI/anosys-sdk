@@ -48,7 +48,7 @@ describe('collection levels', () => {
   for (const [name, record] of [['user', USER], ['assistant', ASSISTANT]]) {
     it(`metadata sends no content (${name})`, () => {
       const out = hookRunner.prepareRecord(transformRecord(record), METADATA);
-      assert.equal(out.consent, 'metadata;none');
+      assert.equal(out.cvs198, 'metadata;none');
       for (const k of CONTENT_KEYS) assert.ok(!(k in out), k);
       for (const k of ['session_id', 'event_id', 'timestamp', 'cvs200']) assert.ok(k in out, k);
       const text = JSON.stringify(out);
@@ -74,7 +74,7 @@ describe('collection levels', () => {
     }).toString());
     const { CV_METADATA_FIELDS } = require('../src/mapper');
     for (const col of ['cvs4', 'cvs5', 'cvs26', 'cvs41', 'cvs199']) assert.ok(!(col in out), col);
-    const allowed = new Set(['consent', 'cvs198', 'timestamp', 'user_timestamp', 'event_id', 'event_type',
+    const allowed = new Set(['cvs198', 'timestamp', 'user_timestamp', 'event_id', 'event_type',
       'event_source_name', 'debug', 'cvs200', ...CV_METADATA_FIELDS]);
     for (const k of Object.keys(out)) assert.ok(allowed.has(k), k);
   });
@@ -82,7 +82,7 @@ describe('collection levels', () => {
   it('off sends nothing and full scrubs secrets', () => {
     assert.deepEqual(hookRunner.prepareRecord(transformRecord(USER), OFF), {});
     const out = hookRunner.prepareRecord(transformRecord(USER), FULL);
-    assert.equal(out.consent, `full;${POLICY_VERSION}`);
+    assert.equal(out.cvs198, `full;${POLICY_VERSION}`);
     assert.ok(out.user_prompt.includes('[SECRET]') && !out.user_prompt.includes('sk-ant-api03'));
     assert.ok(!out.cvs199.includes('sk-ant-api03'));
   });

@@ -7,8 +7,7 @@ import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { spanToJson } from './genai.js';
 import { extractSpanInfo, isAnthropicSpan } from './hooks.js';
-import { encryptPayload } from './encryption.js';
-import { fitRecord } from 'anosys-sdk-core';
+import { FULL, OFF, fitRecord, prepareAppRecord, resolveAppLevel } from 'anosys-sdk-core';
 
 // Read by the Anthropic SDK when a client is constructed
 export const CONTENT_MODE_ENV = 'ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE';
@@ -18,6 +17,7 @@ let _logApiUrlReady = Promise.resolve(DEFAULT_API_URL);
 let _tracingInitialized = false;
 let _provider = null;
 let _captureContent = true;
+let _captureLevel = 'full'; // set by AnosysAnthropicLogger (see anosys-sdk-core capture.js)
 let _hub = null;
 
 function scopeName(span) {
@@ -35,8 +35,10 @@ export class AnosysHttpExporter {
     getUserContext = null,
     acceptsSpan = isAnthropicSpan,
     extract = extractSpanInfo,
+    getLevel = () => _captureLevel,
   } = {}) {
     this._getUserContext = getUserContext ?? (() => null);
+    this._getLevel = getLevel;
     this._acceptsSpan = acceptsSpan;
     this._extract = extract;
   }
@@ -66,7 +68,9 @@ export class AnosysHttpExporter {
           data.llm_output ? String(data.llm_output).length : 0,
         );
 
-        const payloadToSend = encryptPayload(data);
+        // Level filtering, cvs198 and encryption in one place
+        const payloadToSend = prepareAppRecord(data, this._getLevel());
+        if (!payloadToSend) continue;
         await _logApiUrlReady;
         // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
         const fitted = fitRecord(payloadToSend);
@@ -172,19 +176,26 @@ export class AnosysAnthropicLogger {
   /**
    * @param {object}   [opts]
    * @param {Function} [opts.getUserContext]     Returns { session_id, token }
-   * @param {boolean}  [opts.captureContent=true] Record prompts and completions. Applies to
+   * @param {boolean}  [opts.captureContent] true: record prompts and completions; false: metadata
+   *   only. Omitted: follow ANOSYS_COLLECTION_LEVEL and a project `.anosys` file; full otherwise. Applies to
    *   clients created afterwards that are given no `openTelemetry` option of their own.
    * @param {boolean}  [opts.useBatchProcessor=false]
    */
-  constructor({ getUserContext = null, captureContent = true, useBatchProcessor = false } = {}) {
+  constructor({ getUserContext = null, captureContent = null, useBatchProcessor = false } = {}) {
     this.getUserContext = getUserContext;
-    _captureContent = captureContent;
+    const { level, source } = resolveAppLevel(captureContent);
+    _captureLevel = level;
+    _captureContent = level === FULL;
+    this.captureLevel = level;
+    log.info('AnoSys Anthropic collection level: %s (%s)', level, source);
     // The SDK records metadata only unless content mode is requested
-    if (captureContent && process.env[CONTENT_MODE_ENV] === undefined) {
+    if (_captureContent && process.env[CONTENT_MODE_ENV] === undefined) {
       process.env[CONTENT_MODE_ENV] = 'content';
     }
     // The provider is registered synchronously so clients created right after see it
-    if (!_tracingInitialized) {
+    if (level === OFF) {
+      this.ready = Promise.resolve();
+    } else if (!_tracingInitialized) {
       _tracingInitialized = true;
       setupTracing(_logApiUrlReady, useBatchProcessor, this.getUserContext);
       this.ready = this._init();
