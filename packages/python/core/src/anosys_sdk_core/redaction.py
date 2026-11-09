@@ -89,3 +89,44 @@ def redact_dict(
             result[key] = value
     
     return result
+
+
+# Secret-shaped strings scrubbed from hook content even at ``full`` (best effort)
+SECRET_PATTERNS: List[Pattern] = [
+    re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),
+    re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_\-]{20,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bASIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bghp_[A-Za-z0-9]{30,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{30,}\b"),
+    re.compile(r"\bxox[abpr]-[A-Za-z0-9\-]{10,}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b"),  # JWT
+    re.compile(
+        r"(?i)((?:api[_-]?key|apikey|secret|password|passwd|token|authorization)[\"']?\s*[:=]\s*[\"']?(?:bearer\s+)?)"
+        r"[A-Za-z0-9_\-/+=.]{12,}"
+    ),
+]
+SECRET_REPLACEMENT = "[SECRET]"
+
+
+def scrub_secrets(value: Any) -> Any:
+    """
+    Replace secret-shaped substrings (API keys, tokens, private keys) in a
+    string, or in every string inside a dict/list. Best effort: it catches
+    common key formats, not every secret.
+    """
+    if isinstance(value, str):
+        result = value
+        for pattern in SECRET_PATTERNS:
+            if pattern.groups:
+                result = pattern.sub(lambda m: m.group(1) + SECRET_REPLACEMENT, result)
+            else:
+                result = pattern.sub(SECRET_REPLACEMENT, result)
+        return result
+    if isinstance(value, dict):
+        return {k: scrub_secrets(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [scrub_secrets(v) for v in value]
+    return value

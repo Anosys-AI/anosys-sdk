@@ -18,11 +18,34 @@ from anosys_sdk_core.encryption import (
     ANOSYS_ENCRYPTION_PREFIX,
     DEFAULT_ENCRYPTED_COLUMNS,
     derive_256_bit_key,
+    derive_keys,
+    encrypt_value,
+    JSON_COLUMNS,
     encrypt,
     decrypt,
     get_encryption_key,
     get_target_columns,
     encrypt_payload,
+)
+
+from anosys_sdk_core.privacy import (
+    OFF,
+    METADATA,
+    FULL,
+    POLICY_VERSION,
+    effective_level,
+    filter_fields,
+    read_consent,
+    write_consent,
+)
+from anosys_sdk_core.redaction import scrub_secrets
+from anosys_sdk_core.transport import (
+    PendingQueue,
+    chunk_records,
+    deliver,
+    fit_record,
+    max_batch_bytes,
+    send_records,
 )
 
 from importlib.metadata import version, PackageNotFoundError
@@ -59,6 +82,26 @@ __all__ = [
     "ANOSYS_ENCRYPTION_PREFIX",
     "DEFAULT_ENCRYPTED_COLUMNS",
     "derive_256_bit_key",
+    "derive_keys",
+    "encrypt_value",
+    "JSON_COLUMNS",
+    # Privacy levels and consent
+    "OFF",
+    "METADATA",
+    "FULL",
+    "POLICY_VERSION",
+    "effective_level",
+    "filter_fields",
+    "read_consent",
+    "write_consent",
+    "scrub_secrets",
+    # Size-limited delivery
+    "PendingQueue",
+    "chunk_records",
+    "deliver",
+    "fit_record",
+    "max_batch_bytes",
+    "send_records",
     "encrypt",
     "decrypt",
     "get_encryption_key",
