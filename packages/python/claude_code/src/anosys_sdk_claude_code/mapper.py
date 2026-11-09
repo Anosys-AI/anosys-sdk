@@ -10,28 +10,51 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Optional
-from anosys_sdk_claude_code.encryption import encrypt_payload
 
-INTEGRATION_VERSION = '0.2.0'
+from anosys_sdk_core.privacy import BASE_METADATA_FIELDS
+
+INTEGRATION_VERSION = '0.3.0'
 
 OS_USER = getpass.getuser()
 
 CLAUDE_PIXEL = os.environ.get('ANOSYS_CLAUDE_PIXEL', 'true').lower() == 'true'
 
-REDACTION = os.environ.get('REDACTION', 'false').lower() == 'true'
-
+# Legacy debug file older versions appended unrecognized raw records to.
+# Nothing writes it anymore; `anosys-claude-code purge` deletes it.
 UNHANDLED_LOG_PATH = Path('~/.claude/hooks/unhandled_records.jsonl').expanduser()
+
+# Unrecognized record types seen in this process (counted, never stored)
+UNHANDLED_COUNTS: dict = {}
+
+# Fields sent at the `metadata` level, for both layouts. Descriptive mode uses
+# the shared allowlist; legacy CV mode uses the CV columns that hold the same
+# metadata (derived from the two payload definitions below). Everything else
+# (prompts, answers, tool results, commands, files, titles, task text, errors,
+# the raw record in cvs199) is `full`-only.
+CV_METADATA_FIELDS = {
+    'cvb1', 'cvb2', 'cvb3', 'cvb4', 'cvb5', 'cvb6', 'cvb7', 'cvb8', 'cvb9', 'cvb10', 'cvb11',
+    'cvb12', 'cvb13', 'cvb14', 'cvb15',
+    'cvn1', 'cvn2', 'cvn3', 'cvn4', 'cvn5', 'cvn6', 'cvn7', 'cvn8', 'cvn9', 'cvn10', 'cvn11',
+    'cvn12', 'cvn13', 'cvn14', 'cvn15', 'cvn16', 'cvn17', 'cvn18', 'cvn19', 'cvn20', 'cvn21',
+    'cvn22', 'cvn23', 'cvn24', 'cvn25', 'cvn26', 'cvn27', 'cvn28', 'cvn29', 'cvn30', 'cvn31',
+    'cvn32', 'cvn33', 'cvn34', 'cvn35', 'cvn36', 'cvn37', 'cvn38', 'cvn39', 'cvn40', 'cvn41',
+    'cvn42', 'cvn43',
+    'cvs1', 'cvs2', 'cvs3', 'cvs6', 'cvs7', 'cvs8', 'cvs9', 'cvs10', 'cvs11', 'cvs12', 'cvs13',
+    'cvs14', 'cvs15', 'cvs16', 'cvs17', 'cvs18', 'cvs20', 'cvs21', 'cvs22', 'cvs23', 'cvs27',
+    'cvs28', 'cvs29', 'cvs31', 'cvs32', 'cvs33', 'cvs34', 'cvs36', 'cvs37', 'cvs38', 'cvs39',
+    'cvs42', 'cvs43', 'cvs44', 'cvs46', 'cvs47', 'cvs48', 'cvs52', 'cvs53', 'cvs54', 'cvs55',
+    'cvs56', 'cvs58', 'cvs59', 'cvs63', 'cvs64', 'cvs65', 'cvs66', 'cvs67', 'cvs68', 'cvs69',
+    'cvs71', 'cvs73', 'cvs77', 'cvs78', 'cvs92', 'cvs93', 'cvs94',
+}
+METADATA_FIELDS = BASE_METADATA_FIELDS | CV_METADATA_FIELDS
 
 U = object()
 
 
 def log_unhandled(record: dict):
-    try:
-        UNHANDLED_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(UNHANDLED_LOG_PATH, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(record, separators=(',', ':')) + '\n')
-    except Exception:
-        pass
+    """Count an unrecognized record type. Its content is never written anywhere."""
+    kind = str(record.get('type', 'unknown'))[:64]
+    UNHANDLED_COUNTS[kind] = UNHANDLED_COUNTS.get(kind, 0) + 1
 
 
 def to_unix_ms(iso_str: str) -> int:
@@ -47,21 +70,6 @@ def to_unix_ms(iso_str: str) -> int:
         return int(dt.timestamp() * 1000)
     except Exception:
         return int(time.time() * 1000)
-
-
-def redact_raw_record(record: dict) -> dict:
-    import copy
-    rec = copy.deepcopy(record)
-    if 'message' in rec and isinstance(rec['message'], dict):
-        if 'content' in rec['message']: rec['message']['content'] = 'REDACTED'
-    if 'content' in rec and isinstance(rec['content'], str): rec['content'] = 'REDACTED'
-    if 'operation' in rec and 'content' in rec: rec['content'] = 'REDACTED'
-    if 'lastPrompt' in rec: rec['lastPrompt'] = 'REDACTED'
-    if 'summary' in rec: rec['summary'] = 'REDACTED'
-    if 'snapshot' in rec and isinstance(rec['snapshot'], dict):
-        if 'trackedFileBackups' in rec['snapshot'] and isinstance(rec['snapshot']['trackedFileBackups'], dict):
-            for k in rec['snapshot']['trackedFileBackups']: rec['snapshot']['trackedFileBackups'][k] = 'REDACTED'
-    return rec
 
 
 PRICING_CONFIG = {
@@ -98,7 +106,6 @@ def to_num(val: Any) -> Any:
 
 
 def transform_record(record: dict, incremental_tokens: Any = None, context_overrides: dict = None) -> dict:
-    if REDACTION: record = redact_raw_record(record)
     if context_overrides is None: context_overrides = {}
 
     msg_type = record.get('type', 'unknown')
@@ -806,5 +813,5 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
             'cvb15': isP50,
         }
 
-    res = {k: v for k, v in payload.items() if v is not None and v is not U}
-    return encrypt_payload(res)
+    # Collection level, secret scrubbing and encryption are applied by the hook runner
+    return {k: v for k, v in payload.items() if v is not None and v is not U}

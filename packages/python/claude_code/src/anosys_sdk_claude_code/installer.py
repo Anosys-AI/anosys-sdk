@@ -27,7 +27,17 @@ ANOSYS_ENV_KEYS = {
     "OTEL_EXPORTER_OTLP_ENDPOINT",
     "OTEL_EXPORTER_OTLP_HEADERS",
     "OTEL_EXPORTER_OTLP_ANOSYS_APIKEY",  # legacy — kept for clean uninstall
+    "OTEL_METRICS_INCLUDE_ACCOUNT_UUID",
+    "REDACTION",  # legacy — collection is set with `anosys-claude-code privacy`
 }
+
+# Markers of every Stop-hook form this package has ever written
+HOOK_MARKERS = ("anosys-claude-code", "anosys_sdk_claude_code")
+
+
+def hook_command() -> str:
+    """The Stop-hook command: this interpreter by absolute path, never a bare PATH lookup."""
+    return f'"{sys.executable}" -m anosys_sdk_claude_code.cli run'
 
 SETTINGS_PATH = os.path.expanduser("~/.claude/settings.json")
 BACKUP_PATH = SETTINGS_PATH + ".bak"
@@ -85,9 +95,12 @@ def update_env(settings: dict, new_env: dict) -> dict:
 
 
 def _is_anosys_hook_entry(entry: object) -> bool:
+    """Ours if tagged owner=anosys or if its command runs any AnoSys Claude Code hook form."""
     if not isinstance(entry, dict):
         return False
-    return str(entry.get("owner", "")).lower() == "anosys"
+    if str(entry.get("owner", "")).lower() == "anosys":
+        return True
+    return any(marker in str(entry.get("command", "")) for marker in HOOK_MARKERS)
 
 
 def _strip_anosys_from_group(group: dict) -> Optional[dict]:

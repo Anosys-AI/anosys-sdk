@@ -13,7 +13,6 @@ Configuration (env vars):
 """
 
 import json
-import logging
 import os
 import sys
 import time
@@ -21,33 +20,34 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from anosys_sdk_claude_code.mapper import transform_record
-from anosys_sdk_claude_code.encryption import encrypt_payload
+from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.hook_cli import setup_hook_logging
+from anosys_sdk_core.privacy import FULL, OFF, effective_level, filter_fields
+from anosys_sdk_core.redaction import scrub_secrets
+from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
 
-INGESTION_URL = "https://api.anosys.ai/ingestion"
-API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "")
+from anosys_sdk_claude_code.mapper import METADATA_FIELDS, UNHANDLED_COUNTS, transform_record
+
+INGESTION_URL = os.environ.get("ANOSYS_HOOK_ENDPOINT_URL", "https://api.anosys.ai/ingestion")
+API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "") or os.environ.get("ANOSYS_HOOK_API_KEY", "")
 DRY_RUN = os.environ.get('ANOSYS_HOOK_DRY_RUN', 'false').lower() == 'true'
 EXPLICIT_TRANSCRIPT = os.environ.get('ANOSYS_HOOK_TRANSCRIPT', '')
 
 STATE_DIR = Path.home() / '.claude' / 'state'
 STATE_FILE = STATE_DIR / 'hook_state.json'
 PENDING_RECORDS_FILE = STATE_DIR / 'pending_records.jsonl'
+PAUSE_FILE = STATE_DIR / 'anosys_paused.json'
 LOG_FILE = STATE_DIR / 'hook.log'
 
-STATE_DIR.mkdir(parents=True, exist_ok=True)
+# The hook log records ids, sizes and status codes only, never prompts or payloads.
+log = setup_hook_logging(LOG_FILE, 'anosys_claude_hook')
 
-logging.basicConfig(
-    filename=str(LOG_FILE),
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+# Content fields scrubbed for secrets before sending at `full`
+CONTENT_FIELDS = (
+    'user_prompt', 'assistant_text', 'last_prompt', 'tool_use_result', 'commands',
+    'written_paths', 'file_states', 'summary_content', 'task_description', 'cvs199',
+    'cvs4', 'cvs5', 'cvs24', 'cvs26',
 )
-log = logging.getLogger('anosys_claude_hook')
-
-_stderr = logging.StreamHandler(sys.stderr)
-_stderr.setLevel(logging.INFO)
-_stderr.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-log.addHandler(_stderr)
 
 
 @dataclass
@@ -146,88 +146,59 @@ def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state, indent=2), encoding='utf-8')
 
 
-def load_pending_records() -> List[dict]:
-    if not PENDING_RECORDS_FILE.exists():
-        return []
-    records = []
-    try:
-        with open(PENDING_RECORDS_FILE, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip():
-                    records.append(json.loads(line))
-    except Exception as e:
-        log.error("Failed to load pending records: %s", e)
-    return records
+def session_transcripts(primary: 'TranscriptInfo') -> List['TranscriptInfo']:
+    """The current session's transcript and its subagents. Never other sessions."""
+    results = [primary]
+    subagents_dir = primary.path.with_suffix('') / 'subagents'
+    if subagents_dir.is_dir():
+        for af in sorted(subagents_dir.glob('*.jsonl')):
+            meta = _load_agent_meta(af.with_suffix('.meta.json'))
+            results.append(TranscriptInfo(
+                path=af,
+                state_key=f"{primary.session_id}:subagent:{af.stem}",
+                session_id=primary.session_id,
+                is_agent=True,
+                agent_id=af.stem,
+                agent_type=meta.get('agentType'),
+                agent_description=meta.get('description'),
+            ))
+    return results
 
 
-def save_pending_records(records: List[dict], overwrite: bool = False):
-    try:
-        mode = 'w' if overwrite else 'a'
-        with open(PENDING_RECORDS_FILE, mode, encoding='utf-8') as f:
-            for r in records:
-                f.write(json.dumps(r, separators=(',', ':')) + '\n')
-        log.info("Saved %d records to pending storage (%s)", len(records), "overwrite" if overwrite else "append")
-    except Exception as e:
-        log.error("Failed to save pending records: %s", e)
+def prepare_record(mapped: dict, level: str) -> dict:
+    """Apply the collection level, scrub secrets at `full`, then encrypt."""
+    record = filter_fields(mapped, level, METADATA_FIELDS)
+    if level == FULL:
+        for field in CONTENT_FIELDS:
+            if record.get(field) is not None:
+                record[field] = scrub_secrets(record[field])
+    return encrypt_payload(record)
 
 
-def clear_pending_records():
-    try:
-        if PENDING_RECORDS_FILE.exists():
-            PENDING_RECORDS_FILE.unlink()
-            log.info("Cleared pending records.")
-    except Exception as e:
-        log.error("Failed to clear pending records: %s", e)
-
-
-async def post_records_batch(payloads: List[dict]) -> List[dict]:
-    import requests
-    if not payloads:
-        return []
-
+def send(records: List[dict]) -> int:
+    """Deliver records (and queued retries) within the size limit. Returns the number accepted."""
+    if DRY_RUN:
+        log.info("[DRY RUN] Would send %d record(s)", len(records))
+        return len(records)
     headers = {"Content-Type": "application/json"}
     if API_KEY:
         headers["anosys-apikey"] = API_KEY
-
-    failed_records = []
-    batch_size = 100
-
-    for i in range(0, len(payloads), batch_size):
-        chunk = payloads[i:i + batch_size]
-        if DRY_RUN:
-            log.info("[DRY RUN] Would POST chunk of %d records", len(chunk))
-            continue
-        try:
-            encrypted_chunk = [encrypt_payload(p) for p in chunk]
-            resp = requests.post(INGESTION_URL, json=encrypted_chunk, headers=headers, timeout=15)
-            resp.raise_for_status()
-            log.info("Batch POST success — sent %d records", len(chunk))
-        except Exception as e:
-            log.error("Batch POST failed — trying to send %d records: %s", len(chunk), e)
-            failed_records.extend(chunk)
-    return failed_records
+    return deliver(INGESTION_URL, records, PendingQueue(PENDING_RECORDS_FILE), PAUSE_FILE, headers=headers)
 
 
 async def main():
     import asyncio
     await asyncio.sleep(0.5)
 
-    log.info("="*60)
-    log.info("anosys-claude-code run invoked at %s", time.strftime('%Y-%m-%d %H:%M:%S'))
-
-    pending = load_pending_records()
-    if pending:
-        log.info("Found %d pending records. Attempting resend...", len(pending))
-        failed_pending = await post_records_batch(pending)
-        if not failed_pending:
-            clear_pending_records()
-        else:
-            log.warning("%d records still failed after resend. Updating storage.", len(failed_pending))
-            save_pending_records(failed_pending, overwrite=True)
+    level, source = effective_level()
+    if level == OFF:
+        log.info("Collection is off (%s); nothing sent", source)
+        return
+    if is_paused(PAUSE_FILE):
+        log.info("Collection paused after an authorization error; nothing sent")
+        return
 
     stdin_ctx = get_stdin_context()
-    if stdin_ctx:
-        log.info("Received context from stdin: %s", json.dumps(stdin_ctx))
 
     provided_path = EXPLICIT_TRANSCRIPT
     if not provided_path and stdin_ctx:
@@ -252,20 +223,11 @@ async def main():
         return
 
     current_sid = primary_transcript.session_id
-    log.info("Targeting transcript: %s (Session: %s)", primary_transcript.path, current_sid)
-
     state = {} if DRY_RUN else load_state()
-    session_state = state.get(current_sid, {})
-    full_scan_done = session_state.get('full_scan_done', False)
 
-    if not full_scan_done:
-        log.info("First run for session %s. Performing global scan...", current_sid)
-        transcripts = find_all_transcripts()
-    else:
-        all_known = find_all_transcripts()
-        transcripts = [primary_transcript] + [t for t in all_known if t.is_agent and t.session_id == current_sid]
-
-    log.info("Processing %d transcript(s) (%d agent(s)).", len(transcripts), sum(1 for t in transcripts if t.is_agent))
+    # Only this session and its subagents: past sessions are never uploaded
+    transcripts = session_transcripts(primary_transcript)
+    log.info("Session %s at '%s' (%s): %d transcript(s)", current_sid, level, source, len(transcripts))
 
     all_mapped_payloads = []
     session_updates = []
@@ -280,16 +242,14 @@ async def main():
         try:
             content = transcript.path.read_text(encoding='utf-8')
         except Exception as e:
-            log.error("Failed to read transcript %s: %s", transcript.path, e)
+            log.error("Failed to read transcript %s: %s", transcript.state_key, type(e).__name__)
             continue
 
         all_lines = content.strip().split('\n')
         if not all_lines or not all_lines[0]:
-            log.debug("Transcript %s is empty.", sid)
             continue
 
         total_lines = len(all_lines)
-        log.info("Processing %s: %d total lines, previously saw %d", state_key, total_lines, last_line)
 
         parsed = []
         for line in all_lines:
@@ -384,10 +344,10 @@ async def main():
                 mapped = transform_record(msg, incremental, current_context)
                 session_mapped.append(mapped)
             except Exception as e:
-                log.error("Failed to map record in %s at %d: %s", sid, i, e)
+                log.error("Failed to map record in %s at %d: %s", sid, i, type(e).__name__)
 
         if session_mapped:
-            all_mapped_payloads.extend(session_mapped)
+            all_mapped_payloads.extend(r for r in (prepare_record(m, level) for m in session_mapped) if r)
             f_uuid = parsed[total_lines-1][1] if parsed[total_lines-1] else None
             session_updates.append((state_key, {
                 'last_line': total_lines,
@@ -402,22 +362,11 @@ async def main():
         s.update(up)
         state[skey] = s
 
-    pskey = primary_transcript.state_key
-    if pskey in state:
-        state[pskey]['full_scan_done'] = True
-    else:
-        state[pskey] = {'full_scan_done': True}
-
     if not DRY_RUN:
         save_state(state)
+    if UNHANDLED_COUNTS:
+        log.info("Unrecognized record types (counted, not stored): %s", UNHANDLED_COUNTS)
 
-    if not all_mapped_payloads:
-        log.info("No records to send.")
-        return
-
-    failed = await post_records_batch(all_mapped_payloads)
-    if failed:
-        log.error("%d failed to POST. Saving to pending.", len(failed))
-        save_pending_records(failed)
-    else:
-        log.info("Sent %d records successfully.", len(all_mapped_payloads))
+    # Also flushes queued retries; failed records go to the bounded queue
+    sent = send(all_mapped_payloads)
+    log.info("Session %s: %d record(s) mapped, %d accepted", current_sid, len(all_mapped_payloads), sent)
