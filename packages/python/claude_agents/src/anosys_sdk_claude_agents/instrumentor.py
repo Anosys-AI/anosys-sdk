@@ -84,6 +84,12 @@ class AnosysHttpExporter(SpanExporter):
 
                 logger.debug("Exporting span from: %s | Name: %s", data.get("cvs200"), data.get("otel_name"))
 
+                from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
+                level = FULL if _capture_content else METADATA
+                val = consent_value(level)
+                data[CONSENT_FIELD] = val
+                data[CONSENT_COLUMN] = val
+
                 data = encrypt_payload(data)
                 # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
                 response = post_record(_log_api_url, data, timeout=5)

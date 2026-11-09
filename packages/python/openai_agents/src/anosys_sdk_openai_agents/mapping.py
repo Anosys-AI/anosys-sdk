@@ -5,6 +5,7 @@ Provides functions to transform agent spans into the format expected by AnoSys.
 """
 
 import json
+import os
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -244,10 +245,16 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         },
     }
     
+    from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
+    dont_log = os.getenv("OPENAI_AGENTS_DONT_LOG_MODEL_DATA") == "True"
+    c_val = consent_value(METADATA if dont_log else FULL)
+
     result = {
         **base,
         "otel_kind": to_str_or_none(type_),
         "cvb1": True,
+        "cvs198": c_val,
+        "consent": c_val,
         "cvs199": json.dumps(span, default=str),
         "cvs200": "openAI_Agents_Traces"
     }

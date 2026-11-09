@@ -188,6 +188,18 @@ function filterFields(record, level, metadataFields) {
   return result;
 }
 
+/** Ensure record contains both consent and cvs198 with the active policy version. */
+function attachConsent(record, level = null) {
+  if (!level) {
+    const res = effectiveLevel();
+    level = res.level;
+  }
+  const val = consentValue(level);
+  record[CONSENT_FIELD] = val;
+  record[CONSENT_COLUMN] = val;
+  return record;
+}
+
 module.exports = {
   OFF,
   METADATA,
@@ -206,4 +218,5 @@ module.exports = {
   effectiveLevel,
   consentValue,
   filterFields,
+  attachConsent,
 };

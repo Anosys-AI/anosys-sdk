@@ -59,6 +59,12 @@ class AnosysHttpExporter(SpanExporter):
                 
                 # Remove null values and empty containers
                 cleaned_data = clean_nulls(data)
+                from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
+                dont_log = os.getenv("OPENAI_AGENTS_DONT_LOG_MODEL_DATA") == "True"
+                level = METADATA if dont_log else FULL
+                val = consent_value(level)
+                cleaned_data[CONSENT_FIELD] = val
+                cleaned_data[CONSENT_COLUMN] = val
                 encrypted_data = encrypt_payload(cleaned_data)
                 
                 # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
@@ -202,7 +208,6 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
                 hide_inputs=not capture_inputs,
                 hide_outputs=not capture_outputs,
                 hide_llm_invocation_parameters=not capture_parameters,
-                pii_redaction=pii_redaction
             )
             
             setup_tracing(self.log_api_url, use_batch_processor=use_batch_processor, config=config)
@@ -210,6 +215,8 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
         
         # Optional user context function
         self.get_user_context = get_user_context or (lambda: None)
+        self.capture_inputs = capture_inputs
+        self.capture_outputs = capture_outputs
     
     def _get_user_context_safe(self) -> Optional[Dict[str, Any]]:
         """Safely get user context."""
@@ -249,6 +256,13 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             # Transform and send
             transformed = span2json(payload)
             cleaned_transformed = clean_nulls(transformed)
+
+            from anosys_sdk_core.privacy import CONSENT_COLUMN, CONSENT_FIELD, FULL, METADATA, consent_value
+            level = FULL if (getattr(self, "capture_inputs", True) or getattr(self, "capture_outputs", True)) else METADATA
+            val = consent_value(level)
+            cleaned_transformed[CONSENT_FIELD] = val
+            cleaned_transformed[CONSENT_COLUMN] = val
+
             encrypted_transformed = encrypt_payload(cleaned_transformed)
             # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
             response = post_record(self.log_api_url, encrypted_transformed, timeout=5)

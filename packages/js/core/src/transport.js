@@ -37,6 +37,10 @@ function jsonSize(value) {
 
 /** The record if it fits, a copy with its largest strings truncated, or null (logged). */
 function fitRecord(record, limit = null) {
+  if (record && record.cvs198 === undefined && record.consent === undefined) {
+    const { attachConsent } = require('./privacy.js');
+    record = attachConsent({ ...record });
+  }
   const t = target(limit);
   if (jsonSize([record]) <= t) return record;
   const result = { ...record };

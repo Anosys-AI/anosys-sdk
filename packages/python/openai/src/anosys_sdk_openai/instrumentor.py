@@ -74,6 +74,9 @@ class AnosysHttpExporter(SpanExporter):
                 span_name = data.get("otel_name") or "unknown"
                 logger.debug("Exporting span from: %s | Name: %s", span_source, span_name)
 
+                from anosys_sdk_core.privacy import attach_consent
+                data = attach_consent(data)
+
                 data = encrypt_payload(data)
                 # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
                 response = post_record(_log_api_url, data, timeout=5)

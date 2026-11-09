@@ -40,6 +40,7 @@ exports.writeConsent = privacy.writeConsent;
 exports.effectiveLevel = privacy.effectiveLevel;
 exports.consentValue = privacy.consentValue;
 exports.filterFields = privacy.filterFields;
+exports.attachConsent = privacy.attachConsent;
 exports.SECRET_REPLACEMENT = redaction.SECRET_REPLACEMENT;
 exports.scrubSecrets = redaction.scrubSecrets;
 exports.DEFAULT_MAX_BATCH_BYTES = transport.DEFAULT_MAX_BATCH_BYTES;

@@ -248,3 +248,16 @@ def filter_fields(record: Dict[str, Any], level: str, metadata_fields: Iterable[
     result[CONSENT_FIELD] = val
     result[CONSENT_COLUMN] = val
     return result
+
+
+def attach_consent(record: Dict[str, Any], level: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Ensure record contains both ``consent`` and ``cvs198`` with the appropriate level.
+    """
+    if level is None:
+        level, _ = effective_level()
+    val = consent_value(level)
+    record[CONSENT_FIELD] = val
+    record[CONSENT_COLUMN] = val
+    return record
+

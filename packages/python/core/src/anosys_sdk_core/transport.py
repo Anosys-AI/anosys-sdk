@@ -65,6 +65,10 @@ def fit_record(record: Dict[str, Any], limit: Optional[int] = None) -> Optional[
     Return ``record`` if it fits in one request, a truncated copy if
     truncating its largest string fields makes it fit, or None (logged once).
     """
+    if record.get("cvs198") is None and record.get("consent") is None:
+        from anosys_sdk_core.privacy import attach_consent
+        record = attach_consent(dict(record))
+
     target = _target(limit)
     size = json_size([record])
     if size <= target:
