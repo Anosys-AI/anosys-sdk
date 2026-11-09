@@ -112,11 +112,10 @@ function removeHooksConfig(hooksPath) {
   return false;
 }
 
-function updateEnvConfig(envPath, { apiKey = '', endpointUrl = DEFAULT_INGESTION_URL, redaction = false } = {}) {
+function updateEnvConfig(envPath, { apiKey = '', endpointUrl = DEFAULT_INGESTION_URL } = {}) {
   const config = {
     ANOSYS_HOOK_APIKEY: apiKey,
     ANOSYS_HOOK_ENDPOINT_URL: endpointUrl,
-    REDACTION: redaction ? 'true' : 'false',
   };
   writeJsonAtomic(envPath, config);
   try {

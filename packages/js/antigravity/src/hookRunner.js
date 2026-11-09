@@ -4,30 +4,29 @@
 
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const http = require('http');
+const {
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields,
+  isPaused, scrubSecrets,
+} = require('anosys-sdk-core');
 const { GLOBAL_CONFIG_DIR, GLOBAL_ENV_FILE, DEFAULT_INGESTION_URL } = require('./constants');
 const { parseTranscript } = require('./transcript');
-const { transformAntigravityTurn } = require('./mapper');
+const { METADATA_FIELDS, transformAntigravityTurn } = require('./mapper');
 
 const STATE_DIR = path.join(GLOBAL_CONFIG_DIR, 'state');
 const PENDING_FILE = path.join(STATE_DIR, 'pending_records.jsonl');
+const PAUSE_FILE = path.join(STATE_DIR, 'anosys_paused.json');
 const LOG_FILE = path.join(STATE_DIR, 'anosys_hook.log');
+
+// Content fields scrubbed for secrets before sending at `full`
+const CONTENT_FIELDS = ['user_prompt', 'userPrompt', 'assistant_text', 'assistantText', 'cvs4', 'cvs5',
+  'commands', 'cvs90', 'cvs199', 'searched_queries', 'cvs77'];
 
 try {
   fs.mkdirSync(STATE_DIR, { recursive: true });
 } catch {}
 
-function log(level, message, ...args) {
-  const ts = new Date().toISOString();
-  const formatted = `[${ts}] [${level}] ${message} ${args.length ? JSON.stringify(args) : ''}\n`;
-  try {
-    fs.appendFileSync(LOG_FILE, formatted, 'utf-8');
-  } catch {}
-  if (level === 'ERROR' || process.env.ANOSYS_VERBOSE === 'true') {
-    process.stderr.write(formatted);
-  }
-}
+// The hook log records ids, sizes and status codes only, never prompts or payloads.
+const log = createHookLog(LOG_FILE);
 
 function loadEnvConfig(envPath = GLOBAL_ENV_FILE) {
   if (!fs.existsSync(envPath)) return;
@@ -42,7 +41,7 @@ function loadEnvConfig(envPath = GLOBAL_ENV_FILE) {
       }
     }
   } catch (err) {
-    log('WARN', `Failed to load env config from ${envPath}: ${err.message}`);
+    log('WARNING', `Failed to load env config from ${envPath}: ${err.name}`);
   }
 }
 
@@ -68,7 +67,6 @@ function getConfig() {
     ingestion_url: process.env.ANOSYS_HOOK_ENDPOINT_URL || DEFAULT_INGESTION_URL,
     api_key: process.env.ANOSYS_HOOK_APIKEY || process.env.ANOSYS_API_KEY || '',
     dry_run: (process.env.ANOSYS_HOOK_DRY_RUN || 'false').toLowerCase() === 'true',
-    redaction: (process.env.REDACTION || 'false').toLowerCase() === 'true',
   };
 }
 
@@ -95,128 +93,30 @@ function saveState(sessionId, state) {
     const sf = getSessionStateFile(sessionId);
     fs.writeFileSync(sf, JSON.stringify(state, null, 2), 'utf-8');
   } catch (err) {
-    log('ERROR', `Failed to save state for ${sessionId}: ${err.message}`);
+    log('ERROR', `Failed to save state for ${sessionId}: ${err.name}`);
   }
 }
 
-function loadPendingRecords() {
-  if (!fs.existsSync(PENDING_FILE)) return [];
-  const records = [];
-  try {
-    const lines = fs.readFileSync(PENDING_FILE, 'utf-8').split('\n');
-    for (let line of lines) {
-      line = line.trim();
-      if (line) {
-        records.push(JSON.parse(line));
-      }
-    }
-  } catch (err) {
-    log('ERROR', `Failed to load pending records: ${err.message}`);
-  }
-  return records;
-}
-
-function savePendingRecords(records, overwrite = false) {
-  try {
-    const mode = overwrite ? 'w' : 'a';
-    const content = records.map(r => JSON.stringify(r)).join('\n') + '\n';
-    if (overwrite) {
-      fs.writeFileSync(PENDING_FILE, content, 'utf-8');
-    } else {
-      fs.appendFileSync(PENDING_FILE, content, 'utf-8');
-    }
-  } catch (err) {
-    log('ERROR', `Failed to save pending records: ${err.message}`);
-  }
-}
-
-function clearPendingRecords() {
-  try {
-    if (fs.existsSync(PENDING_FILE)) {
-      fs.unlinkSync(PENDING_FILE);
-    }
-  } catch (err) {
-    log('ERROR', `Failed to clear pending records: ${err.message}`);
-  }
-}
-
-function postChunk(chunk, config) {
-  return new Promise((resolve) => {
-    if (config.dry_run) {
-      log('INFO', `[DRY RUN] Would POST ${chunk.length} records to ${config.ingestion_url}`);
-      return resolve({ success: true, records: chunk });
-    }
-
-    try {
-      const url = new URL(config.ingestion_url);
-      const dataStr = JSON.stringify(chunk);
-      const isHttps = url.protocol === 'https:';
-      const client = isHttps ? https : http;
-
-      const headers = {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(dataStr),
-        'User-Agent': 'anosys-antigravity-hook-js/0.1.0',
-      };
-      if (config.api_key) {
-        headers['anosys-apikey'] = config.api_key;
-        headers['x-api-key'] = config.api_key;
-      }
-
-      const req = client.request(
-        {
-          hostname: url.hostname,
-          port: url.port || (isHttps ? 443 : 80),
-          path: url.pathname + url.search,
-          method: 'POST',
-          headers,
-          timeout: 10000,
-        },
-        res => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            log('INFO', `Batch POST success — sent ${chunk.length} records`);
-            resolve({ success: true, records: chunk });
-          } else {
-            log('ERROR', `Batch POST failed with status ${res.statusCode}`);
-            resolve({ success: false, records: chunk });
-          }
-        }
-      );
-
-      req.on('error', err => {
-        log('ERROR', `Batch POST request error: ${err.message}`);
-        resolve({ success: false, records: chunk });
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        log('ERROR', 'Batch POST request timed out');
-        resolve({ success: false, records: chunk });
-      });
-
-      req.write(dataStr);
-      req.end();
-    } catch (err) {
-      log('ERROR', `Batch POST unexpected error: ${err.message}`);
-      resolve({ success: false, records: chunk });
-    }
-  });
-}
-
-async function postRecordsBatch(payloads, config) {
-  if (!payloads || payloads.length === 0) return [];
-  const failed = [];
-  const batchSize = 100;
-
-  for (let i = 0; i < payloads.length; i += batchSize) {
-    const chunk = payloads.slice(i, i + batchSize);
-    const res = await postChunk(chunk, config);
-    if (!res.success) {
-      failed.push(...chunk);
+/** Apply the collection level, scrub secrets at `full`, then encrypt. */
+function prepareRecord(mapped, level) {
+  const record = filterFields(mapped, level, METADATA_FIELDS);
+  if (level === FULL) {
+    for (const field of CONTENT_FIELDS) {
+      if (record[field] !== undefined && record[field] !== null) record[field] = scrubSecrets(record[field]);
     }
   }
+  return encryptPayload(record);
+}
 
-  return failed;
+/** Deliver records (and queued retries) within the size limit. Resolves to the count accepted. */
+async function send(records, config, options = {}) {
+  if (config.dry_run) {
+    log('INFO', `[DRY RUN] Would send ${records.length} record(s)`);
+    return records.length;
+  }
+  const headers = { 'Content-Type': 'application/json' };
+  if (config.api_key) headers['anosys-apikey'] = config.api_key;
+  return deliver(config.ingestion_url, records, new PendingQueue(PENDING_FILE), PAUSE_FILE, { headers, ...options });
 }
 
 function readStdin() {
@@ -240,7 +140,7 @@ function printResponse() {
   process.stdout.write(JSON.stringify({}) + '\n');
 }
 
-async function processTurns(eventName, inputJson, config) {
+async function processTurns(eventName, inputJson, config, level = 'metadata') {
   const cfg = config || getConfig();
   const transcriptPath = inputJson.transcriptPath;
   if (!transcriptPath) {
@@ -251,7 +151,7 @@ async function processTurns(eventName, inputJson, config) {
   const sessionId = inputJson.conversationId || path.basename(path.dirname(transcriptPath)) || 'unknown_session';
   const turns = parseTranscript(transcriptPath);
   if (!turns || turns.length === 0) {
-    log('INFO', `No turns parsed from transcript: ${transcriptPath}`);
+    log('INFO', `No turns parsed from the transcript of session ${sessionId}`);
     return;
   }
 
@@ -285,28 +185,22 @@ async function processTurns(eventName, inputJson, config) {
       turn,
       sessionId,
       turnId,
-      hookMeta,
-      cfg.redaction
+      hookMeta
     );
 
-    recordsToSend.push(payload);
+    recordsToSend.push(prepareRecord(payload, level));
     turnIndicesEmitted.push(i);
     processedTurns.push(turnId);
   }
 
   if (recordsToSend.length > 0) {
-    const failed = await postRecordsBatch(recordsToSend, cfg);
-    if (failed.length > 0) {
-      log('WARN', `Saving ${failed.length} failed records to pending queue`);
-      savePendingRecords(failed);
-    } else {
-      const maxIdx = Math.max(...turnIndicesEmitted);
-      log('INFO', `Successfully emitted ${recordsToSend.length} turns up to index ${maxIdx}`);
-      state.last_emitted_turn = maxIdx;
-      state.processed_turns = processedTurns;
-      state.last_updated = new Date().toISOString();
-      saveState(sessionId, state);
-    }
+    // Failed records go to the bounded queue; turns are marked processed either way
+    const sent = await send(recordsToSend, cfg);
+    log('INFO', `Session ${sessionId} at '${level}': ${recordsToSend.length} turn(s), ${sent} accepted`);
+    state.last_emitted_turn = Math.max(...turnIndicesEmitted);
+    state.processed_turns = processedTurns.slice(-500);
+    state.last_updated = new Date().toISOString();
+    saveState(sessionId, state);
   }
 }
 
@@ -320,23 +214,16 @@ async function run() {
   }
 
   try {
-    const cfg = getConfig();
-    const pending = loadPendingRecords();
-    if (pending.length > 0) {
-      log('INFO', `Retrying ${pending.length} pending records...`);
-      const stillFailed = await postRecordsBatch(pending, cfg);
-      if (stillFailed.length === 0) {
-        clearPendingRecords();
-        log('INFO', 'Successfully flushed pending records.');
-      } else {
-        savePendingRecords(stillFailed, true);
-      }
+    const { level, source } = effectiveLevel();
+    if (level === OFF) {
+      log('INFO', `Collection is off (${source}); nothing sent`);
+    } else if (isPaused(PAUSE_FILE)) {
+      log('INFO', 'Collection paused after an authorization error; nothing sent');
+    } else {
+      await processTurns(eventName, await readStdin(), getConfig(), level);
     }
-
-    const inputJson = await readStdin();
-    await processTurns(eventName, inputJson, cfg);
   } catch (err) {
-    log('ERROR', `Hook runner error on ${eventName}: ${err.message}`);
+    log('ERROR', `Hook runner error on ${eventName}: ${err.name}`);
   } finally {
     printResponse();
   }
@@ -349,13 +236,15 @@ if (require.main === module) {
 module.exports = {
   run,
   processTurns,
+  prepareRecord,
+  send,
   loadState,
   saveState,
-  loadPendingRecords,
-  savePendingRecords,
-  clearPendingRecords,
-  postRecordsBatch,
   readStdin,
   printResponse,
   getConfig,
+  LOG_FILE,
+  PENDING_FILE,
+  PAUSE_FILE,
+  STATE_DIR,
 };

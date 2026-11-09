@@ -4,6 +4,7 @@
  */
 
 const readline = require('readline');
+const { cmdPrivacy, cmdPurge, effectiveLevel, printDoctor } = require('anosys-sdk-core');
 const {
   HOOK_NAME,
   HOOK_COMMAND,
@@ -71,16 +72,6 @@ async function cmdInstall(args) {
   const hooksPath = getHooksPath(workspace);
   const envPath = getEnvPath(workspace);
 
-  let redaction = Boolean(args.redaction);
-  if (!redaction && !args.noRedaction) {
-    if (yes) {
-      redaction = false;
-    } else {
-      const choice = (await promptUser('Enable content redaction? (y/N): ')).toLowerCase();
-      redaction = choice === 'y';
-    }
-  }
-
   let apiKey = args.apiKey
     || (args._[1] && !args._[1].startsWith('-') ? args._[1] : null)
     || process.env.ANOSYS_HOOK_APIKEY
@@ -112,7 +103,7 @@ async function cmdInstall(args) {
     console.log(`\nUpdating ${hooksPath} ...`);
     const backupPath = backup(hooksPath);
     updateHooksConfig(hooksPath, HOOK_COMMAND);
-    updateEnvConfig(envPath, { apiKey, endpointUrl, redaction });
+    updateEnvConfig(envPath, { apiKey, endpointUrl });
 
     if (backupPath) {
       console.log(`  Backed up original settings -> ${backupPath}`);
@@ -123,8 +114,11 @@ async function cmdInstall(args) {
       const masked = apiKey.length > 4 ? '*'.repeat(apiKey.length - 4) + apiKey.slice(-4) : '****';
       console.log(`  Logs API key: ${masked}`);
     }
-    console.log(`  Redaction: ${redaction ? 'enabled' : 'disabled'}`);
-    console.log('\n✅ Antigravity hook installed successfully.\n');
+    const { level, source } = effectiveLevel();
+    console.log(`  Collecting: ${level} (from ${source})`);
+    console.log('\n✅ Antigravity hook installed successfully.');
+    console.log('\nBy default only metadata is sent (no prompts, answers, commands or files).');
+    console.log('To send full content, accept the data-collection policy: anosys-antigravity privacy full\n');
   } else {
     console.log('\n================================================================');
     console.log(`Add the following to your ${hooksPath} file:`);
@@ -139,7 +133,6 @@ async function cmdInstall(args) {
     const envSample = {
       ANOSYS_HOOK_APIKEY: apiKey,
       ANOSYS_HOOK_ENDPOINT_URL: endpointUrl,
-      REDACTION: redaction ? 'true' : 'false',
     };
     console.log(JSON.stringify(envSample, null, 2));
     console.log('================================================================\n');
@@ -187,6 +180,8 @@ function cmdStatus(args) {
   const data = loadJson(hooksPath);
   if (hasAnosysHook(data)) {
     console.log('\nStatus: ✅ Installed and active in hooks.json');
+    const { level, source } = effectiveLevel();
+    console.log(`Collecting: ${level} (from ${source})`);
     const block = data[HOOK_NAME] || {};
     console.log(`Events configured: ${Object.keys(block).join(', ')}`);
   } else {
@@ -223,8 +218,6 @@ Arguments:
 Options:
   --api-key <key>       AnoSys logs API key (flag)
   -y, --yes             Automatic yes to prompts (non-interactive mode)
-  --redaction           Enable content redaction
-  --no-redaction        Disable content redaction
   --workspace           Target workspace .agents/hooks.json
   --endpoint-url <url>  Custom ingestion endpoint URL
   -h, --help            Show this help message
@@ -267,6 +260,24 @@ Options:
     case 'status':
       cmdStatus(args);
       break;
+    case 'privacy':
+      process.exit(await cmdPrivacy('anosys-antigravity', argv.slice(1)));
+      break;
+    case 'purge': {
+      const h = require('./hookRunner');
+      process.exit(await cmdPurge([h.PENDING_FILE, h.LOG_FILE, `${h.LOG_FILE}.1`, `${h.LOG_FILE}.2`, h.PAUSE_FILE], argv.slice(1)));
+      break;
+    }
+    case 'doctor': {
+      const h = require('./hookRunner');
+      const hooksPath = getHooksPath(Boolean(args.workspace));
+      const data = loadJson(hooksPath);
+      printDoctor('anosys-antigravity', ['anosys-antigravity'],
+        hasAnosysHook(data) ? JSON.stringify(data[HOOK_NAME]) : null,
+        { hooks: hooksPath, 'env file': getEnvPath(Boolean(args.workspace)), state: h.STATE_DIR,
+          'pending queue': h.PENDING_FILE, log: h.LOG_FILE });
+      break;
+    }
     case 'run': {
       const { run } = require('./hookRunner');
       await run();
@@ -280,13 +291,14 @@ Commands:
   install [api_key]    Install AnoSys hook into hooks.json
   uninstall            Remove AnoSys hook from hooks.json
   status               Check hook installation status
+  privacy [level]      Show or change what is collected (off | metadata | full)
+  doctor               Show the active hook and local files
+  purge                Delete local queued records and logs
   run [event]          Execute hook handler
 
 Options:
   --api-key <key>       AnoSys API key (or pass as positional argument)
   -y, --yes             Automatic yes to prompts
-  --redaction           Enable content redaction
-  --no-redaction        Disable content redaction
   --workspace           Target workspace .agents/hooks.json
   --endpoint-url <url>  Custom ingestion endpoint URL
   -h, --help            Show this help message

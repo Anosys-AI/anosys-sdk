@@ -8,7 +8,20 @@ const os = require('os');
 const { INTEGRATION_VERSION } = require('./constants');
 
 const OS_USER = process.env.USERNAME || process.env.USER || 'unknown';
-const REDACTION = (process.env.REDACTION || 'false').toLowerCase() === 'true';
+const { BASE_METADATA_FIELDS } = require('anosys-sdk-core');
+
+// Fields sent at the `metadata` level (same list as the Python hook). Content (prompts,
+// answers, commands, viewed/written paths, queries, subagent tasks, errors, the active
+// document and the raw turn in cvs199) is `full`-only.
+const METADATA_FIELDS = new Set([
+  ...BASE_METADATA_FIELDS,
+  'active_document_language', 'cursor_line', 'client_timestamp_iso', 'termination_reason',
+  'llm_step_count', 'fully_idle', 'execution_num', 'workspace_paths',
+  'cvs1', 'cvs2', 'cvs6', 'cvs9', 'cvs12', 'cvs13', 'cvs16', 'cvs17', 'cvs18', 'cvs19',
+  'cvs32', 'cvs33', 'cvs71', 'cvs72', 'cvs93',
+  'cvn1', 'cvn2', 'cvn3', 'cvn6', 'cvn7', 'cvn8', 'cvn25', 'cvn26', 'cvn27', 'cvn28', 'cvn39', 'cvn41',
+  'cvb1', 'cvb2', 'cvb3',
+]);
 
 function extractToolDetails(toolSteps) {
   const toolsUsed = [];
@@ -101,17 +114,11 @@ function extractToolDetails(toolSteps) {
   };
 }
 
-function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata, redact) {
-  const doRedact = typeof redact === 'boolean' ? redact : REDACTION;
+function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
   const meta = hookMetadata || {};
 
-  let userPrompt = String(turn.user_input || '');
-  let assistantText = String(turn.final_response || '');
-
-  if (doRedact) {
-    userPrompt = '[REDACTED]';
-    assistantText = '[REDACTED]';
-  }
+  const userPrompt = String(turn.user_input || '');
+  const assistantText = String(turn.final_response || '');
 
   const model = turn.model_name || meta.modelName || meta.model || 'gemini-2.5-pro';
 
@@ -131,14 +138,7 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata, redact)
   const toolSteps = turn.tool_steps || [];
   const toolDetails = extractToolDetails(toolSteps);
 
-  const toolStepsClean = toolSteps.map(tc => {
-    const entry = { ...tc };
-    if (doRedact) {
-      entry.args = '[REDACTED]';
-      entry.output = '[REDACTED]';
-    }
-    return entry;
-  });
+  const toolStepsClean = toolSteps.map(tc => ({ ...tc }));
 
   const rawData = {
     turn: {
@@ -155,19 +155,8 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata, redact)
     },
   };
 
-  let rawToSerialize = rawData;
-  if (doRedact) {
-    try {
-      let rawStr = JSON.stringify(rawData);
-      const origPrompt = String(turn.user_input || '');
-      const origResp = String(turn.final_response || '');
-      if (origPrompt) rawStr = rawStr.split(origPrompt).join('[REDACTED]');
-      if (origResp) rawStr = rawStr.split(origResp).join('[REDACTED]');
-      rawToSerialize = JSON.parse(rawStr);
-    } catch {
-      rawToSerialize = rawData;
-    }
-  }
+  const rawToSerialize = rawData;
+
 
   const terminationReason = meta.terminationReason || null;
   const errorObj = meta.error || null;
@@ -293,6 +282,7 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata, redact)
 }
 
 module.exports = {
+  METADATA_FIELDS,
   extractToolDetails,
   transformAntigravityTurn,
 };

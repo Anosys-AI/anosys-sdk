@@ -23,11 +23,15 @@ test('workspace credentials work from a subdirectory and respect environment ove
   const env = { ...process.env, HOME: home };
   for (const key of ['ANOSYS_HOOK_APIKEY', 'ANOSYS_API_KEY', 'REDACTION']) delete env[key];
   const modulePath = require.resolve('../src/hookRunner');
-  const code = `console.log(JSON.stringify(require(${JSON.stringify(modulePath)}).getConfig()))`;
+  const corePath = require.resolve('anosys-sdk-core');
+  const code = `const { effectiveLevel } = require(${JSON.stringify(corePath)});
+    console.log(JSON.stringify({ ...require(${JSON.stringify(modulePath)}).getConfig(), level: effectiveLevel() }))`;
+  env.ANOSYS_CONSENT_FILE = path.join(root, 'consent.json');
   for (const override of [null, 'environment-key']) {
     if (override) env.ANOSYS_HOOK_APIKEY = override;
     const config = JSON.parse(execFileSync(process.execPath, ['-e', code], { env, cwd, encoding: 'utf8' }));
     assert.equal(config.api_key, override || 'workspace-key');
-    assert.equal(config.redaction, true);
+    // a saved REDACTION=true still means metadata only
+    assert.deepEqual(config.level, { level: 'metadata', source: 'REDACTION' });
   }
 });

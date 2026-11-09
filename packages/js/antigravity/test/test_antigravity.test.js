@@ -201,21 +201,6 @@ test('mapper.transformAntigravityTurn matches AnoSys schema', () => {
   assert.equal(payload.cvs200, 'AntigravityHook');
 });
 
-test('mapper.transformAntigravityTurn handles content redaction', () => {
-  const turn = {
-    user_input: 'Top secret secret_key_456',
-    final_response: 'Stored secret_key_456 safely.',
-    tool_steps: [],
-  };
-
-  const payload = transformAntigravityTurn(turn, 'c1', 'c1_0', {}, true);
-  assert.equal(payload.user_prompt, '[REDACTED]');
-  assert.equal(payload.assistant_text, '[REDACTED]');
-  assert.equal(payload.cvs4, '[REDACTED]');
-  assert.equal(payload.cvs5, '[REDACTED]');
-  assert.ok(!payload.cvs199.includes('secret_key_456'));
-});
-
 test('installer manages hooks.json lifecycle idempotently and preserves existing hooks', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-hooks-'));
   const hooksFile = path.join(tmpDir, 'hooks.json');
@@ -246,11 +231,12 @@ test('installer manages anosys-env.json lifecycle', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-env-'));
   const envFile = path.join(tmpDir, 'anosys-env.json');
 
-  updateEnvConfig(envFile, { apiKey: 'key-123', endpointUrl: 'https://test/ingest', redaction: true });
+  updateEnvConfig(envFile, { apiKey: 'key-123', endpointUrl: 'https://test/ingest' });
   const data = JSON.parse(fs.readFileSync(envFile, 'utf-8'));
   assert.equal(data.ANOSYS_HOOK_APIKEY, 'key-123');
   assert.equal(data.ANOSYS_HOOK_ENDPOINT_URL, 'https://test/ingest');
-  assert.equal(data.REDACTION, 'true');
+  assert.equal(data.REDACTION, undefined);
+  assert.equal(fs.statSync(envFile).mode & 0o777, 0o600);
 
   assert.equal(removeEnvConfig(envFile), true);
   assert.equal(fs.existsSync(envFile), false);

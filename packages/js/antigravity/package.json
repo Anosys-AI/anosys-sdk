@@ -1,7 +1,7 @@
 {
   "name": "anosys-sdk-antigravity",
-  "version": "0.1.0",
-  "description": "AnoSys observability hook for Google Antigravity CLI/IDE — automatic instrumentation and logging",
+  "version": "0.2.0",
+  "description": "AnoSys observability hook for Google Antigravity CLI/IDE \u2014 automatic instrumentation and logging",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
   "homepage": "https://anosys.ai",
@@ -34,5 +34,8 @@
   ],
   "scripts": {
     "test": "node --test"
+  },
+  "dependencies": {
+    "anosys-sdk-core": "^2.0.0"
   }
 }
