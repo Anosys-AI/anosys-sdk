@@ -60,7 +60,7 @@ describe('decorators.anosysLogger', () => {
 });
 
 import {
-  derive256BitKey,
+  deriveKeys,
   encrypt,
   decrypt,
   encryptPayload,
@@ -71,119 +71,28 @@ import {
 } from '../src/encryption.js';
 
 describe('encryption', () => {
-  it('matches cross-platform AES-256-CBC test vector exactly', () => {
-    const key = derive256BitKey('YOUR_SECRET_KEY_HERE');
-    const ciphertext = encrypt('Hello from AnoSys Technologies!', key);
-    const prefixed = ANOSYS_ENCRYPTION_PREFIX + ciphertext;
-
-    assert.equal(
-      prefixed,
-      'enc:J+0Ntn9F5hhtKSBGTFZPce61f8zwRKwrp7bNpwp2Cw4='
-    );
-    assert.equal(decrypt(prefixed, key), 'Hello from AnoSys Technologies!');
-    assert.equal(decrypt(ciphertext, key), 'Hello from AnoSys Technologies!');
+  it('re-exports the enc2 implementation from anosys-sdk-core', () => {
+    const keys = deriveKeys('YOUR_SECRET_KEY_HERE', 'workspace-123');
+    const value = encrypt('Hello from AnoSys Technologies!', keys);
+    assert.equal(value, 'enc2:QwYbSu12pZL4oSf17Bb5zJUkGjoRc3wL66HwlsbjlJ5sLJWIHWGlgz7f+PXh4yem/EvB20sQjSg+R4A=');
+    assert.equal(decrypt(value, keys), 'Hello from AnoSys Technologies!');
+    assert.equal(ANOSYS_ENCRYPTION_PREFIX, 'enc2:');
+    assert.ok(DEFAULT_ENCRYPTED_COLUMNS.includes('cvs199'));
   });
 
-  it('noop when ANOSYS_ENCRYPTION_KEY is not set', () => {
-    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-    delete process.env.ANOSYS_ENCRYPTION_KEY;
+  it('encrypts default columns when key is set and leaves others', () => {
+    const prev = { key: process.env.ANOSYS_ENCRYPTION_KEY, salt: process.env.ANOSYS_ENCRYPTION_SALT };
+    process.env.ANOSYS_ENCRYPTION_KEY = 'pass';
+    process.env.ANOSYS_ENCRYPTION_SALT = 'ws';
     try {
-      const payload = { llm_input: 'hello', cvs199: 'raw' };
-      const res = encryptPayload(payload);
-      assert.deepEqual(res, payload);
+      assert.ok(getEncryptionKey());
+      const out = encryptPayload({ cvs199: 'raw', session_id: 'sess-1' });
+      assert.ok(out.cvs199.startsWith('enc2:'));
+      assert.equal(out.session_id, 'sess-1');
+      assert.ok(getTargetColumns().has('cvs199'));
     } finally {
-      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    }
-  });
-
-  it('encrypts default columns when key is set', () => {
-    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-    process.env.ANOSYS_ENCRYPTION_KEY = 'secret-123';
-    try {
-      const payload = {
-        llm_input: 'Tell me a joke',
-        llm_output: 'Why did the chicken cross the road?',
-        session_id: 'sess-abc',
-        cvs199: '{"span":"data"}',
-      };
-      const res = encryptPayload(payload);
-      assert.ok(res.llm_input.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-      assert.ok(res.llm_output.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-      assert.ok(res.cvs199.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-      assert.equal(res.session_id, 'sess-abc');
-
-      const key = derive256BitKey('secret-123');
-      assert.equal(decrypt(res.llm_input, key), 'Tell me a joke');
-      assert.equal(decrypt(res.llm_output, key), 'Why did the chicken cross the road?');
-      assert.equal(decrypt(res.cvs199, key), '{"span":"data"}');
-    } finally {
-      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-      else delete process.env.ANOSYS_ENCRYPTION_KEY;
-    }
-  });
-
-  it('supports ANOSYS_ENCRYPTED_COLUMNS and typo alias ANOSYS_ENCRYPTES_COLUMNS override', () => {
-    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-    const oldCols = process.env.ANOSYS_ENCRYPTES_COLUMNS;
-    process.env.ANOSYS_ENCRYPTION_KEY = 'secret-123';
-    process.env.ANOSYS_ENCRYPTES_COLUMNS = 'custom_field, other_field';
-    try {
-      const payload = {
-        llm_input: 'not encrypted now',
-        custom_field: 'secret data',
-        other_field: 'more secret data',
-      };
-      const res = encryptPayload(payload);
-      assert.equal(res.llm_input, 'not encrypted now');
-      assert.ok(res.custom_field.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-      assert.ok(res.other_field.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    } finally {
-      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-      else delete process.env.ANOSYS_ENCRYPTION_KEY;
-      if (oldCols) process.env.ANOSYS_ENCRYPTES_COLUMNS = oldCols;
-      else delete process.env.ANOSYS_ENCRYPTES_COLUMNS;
-    }
-  });
-
-  it('warns on non-string column and skips encryption', () => {
-    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-    process.env.ANOSYS_ENCRYPTION_KEY = 'secret-123';
-    let warned = false;
-    const originalWarn = console.warn;
-    console.warn = (...args) => {
-      warned = true;
-      originalWarn(...args);
-    };
-    try {
-      const payload = {
-        llm_input: 12345,
-        cvs199: { complex: 'object' },
-      };
-      const res = encryptPayload(payload);
-      assert.equal(res.llm_input, 12345);
-      assert.deepEqual(res.cvs199, { complex: 'object' });
-      assert.ok(warned);
-    } finally {
-      console.warn = originalWarn;
-      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-      else delete process.env.ANOSYS_ENCRYPTION_KEY;
-    }
-  });
-
-  it('is idempotent and does not re-encrypt already encrypted fields', () => {
-    const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-    process.env.ANOSYS_ENCRYPTION_KEY = 'secret-123';
-    try {
-      const payload = {
-        llm_input: 'Hello',
-      };
-      const res1 = encryptPayload(payload);
-      const firstCipher = res1.llm_input;
-      const res2 = encryptPayload(res1);
-      assert.equal(res2.llm_input, firstCipher);
-    } finally {
-      if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-      else delete process.env.ANOSYS_ENCRYPTION_KEY;
+      if (prev.key === undefined) delete process.env.ANOSYS_ENCRYPTION_KEY; else process.env.ANOSYS_ENCRYPTION_KEY = prev.key;
+      if (prev.salt === undefined) delete process.env.ANOSYS_ENCRYPTION_SALT; else process.env.ANOSYS_ENCRYPTION_SALT = prev.salt;
     }
   });
 });

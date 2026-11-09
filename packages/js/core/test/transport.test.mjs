@@ -96,3 +96,27 @@ describe('failure handling', () => {
     assert.deepEqual(new PendingQueue(path.join(d, 'old.jsonl')).load(), []);
   });
 });
+
+describe('encrypted values and single-record posts', () => {
+  it('replaces an encrypted value whole instead of cutting the ciphertext', async () => {
+    const { deriveKeys, encrypt, decrypt } = await import('../src/encryption.js');
+    const keys = deriveKeys('pass', 'ws');
+    const out = fitRecord({ cvs199: encrypt('x'.repeat(5000), keys), user_prompt: encrypt('keep me', keys) }, 3000);
+    assert.ok(out.cvs199.startsWith('[truncated: original'));
+    assert.equal(decrypt(out.user_prompt, keys), 'keep me');
+  });
+
+  it('postRecord fits the record under the limit before posting', async () => {
+    const { postRecord } = await import('../src/transport.js');
+    const bodies = [];
+    const post = async (url, body) => { bodies.push(body); return { status: 200 }; };
+    process.env.ANOSYS_MAX_BATCH_BYTES = '2048';
+    try {
+      const res = await postRecord('u', { cvs199: 'y'.repeat(5000), a: 1 }, { post });
+      assert.equal(res.status, 200);
+      assert.ok(bodies[0].cvs199.includes('truncated') && bodies[0].a === 1);
+    } finally {
+      delete process.env.ANOSYS_MAX_BATCH_BYTES;
+    }
+  });
+});

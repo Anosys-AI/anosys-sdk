@@ -51,6 +51,7 @@ exports.chunkRecords = transport.chunkRecords;
 exports.pauseCollection = transport.pauseCollection;
 exports.isPaused = transport.isPaused;
 exports.sendRecords = transport.sendRecords;
+exports.postRecord = transport.postRecord;
 exports.deliver = transport.deliver;
 exports.PendingQueue = transport.PendingQueue;
 exports.POLICY_SUMMARY = hookCli.POLICY_SUMMARY;

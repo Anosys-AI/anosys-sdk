@@ -8,6 +8,7 @@ import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { extractSpanInfo } from './hooks.js';
 import { encryptPayload } from './encryption.js';
+import { fitRecord } from 'anosys-sdk-core';
 
 let _logApiUrl = DEFAULT_API_URL;
 let _tracingInitialized = false;
@@ -41,7 +42,9 @@ export class AnosysHttpExporter {
         log.debug('Exporting span from: %s | Name: %s', spanSource, spanName);
 
         const payloadToSend = encryptPayload(data);
-        await axios.post(_logApiUrl, payloadToSend, { timeout: 5000 });
+        // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
+        const fitted = fitRecord(payloadToSend);
+        if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });
 
       } catch (e) {
         if (e.response) {

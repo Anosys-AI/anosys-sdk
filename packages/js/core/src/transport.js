@@ -49,6 +49,11 @@ function fitRecord(record, limit = null) {
     if (excess <= 0) break;
     const value = result[key];
     const mark = `...[truncated: original ${Buffer.byteLength(value, 'utf8')} bytes]`;
+    if (value.startsWith('enc2:') || value.startsWith('"enc2:')) {
+      // a cut ciphertext cannot be decrypted: replace the whole value
+      result[key] = mark.replace(/^\.+/, '');
+      continue;
+    }
     const keep = Math.max(0, value.length - excess - mark.length - 64);
     result[key] = value.slice(0, keep) + mark;
   }
@@ -58,6 +63,17 @@ function fitRecord(record, limit = null) {
   }
   log.warn(`Dropped a record that does not fit in ${t} bytes even after truncation`);
   return null;
+}
+
+/**
+ * POST one already-encrypted record, fitted under the size limit. Resolves to
+ * the response, or null when the record had to be dropped. Used by the
+ * application SDKs, which send one span or call per request.
+ */
+async function postRecord(url, record, { timeout = 5, headers = {}, post = defaultPost } = {}) {
+  const fitted = fitRecord(record);
+  if (fitted === null) return null;
+  return post(url, fitted, headers, timeout);
 }
 
 /** Split records into request bodies under the byte limit. */
@@ -222,6 +238,7 @@ async function deliver(url, records, queue, pauseMarker, options = {}) {
 }
 
 module.exports = {
+  postRecord,
   DEFAULT_MAX_BATCH_BYTES,
   PERMANENT_STATUS,
   isPermanent,

@@ -8,6 +8,7 @@ import { setupApi } from './decorators.js';
 import { spanToJson } from './genai.js';
 import { extractSpanInfo, isAnthropicSpan } from './hooks.js';
 import { encryptPayload } from './encryption.js';
+import { fitRecord } from 'anosys-sdk-core';
 
 // Read by the Anthropic SDK when a client is constructed
 export const CONTENT_MODE_ENV = 'ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE';
@@ -67,7 +68,9 @@ export class AnosysHttpExporter {
 
         const payloadToSend = encryptPayload(data);
         await _logApiUrlReady;
-        await axios.post(_logApiUrl, payloadToSend, { timeout: 5000 });
+        // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
+        const fitted = fitRecord(payloadToSend);
+        if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });
       } catch (e) {
         if (e.response) {
           log.error('HTTP export failed (%d): %s', e.response.status, e.message);

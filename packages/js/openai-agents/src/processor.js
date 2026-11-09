@@ -9,6 +9,7 @@ import { setupApi } from './decorators.js';
 import { span2json, extractOtelSpanInfo } from './mapping.js';
 import { safeSerialize, cleanNulls } from './utils.js';
 import { encryptPayload } from './encryption.js';
+import { fitRecord } from 'anosys-sdk-core';
 
 let _logApiUrl = DEFAULT_API_URL;
 let _tracingInitialized = false;
@@ -31,7 +32,9 @@ export class AnosysHttpExporter {
         log.debug('Exporting span from: %s | Name: %s', spanSource, spanName);
 
         const payloadToSend = encryptPayload(cleaned);
-        await axios.post(_logApiUrl, payloadToSend, { timeout: 5000 });
+        // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
+        const fitted = fitRecord(payloadToSend);
+        if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });
         log.debug('Successfully sent: %s | %s', spanSource, spanName);
 
       } catch (e) {
@@ -154,7 +157,9 @@ export class AnosysOpenAIAgentsLogger {
 
       const transformed = span2json(payload);
       const payloadToSend = encryptPayload(transformed);
-      await axios.post(this._logApiUrl, payloadToSend, { timeout: 5000 });
+      // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
+      const fitted = fitRecord(payloadToSend);
+      if (fitted) await axios.post(this._logApiUrl, fitted, { timeout: 5000 });
 
     } catch (e) {
       log.error('Error logging trace:', e.message);
