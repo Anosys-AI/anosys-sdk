@@ -5,9 +5,12 @@
 | Integration | Content control | Encryption |
 | --- | --- | --- |
 | Claude Code, Codex, Antigravity hooks | Collection levels `off` / `metadata` (default) / `full` after accepting [PRIVACY.md](PRIVACY.md): `<tool> privacy` | Content fields, before sending |
-| OpenAI and OpenAI Agents | Review what each instrumentor captures | Selected fields, before sending |
-| Anthropic API | `capture_content=False` / `captureContent: false`; pass the supplied OpenTelemetry options helper to clients | Selected fields, before sending |
-| Claude Agent SDK | `capture_content=False` / `captureContent: false` | Selected fields, before sending |
+| OpenAI (including OpenRouter through the OpenAI SDK) and OpenAI Agents | One collection level (below); `capture_content` / `captureContent`, OpenAI Agents `capture_inputs` / `capture_outputs` / `capture_parameters` | Selected fields, before sending |
+| Anthropic API | Same level; `capture_content=False` / `captureContent: false`; pass the supplied OpenTelemetry options helper to clients | Selected fields, before sending |
+| Claude Agent SDK | Same level; `capture_content=False` / `captureContent: false` | Selected fields, before sending |
+| Decorators and `AnosysClient` | Same level | Selected fields, before sending |
+
+[PRIVACY.md](PRIVACY.md) is the policy; this page is the technical reference.
 
 The old `REDACTION=true` setting and the installers' `--redaction` flags still
 work: they mean `metadata`.
@@ -81,7 +84,21 @@ under `ANOSYS_MAX_BATCH_BYTES` (default `10000000`, measured after encryption):
 The hooks retry only transient failures (timeouts, connection errors, 408, 429,
 5xx), from a local queue that keeps records at most 24 hours, 5 attempts and
 50 MB. Responses 400, 401, 403, 404, 413 and 422 are not retried; 401 and 403
-also pause collection for 6 hours.
+also pause collection for 6 hours. A hook run spends at most
+`ANOSYS_HOOK_TIME_BUDGET` seconds sending (default 20); after a timeout or
+connection error the rest is queued at once instead of waiting out the timeout for
+each request. Concurrent hook runs take turns on the queue (a lock file next to it,
+broken after 120 s if stale); a run that cannot get the queue sends only its own
+records. A hook never fails the coding tool: errors are logged by type and the
+hook exits normally, also when the home folder is read-only.
+
+The application SDKs never make the instrumented call wait: records are sent in the
+background from a bounded in-memory queue (1,000 records in Python, 64 requests in
+flight in JavaScript). When it is full, records are dropped with one warning;
+nothing is written to disk or retried. Errors are logged by type only.
+
+Without `ANOSYS_API_KEY` (or when the key cannot be resolved) nothing is sent. To
+send to a self-hosted endpoint without a key, set `ANOSYS_API_URL`.
 
 ## Encryption
 

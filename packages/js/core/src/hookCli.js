@@ -23,6 +23,9 @@ At \`metadata\` (the default) only ids, timestamps, models, token and cost
 numbers, durations, tool names, project/branch names and your OS username
 are sent. Set ANOSYS_ENCRYPTION_KEY to encrypt content so only your browser
 can read it. Each record carries the level and policy version you chose.
+The data goes to your organisation's AnoSys workspace, which decides how long
+it is kept. You can go back with \`privacy metadata\` or \`privacy off\` at any
+time; that applies to new records, not to data already sent.
 `;
 
 const LOG_MAX_BYTES = 5000000;
