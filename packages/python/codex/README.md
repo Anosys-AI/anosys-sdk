@@ -11,35 +11,47 @@ pip install anosys-codex
 anosys-codex install
 ```
 
-The installer asks for an ingestion key from an AnoSys Claude Code & Codex CLI (CC) endpoint, content redaction, and permission to update the user-level Codex configuration. It backs up the configuration and writes the ingestion key and redaction choice to $CODEX_HOME/anosys-env.sh. CODEX_HOME defaults to ~/.codex.
+The installer asks for an ingestion key from an AnoSys Claude Code & Codex CLI (CC) endpoint and permission to update the user-level Codex configuration. It backs up the configuration and writes the ingestion key to $CODEX_HOME/anosys-env.sh (readable only by you). CODEX_HOME defaults to ~/.codex.
 
 For non-interactive setup:
 
 ```bash
-anosys-codex install --api-key "your-cc-endpoint-key" --redaction --auto-update --yes
+anosys-codex install --api-key "your-cc-endpoint-key" --auto-update --yes
 ```
 
 API-key validation produces a warning on failure; it does not prevent installation. Verify the endpoint key and delivery independently.
 
 ## Notification command
 
-Version 0.1.1 accepts the JSON argument that Codex appends to the notification command. The registered configuration is:
+The installer registers this Python interpreter by absolute path, so Codex can run the hook without activating a virtual environment:
 
 ```toml
-notify = ["anosys-codex", "run"]
+notify = ["/path/to/python", "-m", "anosys_sdk_codex.hook_runner"]
 ```
 
-Place notify at the top level of the user-level config.toml, before section headers. If the executable is installed in a virtual environment, use its absolute path so Codex can invoke it without activating that environment.
+If another notifier was already configured, it is kept and called after AnoSys (`--previous-notify`); uninstall restores it.
 
 Restart Codex and complete a CLI turn. Check $CODEX_HOME/state/anosys_hook.log for callback execution and delivery errors. The status command checks registration, not network delivery.
 
-Upgrade from version 0.1.0 with pip install --upgrade anosys-codex. Existing direct module notifications remain supported; the default CLI command no longer needs the old workaround. Saved redaction settings are now applied when mapping each turn.
+The notify callback is separate from lifecycle hooks displayed by /hooks. See the [official Codex notification documentation](https://learn.chatgpt.com/docs/config-file/config-advanced#notifications).
 
-The notify callback is separate from lifecycle hooks displayed by /hooks. See the [official Codex notification documentation](https://learn.chatgpt.com/docs/config-file/config-advanced#notifications). Preserve existing notification integrations separately: the installer can replace an existing notify command.
+## Privacy
+
+By default the hook sends metadata only: ids, timestamps, models, token and cost numbers, durations, tool names, and the project, branch and OS username. Prompts, answers, tool output, commands and file contents are sent only after you accept the [data-collection policy](../../../PRIVACY.md):
+
+```bash
+anosys-codex privacy          # show the current level and where it comes from
+anosys-codex privacy full     # read and accept the policy, then send full content
+anosys-codex privacy off      # keep the hook installed but send nothing
+anosys-codex doctor           # installed copies, the active hook and local files
+anosys-codex purge            # delete the local queue and logs
+```
+
+The hook reads only the session that just ended, never earlier history, and its log holds ids and sizes only. The old `--redaction` flag and `REDACTION=true` still work and mean `metadata`. See [content controls](../../../DATA_CONTROLS.md) for the 10 MB request limit, retries and encryption.
 
 ## Runtime behavior
 
-The runner finds a rollout file under $CODEX_HOME/sessions, maps the completed turn, and posts batches to https://api.anosys.ai/ingestion. Failed records are buffered in $CODEX_HOME/state/pending_records.jsonl and retried on later invocations.
+The runner finds a rollout file under $CODEX_HOME/sessions, maps the completed turn, and posts it to https://api.anosys.ai/ingestion in requests under 10 MB. Transient failures wait in $CODEX_HOME/state/pending_records.jsonl (at most 24 hours, 5 attempts, 50 MB); rejected requests are not retried.
 
 Token usage and cost depend on the transcript fields and the package's embedded pricing table. Treat cost as an estimate. This package targets local Codex CLI transcripts; do not assume that a desktop or cloud session invokes the same callback.
 
@@ -50,15 +62,16 @@ Token usage and cost depend on the transcript fields and the package's embedded 
 | ANOSYS_HOOK_APIKEY | Runtime ingestion key; also loaded from anosys-env.sh |
 | ANOSYS_API_KEY | Accepted by the installer as a source for the saved ingestion key |
 | ANOSYS_HOOK_ENDPOINT_URL | Ingestion URL override |
-| REDACTION | true to mask supported content fields |
+| ANOSYS_DISABLE | 1 to send nothing |
+| ANOSYS_COLLECTION_LEVEL | off, metadata or full (full still needs accepted consent) |
 | ANOSYS_ENCRYPTION_KEY | Enable selected-field encryption |
+| ANOSYS_ENCRYPTION_SALT | Workspace salt shown in the AnoSys console |
 | ANOSYS_ENCRYPTED_COLUMNS | Override the default encrypted columns |
+| ANOSYS_MAX_BATCH_BYTES | Request size limit (default 10000000) |
 | ANOSYS_HOOK_DRY_RUN | true to skip network submission |
 | CODEX_HOME | Codex configuration, session, and state directory |
 
-Version 0.1.1 reads the active REDACTION setting when mapping each turn, including settings loaded from anosys-env.sh.
-
-See [content controls](../../../DATA_CONTROLS.md) for encryption and redaction limitations. Dry-run mode is a network diagnostic; it does not confirm server ingestion.
+See [content controls](../../../DATA_CONTROLS.md) for encryption details. Dry-run mode is a network diagnostic; it does not confirm server ingestion.
 
 ## Commands
 

@@ -63,4 +63,4 @@ new AnosysOpenAILogger({
 
 ## Content controls
 
-See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, redaction, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.
+See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, size limits, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.

@@ -502,6 +502,16 @@ It captures agent turns, planner LLM steps (including Gemini reasoning/thinking)
 
 ---
 
+## 4e. Privacy fields on hook records (Claude Code, Codex, Antigravity)
+
+| Field | Type | Description |
+|---|---|---|
+| `consent` | string | Collection level and accepted policy version: `full;2026-11-09`, or `metadata;none` / `off;none`. Set on every hook record. |
+
+At `metadata` the hooks send only allow-listed fields (`BASE_METADATA_FIELDS` in `anosys-sdk-core` plus each integration's own list); everything else in the tables above is sent only at `full`. Encrypted values start with `enc2:`; in JSON columns they are stored as the JSON string `"enc2:..."`. See [PRIVACY.md](PRIVACY.md) and [DATA_CONTROLS.md](DATA_CONTROLS.md).
+
+---
+
 ## 5. Source Tag Values (`cvs200`)
 
 | Package | Path | `cvs200` value |

@@ -1,52 +1,111 @@
-# Content controls and encryption
+# Content controls, size limits and encryption
 
 ## Coverage
 
 | Integration | Content control | Encryption |
 | --- | --- | --- |
-| OpenAI and OpenAI Agents | Review the telemetry captured by each instrumentor | Selected fields through the shared Python core or JavaScript encryption module |
-| Anthropic API | `capture_content=False` / `captureContent: false`; pass the supplied OpenTelemetry options helper to clients | Selected fields before export |
-| Claude Agent SDK | `capture_content=False` / `captureContent: false` | Selected fields before export |
-| Claude Code and Codex CLI | Installer `--redaction` or runtime `REDACTION=true` | Selected fields before sending hook telemetry |
-| Antigravity 0.1.0 | Installer `--redaction` or runtime `REDACTION=true` | Not implemented in this version |
+| Claude Code, Codex, Antigravity hooks | Collection levels `off` / `metadata` (default) / `full` after accepting [PRIVACY.md](PRIVACY.md): `<tool> privacy` | Content fields, before sending |
+| OpenAI and OpenAI Agents | Review what each instrumentor captures | Selected fields, before sending |
+| Anthropic API | `capture_content=False` / `captureContent: false`; pass the supplied OpenTelemetry options helper to clients | Selected fields, before sending |
+| Claude Agent SDK | `capture_content=False` / `captureContent: false` | Selected fields, before sending |
 
-Redaction replaces supported content fields. It is not a general-purpose personal-data scanner and is separate from encryption. Review complete payloads before enabling collection for sensitive applications.
+The old `REDACTION=true` setting and the installers' `--redaction` flags still
+work: they mean `metadata`.
 
-## Enable encryption
+## Collection levels for the coding-agent hooks
 
-Set these variables in the process that runs the exporter:
+```bash
+anosys-claude-code privacy            # show the level and where it comes from
+anosys-claude-code privacy metadata   # ids, timing, models, tokens and cost only (default)
+anosys-claude-code privacy full       # prompts, answers, tool I/O; asks you to accept PRIVACY.md
+anosys-claude-code privacy off        # send nothing
+```
+
+The same commands exist for `anosys-codex` and `anosys-antigravity`. Other switches:
+
+| Setting | Effect |
+| --- | --- |
+| `ANOSYS_DISABLE=1` | Sends nothing, whatever else is set |
+| `.anosys` file with `level=off` or `level=metadata` | Lowers the level for that project and its subfolders |
+| `ANOSYS_COLLECTION_LEVEL=off\|metadata\|full` | Level for environments without the consent file; `full` still needs consent |
+| `ANOSYS_CONSENT_FILE` | Location of the consent file (default `~/.anosys/consent.json`) |
+
+Every hook record carries `consent` (`full;<policy version>` or `<level>;none`).
+
+At `metadata` only allow-listed fields leave the machine; a new upstream field is
+excluded until it is added to the list. At `full`, credential-shaped strings are
+replaced with `[SECRET]` on a best-effort basis.
+
+## Request size and retries
+
+AnoSys ingestion drops request bodies over 10 MB. Every package fits its requests
+under `ANOSYS_MAX_BATCH_BYTES` (default `10000000`, measured after encryption):
+
+- records are batched up to the limit;
+- a single record that is too large has its biggest content fields truncated
+  (raw record first), each marked `...[truncated: original N bytes]`; an
+  encrypted value is replaced whole, because cut ciphertext cannot be decrypted;
+- a record that still does not fit is dropped with one warning.
+
+The hooks retry only transient failures (timeouts, connection errors, 408, 429,
+5xx), from a local queue that keeps records at most 24 hours, 5 attempts and
+50 MB. Responses 400, 401, 403, 404, 413 and 422 are not retried; 401 and 403
+also pause collection for 6 hours.
+
+## Encryption
+
+Set these in the process that runs the SDK or hook:
 
 ```bash
 export ANOSYS_ENCRYPTION_KEY="your-secret-passphrase"
+export ANOSYS_ENCRYPTION_SALT="your-workspace-salt"   # shown in the AnoSys console
 # Optional: replaces the default selection
 export ANOSYS_ENCRYPTED_COLUMNS="llm_input,llm_output,cvs199"
 ```
 
-`ANOSYS_ENCRYPTION_KEY` enables encryption when non-empty. `ANOSYS_ENCRYPTED_COLUMNS` replaces the default selection; `ANOSYS_ENCRYPTES_COLUMNS` is accepted as a compatibility alias.
+For coding tools, variables set in a terminal do not reach an already-running GUI
+application; set them where the hook is launched. Never commit a passphrase.
 
-For coding tools, setting variables in a terminal does not configure an already-running GUI application. Provide them to the process that launches the hook. The Codex installer saves its ingestion key and redaction settings to `$CODEX_HOME/anosys-env.sh`; it does not prompt for or save an encryption passphrase. Do not commit credentials or passphrases to a repository.
+### Format (`enc2`)
 
-## Default fields
+- Keys: PBKDF2-HMAC-SHA256, 600,000 iterations, salt `anosys-enc2:<workspace salt>`,
+  64 bytes split into an encryption key and a nonce key.
+- Nonce: the first 12 bytes of HMAC-SHA256(nonce key, plaintext).
+- Cipher: AES-256-GCM. Stored as `enc2:` + Base64(nonce + ciphertext + tag).
+- Columns stored as JSON in BigQuery hold the JSON string `"enc2:..."`, so the
+  column stays valid JSON. Objects and arrays are serialized to JSON first.
+- If encryption fails, the column is dropped rather than sent in clear.
 
-The default selection includes these columns when present:
+The same plaintext always gives the same ciphertext within a workspace. That keeps
+`GROUP BY`, `COUNT(DISTINCT ...)` and joins across columns working on encrypted
+data, and it reveals which values are equal (never what they are). The salt is
+fixed per workspace, so data stored earlier stays decryptable with the same
+passphrase and salt. The field name is not part of the key, which is what makes
+cross-column joins possible.
+
+Evaluations need plaintext and refuse to run on fields that contain `enc2:` values.
+
+Test vector: passphrase `YOUR_SECRET_KEY_HERE`, salt `workspace-123`, plaintext
+`Hello from AnoSys Technologies!` gives
+`enc2:QwYbSu12pZL4oSf17Bb5zJUkGjoRc3wL66HwlsbjlJ5sLJWIHWGlgz7f+PXh4yem/EvB20sQjSg+R4A=`.
+
+### Default fields
 
 ```text
-llm_input, llm_output, gen_ai_input_messages, gen_ai_output_messages,
-gen_ai_system_instructions, llm_system, user_prompt, userPrompt,
-assistant_text, assistantText, cvs4, cvs5, last_prompt, cvs24,
-tool_use_result, cvs26, cvs65, task_description, summary_content, cvs199
+llm_input, llm_output, llm_system, gen_ai_input_messages, gen_ai_output_messages,
+gen_ai_system_instructions, user_prompt, userPrompt, assistant_text, assistantText,
+last_prompt, cvs4, cvs5, cvs24, cvs199, cvs18, otel_events, tool_use_result, cvs26,
+commands, written_paths, file_states, ide_diagnostics, cvs30, file_attachments,
+hook_specific_output, mcp_meta, custom_title, ai_title, cvs40, cvs41,
+agent_description, cvs35, summary_content, task_description, cvs65,
+origami_summary, status_message, error_details, api_error, error_obj, cvs25,
+cause, research
 ```
 
-These names cover descriptive and legacy column layouts. Their meaning depends on the integration; consult [column mappings](MAPPINGS.md) before overriding the selection.
+These names cover the descriptive and legacy column layouts; see
+[column mappings](MAPPINGS.md) before overriding the selection.
 
-Only string values are encrypted. Numbers, booleans, arrays, and objects in selected columns are skipped with a warning and remain unchanged. Values already prefixed with `enc:` are preserved. Untargeted columns remain readable. Selecting one field does not encrypt every copy of its content elsewhere in a record.
-
-## Format and decryption
-
-The passphrase is encoded as UTF-8 and hashed with SHA-256 to derive a 32-byte key. Strings are encrypted using AES-256-CBC with a 16-byte zero IV and PKCS#7 byte padding. The result is Base64 encoded and prefixed with `enc:`.
-
-This compatibility format is deterministic and does not authenticate ciphertext. It is not a guarantee that all payload data is encrypted or that arbitrary personal data is detected. Python packages require `cryptography`; if it is unavailable, the helper logs a warning and skips encryption.
-
-The SDK does not upload the encryption passphrase as a telemetry field or register browser settings. Browser decryption is configured separately in the AnoSys platform. If a setting requests the derived Base64 key, use the Base64 encoding of `SHA256(passphrase UTF-8 bytes)`. Verify the browser setting's storage behavior separately and keep decryption material under your control.
-
-For Anthropic clients, use `get_anthropic_open_telemetry_options()` or `getAnthropicOpenTelemetryOptions()` to pass the intended content setting and tracer provider explicitly. Setting `capture_content=False` does not remove an existing content-mode environment variable; the supplied helper carries the logger's current choice.
+For Anthropic clients, use `get_anthropic_open_telemetry_options()` or
+`getAnthropicOpenTelemetryOptions()` to pass the intended content setting and tracer
+provider explicitly. Setting `capture_content=False` does not remove an existing
+content-mode environment variable; the supplied helper carries the logger's choice.

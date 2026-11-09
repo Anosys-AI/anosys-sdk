@@ -165,23 +165,24 @@ npm install -g anosys-sdk-antigravity
 anosys-antigravity install
 ```
 
-Choose one language implementation per tool to avoid duplicate collection. Python Codex 0.1.1 accepts the turn-completion notification argument and applies the saved redaction setting. Users of 0.1.0 should upgrade. Codex notify callbacks are separate from lifecycle hooks listed by /hooks. Restart each coding tool after changing its configuration.
+Choose one language implementation per tool to avoid duplicate collection. Codex notify callbacks are separate from lifecycle hooks listed by /hooks. Restart each coding tool after changing its configuration.
 
 ## Content controls and encryption
 
-Content capture is enabled by default in the Anthropic and Claude Agent SDK integrations. Set capture_content=False in Python or captureContent: false in JavaScript to omit conversation and tool content from those integrations. Coding-tool installers offer --redaction to replace supported content fields; this is field masking, not automatic detection of every kind of personal data.
+Content capture is enabled by default in the Anthropic and Claude Agent SDK integrations. Set capture_content=False in Python or captureContent: false in JavaScript to omit conversation and tool content from those integrations. The coding-agent hooks (Claude Code, Codex, Antigravity) send metadata only by default. Full content requires accepting the [data-collection policy](PRIVACY.md) with `<tool> privacy full`, and `<tool> privacy off` stops collection. Every package keeps requests under 10 MB (`ANOSYS_MAX_BATCH_BYTES`).
 
-The OpenAI, Anthropic, Claude Agents, Claude Code, and Codex integrations support opt-in encryption of selected string fields before telemetry is sent:
+All integrations support opt-in encryption of selected string fields before telemetry is sent:
 
 ```bash
 export ANOSYS_ENCRYPTION_KEY="your-secret-passphrase"
+export ANOSYS_ENCRYPTION_SALT="your-workspace-salt"
 # Optional: replaces the default field selection
 export ANOSYS_ENCRYPTED_COLUMNS="llm_input,llm_output,cvs199"
 ```
 
-The implementation uses SHA-256 key derivation, AES-256-CBC, a fixed zero IV, PKCS#7 padding, and Base64 ciphertext prefixed with enc:. It encrypts selected strings, not the complete record. Non-string values are skipped, and untargeted fields remain visible. This format is deterministic and does not authenticate ciphertext. Keep the passphrase outside source control and configure browser decryption separately.
+The `enc2` format uses PBKDF2-SHA256 key derivation with a workspace salt and deterministic AES-256-GCM, so dashboards can still group and join on encrypted values. It encrypts selected fields, not the complete record; untargeted fields remain visible. Keep the passphrase outside source control.
 
-See [content controls](DATA_CONTROLS.md) for coverage, default columns, environment configuration, and limitations. Antigravity 0.1.0 supports content redaction but does not implement selected-field encryption.
+See [content controls](DATA_CONTROLS.md) for coverage, default columns, size limits and the format, and [PRIVACY.md](PRIVACY.md) for what the hooks collect.
 
 ## Examples and references
 
