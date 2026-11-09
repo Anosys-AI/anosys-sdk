@@ -3,6 +3,7 @@
 const path = require('path');
 const os = require('os');
 const {
+  BASE_METADATA_FIELDS,
   encryptPayload,
   derive256BitKey,
   encrypt,
@@ -11,10 +12,17 @@ const {
   getTargetColumns,
   ANOSYS_ENCRYPTION_PREFIX,
   DEFAULT_ENCRYPTED_COLUMNS,
-} = require('./encryption');
+} = require('anosys-sdk-core');
 
 const INTEGRATION_VERSION = require('../package.json').version || '0.1.0';
 const OS_USER = os.userInfo().username || 'unknown';
+
+// Fields sent at the `metadata` level (same as Python mapper.METADATA_FIELDS)
+const METADATA_FIELDS = new Set([
+  ...BASE_METADATA_FIELDS,
+  'cvs1', 'cvs2', 'cvs9', 'cvs12', 'cvs19', 'cvs32', 'cvs33',
+  'cvn1', 'cvn2', 'cvn3', 'cvn4', 'cvn5', 'cvn6', 'cvn7',
+]);
 
 const OPENAI_PRICING = {
   'gpt-4o': { input: 2.50 / 1e6, output: 10.00 / 1e6, cached: 1.25 / 1e6 },
@@ -86,22 +94,14 @@ function extractCommandsAndPaths(toolCalls) {
   return { commands, writtenPaths };
 }
 
-function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, redact = null) {
-  const envRedaction = (process.env.REDACTION || 'false').toLowerCase() === 'true';
-  const doRedact = redact !== null ? redact : envRedaction;
-
+function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null) {
   const model = turn.model || 'unknown';
   const provider = turn.model_provider || 'openai';
   const cwd = turn.cwd || '';
   const project = cwd ? path.basename(cwd) : null;
 
-  let userPrompt = turn.user_prompt || '';
-  let assistantText = turn.assistant_output || '';
-
-  if (doRedact) {
-    userPrompt = '[REDACTED]';
-    assistantText = '[REDACTED]';
-  }
+  const userPrompt = turn.user_prompt || '';
+  const assistantText = turn.assistant_output || '';
 
   const tokens = turn.tokens || {};
   const inputTokens = Number(tokens.input_tokens || 0);
@@ -127,10 +127,6 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
 
   const cleanToolCalls = toolCalls.map(tc => {
     const c = Object.assign({}, tc);
-    if (doRedact) {
-      c.args = '[REDACTED]';
-      c.output = '[REDACTED]';
-    }
     return c;
   });
 
@@ -147,23 +143,7 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
     events: []
   };
 
-  const origPrompt = turn.user_prompt || '';
-  const origAssistant = turn.assistant_output || '';
-  let rawToSerialize = rawData;
-  if (doRedact) {
-    try {
-      let s = JSON.stringify(rawData);
-      if (origPrompt) {
-        s = s.split(origPrompt).join('[REDACTED]');
-      }
-      if (origAssistant) {
-        s = s.split(origAssistant).join('[REDACTED]');
-      }
-      rawToSerialize = JSON.parse(s);
-    } catch (_) {
-      rawToSerialize = rawData;
-    }
-  }
+  const rawToSerialize = rawData;
 
   let permMode = null;
   if (turn.permission_mode) {
@@ -259,13 +239,15 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
       cleanPayload[k] = v;
     }
   }
-  return encryptPayload(cleanPayload);
+  // Collection level, secret scrubbing and encryption are applied by the hook runner
+  return cleanPayload;
 }
 
 module.exports = {
   calculateCost,
   extractCommandsAndPaths,
   transformCodexTurn,
+  METADATA_FIELDS,
   encryptPayload,
   derive256BitKey,
   encrypt,

@@ -1,6 +1,6 @@
 {
   "name": "anosys-sdk-codex",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AnoSys observability hook for OpenAI Codex CLI \u2014 automatic instrumentation and logging for Codex sessions",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
@@ -33,6 +33,9 @@
     "hooks"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test test/basic.test.js test/privacy.test.js"
+  },
+  "dependencies": {
+    "anosys-sdk-core": "^2.0.0"
   }
 }

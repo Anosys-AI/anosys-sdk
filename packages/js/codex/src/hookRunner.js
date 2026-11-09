@@ -2,28 +2,30 @@
 
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const http = require('http');
+const { spawnSync } = require('child_process');
 
-const { getCodexHome, getEnvPath } = require('./installer');
-const { transformCodexTurn, encryptPayload } = require('./mapper');
+const {
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields,
+  isPaused, scrubSecrets,
+} = require('anosys-sdk-core');
+
+const { PREVIOUS_NOTIFY_FLAG, getCodexHome, getEnvPath } = require('./installer');
+const { METADATA_FIELDS, transformCodexTurn } = require('./mapper');
 
 const CODEX_HOME = getCodexHome();
 const STATE_DIR = path.join(CODEX_HOME, 'state');
 const STATE_FILE = path.join(STATE_DIR, 'anosys_state.json');
 const PENDING_FILE = path.join(STATE_DIR, 'pending_records.jsonl');
+const PAUSE_FILE = path.join(STATE_DIR, 'anosys_paused.json');
 const LOG_FILE = path.join(STATE_DIR, 'anosys_hook.log');
 
-try {
-  fs.mkdirSync(STATE_DIR, { recursive: true });
-} catch (_) {}
+// The hook log records ids, sizes and status codes only, never prompts or payloads.
+const writeLog = createHookLog(LOG_FILE);
+const log = (msg, level = 'INFO') => writeLog(level, msg);
 
-function log(msg) {
-  const line = `${new Date().toISOString()} [INFO] ${msg}\n`;
-  try {
-    fs.appendFileSync(LOG_FILE, line, 'utf8');
-  } catch (_) {}
-}
+// Content fields scrubbed for secrets before sending at `full`
+const CONTENT_FIELDS = ['user_prompt', 'userPrompt', 'assistant_text', 'assistantText', 'cvs4', 'cvs5',
+  'commands', 'written_paths', 'cvs199'];
 
 function loadEnvFile() {
   const envPath = getEnvPath();
@@ -43,7 +45,7 @@ function loadEnvFile() {
       }
     }
   } catch (err) {
-    log(`Failed to load env file: ${err.message}`);
+    log(`Failed to load env file: ${err.name}`, 'WARNING');
   }
 }
 
@@ -66,98 +68,37 @@ function saveState(state) {
   try {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
   } catch (err) {
-    log(`Failed to save state: ${err.message}`);
+    log(`Failed to save state: ${err.name}`, 'ERROR');
   }
 }
 
-function loadPendingRecords() {
-  if (!fs.existsSync(PENDING_FILE)) return [];
-  try {
-    const lines = fs.readFileSync(PENDING_FILE, 'utf8').split('\n').filter(Boolean);
-    return lines.map(l => JSON.parse(l));
-  } catch (_) {
-    return [];
+function headers() {
+  const h = { 'Content-Type': 'application/json', 'User-Agent': 'anosys-codex-hook/0.2.0' };
+  if (API_KEY) {
+    h['anosys-apikey'] = API_KEY;
+    h['x-api-key'] = API_KEY;
   }
+  return h;
 }
 
-function savePendingRecords(records, overwrite = false) {
-  try {
-    const serialized = records.map(r => JSON.stringify(r)).join('\n') + '\n';
-    if (overwrite) {
-      fs.writeFileSync(PENDING_FILE, serialized, 'utf8');
-    } else {
-      fs.appendFileSync(PENDING_FILE, serialized, 'utf8');
+/** Apply the collection level, scrub secrets at `full`, then encrypt. */
+function prepareRecord(mapped, level) {
+  const record = filterFields(mapped, level, METADATA_FIELDS);
+  if (level === FULL) {
+    for (const field of CONTENT_FIELDS) {
+      if (record[field] !== undefined && record[field] !== null) record[field] = scrubSecrets(record[field]);
     }
-  } catch (err) {
-    log(`Failed to save pending records: ${err.message}`);
   }
+  return encryptPayload(record);
 }
 
-function clearPendingRecords() {
-  try {
-    if (fs.existsSync(PENDING_FILE)) fs.unlinkSync(PENDING_FILE);
-  } catch (_) {}
-}
-
-function postRecordsBatch(payloads) {
-  return new Promise(resolve => {
-    if (!payloads || !payloads.length) return resolve([]);
-
-    loadEnvFile();
-    const targetUrl = process.env.ANOSYS_HOOK_ENDPOINT_URL || INGESTION_URL;
-    const apiKey = process.env.ANOSYS_HOOK_APIKEY || API_KEY;
-    const isDryRun = (process.env.ANOSYS_HOOK_DRY_RUN || 'false').toLowerCase() === 'true';
-
-    if (isDryRun) {
-      log(`[DRY RUN] Would POST ${payloads.length} records to ${targetUrl}`);
-      return resolve([]);
-    }
-
-    const preparedPayloads = payloads.map(p => encryptPayload(p));
-    log(`POSTing ${preparedPayloads.length} record(s) to ${targetUrl}`);
-    log(`Outgoing payload:\n${JSON.stringify(preparedPayloads, null, 2)}`);
-
-    const data = JSON.stringify(preparedPayloads);
-    const urlObj = new URL(targetUrl);
-    const isHttps = urlObj.protocol === 'https:';
-    const client = isHttps ? https : http;
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(data),
-      'User-Agent': 'anosys-codex-hook/0.1.0'
-    };
-    if (apiKey) {
-      headers['anosys-apikey'] = apiKey;
-      headers['x-api-key'] = apiKey;
-    }
-
-    const req = client.request(targetUrl, {
-      method: 'POST',
-      headers: headers,
-      timeout: 15000
-    }, res => {
-      let resBody = '';
-      res.on('data', chunk => { resBody += chunk; });
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          log(`Batch POST success (HTTP ${res.statusCode}) — sent ${payloads.length} record(s). Response: ${resBody.slice(0, 300)}`);
-          resolve([]);
-        } else {
-          log(`Batch POST failed — HTTP ${res.statusCode}: ${resBody}`);
-          resolve(payloads);
-        }
-      });
-    });
-
-    req.on('error', err => {
-      log(`Batch POST request error: ${err.message}`);
-      resolve(payloads);
-    });
-
-    req.write(data);
-    req.end();
-  });
+/** Deliver records (and queued retries) within the size limit. Resolves to the count accepted. */
+async function send(records, options = {}) {
+  if (DRY_RUN) {
+    log(`[DRY RUN] Would send ${records.length} record(s)`);
+    return records.length;
+  }
+  return deliver(INGESTION_URL, records, new PendingQueue(PENDING_FILE), PAUSE_FILE, { headers: headers(), ...options });
 }
 
 function findRolloutFile(sessionId) {
@@ -525,47 +466,45 @@ function extractTurnFallback(inputJson, threadId, turnId) {
   };
 }
 
-async function run() {
-  log(`anosys-codex run invoked with args: ${process.argv.join(' ')}`);
-
-  // 1. Retry pending records
-  const pending = loadPendingRecords();
-  if (pending.length) {
-    log(`Retrying ${pending.length} pending records...`);
-    const stillFailed = await postRecordsBatch(pending);
-    if (!stillFailed.length) {
-      clearPendingRecords();
-      log('Cleared pending records after successful delivery.');
-    } else {
-      savePendingRecords(stillFailed, true);
-    }
+/** Split Codex's argv into { previous, raw }: the chained notify command and the notification JSON. */
+function parseArgv(argv) {
+  const args = argv.filter(a => a.trim() !== 'run');
+  let previous = null;
+  const i = args.indexOf(PREVIOUS_NOTIFY_FLAG);
+  if (i !== -1) {
+    try { previous = JSON.parse(args[i + 1]); } catch { previous = null; }
+    args.splice(i, 2);
   }
+  const raw = args.find(a => /^\s*[[{]/.test(a)) || args[0] || '{}';
+  return { previous, raw: raw.trim() };
+}
 
-  // 2. Parse notify payload
-  let rawInput = '{}';
-  for (let i = 2; i < process.argv.length; i++) {
-    const arg = process.argv[i].trim();
-    if (arg === 'run') continue;
-    if (arg.startsWith('{') || arg.startsWith('[')) {
-      rawInput = arg;
-      break;
-    }
+/** Run the notify command that was configured before AnoSys, unchanged. */
+function callPreviousNotify(previous, raw) {
+  if (!Array.isArray(previous) || !previous.length) return;
+  try {
+    spawnSync(String(previous[0]), [...previous.slice(1).map(String), raw], { stdio: 'ignore', timeout: 30000 });
+  } catch (e) {
+    log(`Previous notify command failed: ${e.name}`, 'WARNING');
   }
-  if (rawInput === '{}') {
-    for (let i = 2; i < process.argv.length; i++) {
-      const arg = process.argv[i].trim();
-      if (arg !== 'run') {
-        rawInput = arg;
-        break;
-      }
-    }
+}
+
+async function processNotification(rawInput, options = {}) {
+  const { level, source } = effectiveLevel();
+  if (level === OFF) {
+    log(`Collection is off (${source}); nothing sent`);
+    return;
+  }
+  if (isPaused(PAUSE_FILE)) {
+    log('Collection paused after an authorization error; nothing sent');
+    return;
   }
 
   let event = {};
   try {
     event = JSON.parse(rawInput);
-  } catch (err) {
-    log(`Failed to parse notify event JSON: ${err.message}`);
+  } catch {
+    log(`Notification is not valid JSON (${rawInput.length} bytes)`, 'ERROR');
     return;
   }
 
@@ -575,10 +514,9 @@ async function run() {
     return;
   }
 
-  const threadId = event['thread-id'] || event.thread_id || event.sessionId || 'unknown_session';
-  const turnId = event['turn-id'] || event.turn_id || `turn_${Date.now()}`;
+  const threadId = event['thread-id'] || event.thread_id || event.threadId || event.sessionId || 'unknown_session';
+  const turnId = event['turn-id'] || event.turn_id || event.turnId || `turn_${Date.now()}`;
 
-  // 3. Deduplication check
   const state = loadState();
   state[threadId] = state[threadId] || { processed_turns: [] };
   if (state[threadId].processed_turns.includes(turnId)) {
@@ -586,37 +524,41 @@ async function run() {
     return;
   }
 
-  // 4. Extract turn
   const rolloutPath = findRolloutFile(threadId);
-  let turnData = null;
-  if (rolloutPath) {
-    log(`Extracting turn ${turnId} from ${rolloutPath}`);
-    turnData = extractTurnFromRollout(rolloutPath, turnId, event);
-  }
-
+  let turnData = rolloutPath ? extractTurnFromRollout(rolloutPath, turnId, event) : null;
   if (!turnData) {
-    log('Fallback turn extraction used');
+    log(`Could not extract turn ${turnId} from the rollout file; using the notification`, 'WARNING');
     turnData = extractTurnFallback(event, threadId, turnId);
   }
 
-  // 5. Map to AnoSys schema
-  const mapped = transformCodexTurn(turnData, threadId, turnId);
+  const record = prepareRecord(transformCodexTurn(turnData, threadId, turnId), level);
+  const sent = await send([record], options);
+  log(`Turn ${turnId} (session ${threadId}) at '${level}': ${sent} record(s) accepted`);
 
-  // 6. Deliver to AnoSys Ingestion
-  const failed = await postRecordsBatch([mapped]);
-  if (failed.length) {
-    log('Delivery failed; queued to pending_records');
-    savePendingRecords(failed);
-  } else {
-    log(`Turn ${turnId} successfully sent`);
-    state[threadId].processed_turns.push(turnId);
-    state[threadId].last_seen = new Date().toISOString();
-    saveState(state);
+  // Mark the turn processed either way: retries live in the bounded queue
+  state[threadId].processed_turns = [...state[threadId].processed_turns, turnId].slice(-500);
+  state[threadId].last_seen = new Date().toISOString();
+  saveState(state);
+}
+
+async function run(argv = process.argv.slice(2), options = {}) {
+  const { previous, raw } = parseArgv(argv);
+  try {
+    await processNotification(raw, options);
+  } finally {
+    callPreviousNotify(previous, raw);
   }
 }
 
 module.exports = {
   run,
+  parseArgv,
+  prepareRecord,
+  processNotification,
+  LOG_FILE,
+  PENDING_FILE,
+  PAUSE_FILE,
+  STATE_FILE,
   findRolloutFile,
   extractTurnFromRollout,
   extractTurnFallback

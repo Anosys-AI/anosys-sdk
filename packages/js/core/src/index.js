@@ -1,46 +1,60 @@
-export {
-  ANOSYS_ENCRYPTION_PREFIX,
-  DEFAULT_ENCRYPTED_COLUMNS,
-  JSON_COLUMNS,
-  KDF_ITERATIONS,
-  deriveKeys,
-  derive256BitKey,
-  encrypt,
-  decrypt,
-  encryptValue,
-  encryptPayload,
-  getEncryptionKey,
-  getEncryptionSalt,
-  getTargetColumns,
-} from './encryption.js';
-export {
-  OFF,
-  METADATA,
-  FULL,
-  LEVELS,
-  POLICY_VERSION,
-  POLICY_URL,
-  CONSENT_FIELD,
-  BASE_METADATA_FIELDS,
-  consentPath,
-  consentValue,
-  effectiveLevel,
-  filterFields,
-  readConsent,
-  writeConsent,
-  writePrivateFile,
-} from './privacy.js';
-export { scrubSecrets, SECRET_REPLACEMENT } from './redaction.js';
-export {
-  DEFAULT_MAX_BATCH_BYTES,
-  PendingQueue,
-  chunkRecords,
-  deliver,
-  fitRecord,
-  isPaused,
-  isPermanent,
-  jsonSize,
-  maxBatchBytes,
-  pauseCollection,
-  sendRecords,
-} from './transport.js';
+'use strict';
+
+// CommonJS so the CommonJS hook packages can require it; ESM packages import it too.
+const encryption = require('./encryption.js');
+const privacy = require('./privacy.js');
+const redaction = require('./redaction.js');
+const transport = require('./transport.js');
+const hookCli = require('./hookCli.js');
+
+// One `exports.x =` line per name so ESM importers get named exports.
+exports.ANOSYS_ENCRYPTION_PREFIX = encryption.ANOSYS_ENCRYPTION_PREFIX;
+exports.KDF_ITERATIONS = encryption.KDF_ITERATIONS;
+exports.KDF_SALT_PREFIX = encryption.KDF_SALT_PREFIX;
+exports.DEFAULT_SALT = encryption.DEFAULT_SALT;
+exports.DEFAULT_ENCRYPTED_COLUMNS = encryption.DEFAULT_ENCRYPTED_COLUMNS;
+exports.JSON_COLUMNS = encryption.JSON_COLUMNS;
+exports.getEncryptionSalt = encryption.getEncryptionSalt;
+exports.deriveKeys = encryption.deriveKeys;
+exports.derive256BitKey = encryption.derive256BitKey;
+exports.encrypt = encryption.encrypt;
+exports.decrypt = encryption.decrypt;
+exports.getEncryptionKey = encryption.getEncryptionKey;
+exports.getTargetColumns = encryption.getTargetColumns;
+exports.encryptValue = encryption.encryptValue;
+exports.encryptPayload = encryption.encryptPayload;
+exports.OFF = privacy.OFF;
+exports.METADATA = privacy.METADATA;
+exports.FULL = privacy.FULL;
+exports.LEVELS = privacy.LEVELS;
+exports.POLICY_VERSION = privacy.POLICY_VERSION;
+exports.POLICY_URL = privacy.POLICY_URL;
+exports.CONSENT_FIELD = privacy.CONSENT_FIELD;
+exports.PROJECT_FILE = privacy.PROJECT_FILE;
+exports.BASE_METADATA_FIELDS = privacy.BASE_METADATA_FIELDS;
+exports.consentPath = privacy.consentPath;
+exports.writePrivateFile = privacy.writePrivateFile;
+exports.readConsent = privacy.readConsent;
+exports.writeConsent = privacy.writeConsent;
+exports.effectiveLevel = privacy.effectiveLevel;
+exports.consentValue = privacy.consentValue;
+exports.filterFields = privacy.filterFields;
+exports.SECRET_REPLACEMENT = redaction.SECRET_REPLACEMENT;
+exports.scrubSecrets = redaction.scrubSecrets;
+exports.DEFAULT_MAX_BATCH_BYTES = transport.DEFAULT_MAX_BATCH_BYTES;
+exports.PERMANENT_STATUS = transport.PERMANENT_STATUS;
+exports.isPermanent = transport.isPermanent;
+exports.maxBatchBytes = transport.maxBatchBytes;
+exports.jsonSize = transport.jsonSize;
+exports.fitRecord = transport.fitRecord;
+exports.chunkRecords = transport.chunkRecords;
+exports.pauseCollection = transport.pauseCollection;
+exports.isPaused = transport.isPaused;
+exports.sendRecords = transport.sendRecords;
+exports.deliver = transport.deliver;
+exports.PendingQueue = transport.PendingQueue;
+exports.POLICY_SUMMARY = hookCli.POLICY_SUMMARY;
+exports.createHookLog = hookCli.createHookLog;
+exports.cmdPrivacy = hookCli.cmdPrivacy;
+exports.cmdPurge = hookCli.cmdPurge;
+exports.printDoctor = hookCli.printDoctor;

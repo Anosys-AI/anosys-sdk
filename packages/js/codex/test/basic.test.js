@@ -13,7 +13,6 @@ const {
 } = require('../src/mapper');
 
 const {
-  HOOK_COMMAND,
   backup,
   hasAnosysHook,
   loadToml,
@@ -96,23 +95,6 @@ test('transformCodexTurn matches AnoSys schema', () => {
   assert.ok(mapped.cvs199);
 });
 
-test('transformCodexTurn handles content redaction', () => {
-  const turn = {
-    turn_id: 'turn-redact',
-    model: 'o1',
-    user_prompt: 'Confidential project details',
-    assistant_output: 'Here is the confidential response',
-    tokens: { input_tokens: 10, output_tokens: 10 },
-    tool_calls: [{ tool: 'shell', args: 'cat secret.key', output: 'secret' }]
-  };
-
-  const mapped = transformCodexTurn(turn, 'sess-redact', 'turn-redact', null, true);
-
-  assert.equal(mapped.userPrompt, '[REDACTED]');
-  assert.equal(mapped.assistantText, '[REDACTED]');
-  assert.ok(mapped.cvs199.includes('[REDACTED]'));
-});
-
 test('installer manages config.toml lifecycle idempotently and preserves existing sections', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-js-test-'));
   const configPath = path.join(tmpDir, 'config.toml');
@@ -122,7 +104,7 @@ test('installer manages config.toml lifecycle idempotently and preserves existin
   fs.writeFileSync(configPath, '[desktop]\nfollowUpQueueMode = "steer"\n\n[plugins."browser@openai-bundled"]\nenabled = true\n', 'utf8');
 
   // 1. Update config
-  const updated = updateCodexConfig(HOOK_COMMAND, configPath);
+  const updated = updateCodexConfig(null, configPath);
   assert.equal(updated, true);
   assert.ok(fs.existsSync(configPath));
 
@@ -132,10 +114,10 @@ test('installer manages config.toml lifecycle idempotently and preserves existin
 
   const data = loadToml(configPath);
   assert.equal(hasAnosysHook(data), true);
-  assert.ok(data.notify.includes('anosys-codex'));
+  assert.equal(data.notify[0], process.execPath);
 
   // 2. Idempotent check
-  const updatedAgain = updateCodexConfig(HOOK_COMMAND, configPath);
+  const updatedAgain = updateCodexConfig(null, configPath);
   assert.equal(updatedAgain, false);
 
   // 3. Backup
@@ -143,11 +125,12 @@ test('installer manages config.toml lifecycle idempotently and preserves existin
   assert.ok(bk && fs.existsSync(bk));
 
   // 4. Update env
-  updateCodexEnv({ apiKey: 'key-123', redaction: true, customPath: envPath });
+  updateCodexEnv({ apiKey: 'key-123', customPath: envPath });
   assert.ok(fs.existsSync(envPath));
   const envText = fs.readFileSync(envPath, 'utf8');
   assert.ok(envText.includes('key-123'));
-  assert.ok(envText.includes('REDACTION="true"'));
+  assert.ok(!envText.includes('REDACTION'));
+  assert.equal(fs.statSync(envPath).mode & 0o777, 0o600);
 
   // 5. Remove config
   const removed = removeCodexConfig(configPath);
@@ -273,114 +256,6 @@ test('validateApiKey returns true for CC pixel and false for non-CC pixel', asyn
     assert.equal(isT, false);
   } finally {
     https.get = origGet;
-  }
-});
-
-const {
-  derive256BitKey,
-  encrypt,
-  decrypt,
-  encryptPayload,
-  ANOSYS_ENCRYPTION_PREFIX,
-} = require('../src/mapper');
-
-test('encryption matches cross-platform AES-256-CBC test vector exactly', () => {
-  const key = derive256BitKey('YOUR_SECRET_KEY_HERE');
-  const ciphertext = encrypt('Hello from AnoSys Technologies!', key);
-  const prefixed = ANOSYS_ENCRYPTION_PREFIX + ciphertext;
-
-  assert.equal(
-    prefixed,
-    'enc:J+0Ntn9F5hhtKSBGTFZPce61f8zwRKwrp7bNpwp2Cw4='
-  );
-  assert.equal(decrypt(prefixed, key), 'Hello from AnoSys Technologies!');
-  assert.equal(decrypt(ciphertext, key), 'Hello from AnoSys Technologies!');
-});
-
-test('transformCodexTurn handles encryption when ANOSYS_ENCRYPTION_KEY is set', () => {
-  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
-  try {
-    const turn = {
-      model: 'gpt-4o',
-      user_prompt: 'Codex secret query',
-      assistant_output: 'Codex completion text',
-    };
-    const res = transformCodexTurn(turn, 's1', 't1');
-    assert.ok(res.user_prompt.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.ok(res.assistant_text.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.ok(res.cvs4.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.ok(res.cvs5.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.ok(res.cvs199.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.equal(res.model, 'gpt-4o');
-
-    const key = derive256BitKey('codex-secret-key');
-    assert.equal(decrypt(res.user_prompt, key), 'Codex secret query');
-    assert.equal(decrypt(res.assistant_text, key), 'Codex completion text');
-  } finally {
-    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    else delete process.env.ANOSYS_ENCRYPTION_KEY;
-  }
-});
-
-test('supports ANOSYS_ENCRYPTED_COLUMNS and typo alias ANOSYS_ENCRYPTES_COLUMNS override', () => {
-  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-  const oldCols = process.env.ANOSYS_ENCRYPTES_COLUMNS;
-  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
-  process.env.ANOSYS_ENCRYPTES_COLUMNS = 'user_prompt';
-  try {
-    const turn = {
-      model: 'gpt-4o',
-      user_prompt: 'Only encrypt this',
-      assistant_output: 'Do not encrypt this',
-    };
-    const res = transformCodexTurn(turn, 's1', 't1');
-    assert.ok(res.user_prompt.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.equal(res.assistant_text, 'Do not encrypt this');
-  } finally {
-    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    else delete process.env.ANOSYS_ENCRYPTION_KEY;
-    if (oldCols) process.env.ANOSYS_ENCRYPTES_COLUMNS = oldCols;
-    else delete process.env.ANOSYS_ENCRYPTES_COLUMNS;
-  }
-});
-
-test('warns on non-string column and skips encryption', () => {
-  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
-  let warned = false;
-  const originalWarn = console.warn;
-  console.warn = (...args) => {
-    warned = true;
-    originalWarn(...args);
-  };
-  try {
-    const payload = {
-      user_prompt: 12345,
-      cvs199: true,
-    };
-    const res = encryptPayload(payload);
-    assert.equal(res.user_prompt, 12345);
-    assert.equal(res.cvs199, true);
-    assert.ok(warned);
-  } finally {
-    console.warn = originalWarn;
-    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    else delete process.env.ANOSYS_ENCRYPTION_KEY;
-  }
-});
-
-test('is idempotent and does not re-encrypt already encrypted fields', () => {
-  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
-  try {
-    const payload = { user_prompt: 'Test message' };
-    const res1 = encryptPayload(payload);
-    const res2 = encryptPayload(res1);
-    assert.equal(res1.user_prompt, res2.user_prompt);
-  } finally {
-    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    else delete process.env.ANOSYS_ENCRYPTION_KEY;
   }
 });
 

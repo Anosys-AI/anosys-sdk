@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * Collection levels and consent — JS port of Python `anosys_sdk_core/privacy.py`.
  *
@@ -8,22 +10,22 @@
  * metadata; default metadata. A project `.anosys` file can only lower the level.
  */
 
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
-export const OFF = 'off';
-export const METADATA = 'metadata';
-export const FULL = 'full';
-export const LEVELS = [OFF, METADATA, FULL];
+const OFF = 'off';
+const METADATA = 'metadata';
+const FULL = 'full';
+const LEVELS = [OFF, METADATA, FULL];
 const RANK = { off: 0, metadata: 1, full: 2 };
 
-export const POLICY_VERSION = '2026-11-09';
-export const POLICY_URL = 'https://github.com/anosys-ai/anosys-sdk/blob/main/PRIVACY.md';
-export const CONSENT_FIELD = 'consent';
-export const PROJECT_FILE = '.anosys';
+const POLICY_VERSION = '2026-11-09';
+const POLICY_URL = 'https://github.com/anosys-ai/anosys-sdk/blob/main/PRIVACY.md';
+const CONSENT_FIELD = 'consent';
+const PROJECT_FILE = '.anosys';
 
-export function consentPath() {
+function consentPath() {
   const custom = (process.env.ANOSYS_CONSENT_FILE || '').trim();
   if (custom) return custom.replace(/^~(?=$|\/)/, os.homedir());
   return path.join(os.homedir(), '.anosys', 'consent.json');
@@ -36,7 +38,7 @@ function normalize(level) {
 }
 
 /** Write a file readable only by the current user (0600). */
-export function writePrivateFile(file, content) {
+function writePrivateFile(file, content) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, content, { encoding: 'utf8', mode: 0o600 });
@@ -45,7 +47,7 @@ export function writePrivateFile(file, content) {
 }
 
 /** The stored privacy settings ({} when none). Never throws. */
-export function readConsent() {
+function readConsent() {
   try {
     const data = JSON.parse(fs.readFileSync(consentPath(), 'utf8'));
     return data && typeof data === 'object' ? data : {};
@@ -55,7 +57,7 @@ export function readConsent() {
 }
 
 /** Store the chosen level; `full` needs acceptPolicy === POLICY_VERSION. */
-export function writeConsent(level, method, acceptPolicy = null) {
+function writeConsent(level, method, acceptPolicy = null) {
   const l = normalize(level);
   if (!l) throw new Error(`level must be one of ${LEVELS.join(', ')}`);
   if (l === FULL && acceptPolicy !== POLICY_VERSION) {
@@ -93,7 +95,7 @@ function projectLevel(cwd) {
 }
 
 /** The level to collect at and where it came from: { level, source }. */
-export function effectiveLevel(explicit = null, cwd = null) {
+function effectiveLevel(explicit = null, cwd = null) {
   if (['1', 'true', 'yes'].includes((process.env.ANOSYS_DISABLE || '').trim().toLowerCase())) {
     return { level: OFF, source: 'ANOSYS_DISABLE' };
   }
@@ -125,12 +127,12 @@ export function effectiveLevel(explicit = null, cwd = null) {
 }
 
 /** The consent field stored on every hook record, e.g. `full;2026-11-09`. */
-export function consentValue(level) {
+function consentValue(level) {
   return level === FULL ? `${FULL};${POLICY_VERSION}` : `${level};none`;
 }
 
 // Same allowlist as Python BASE_METADATA_FIELDS
-export const BASE_METADATA_FIELDS = new Set([
+const BASE_METADATA_FIELDS = new Set([
   'timestamp', 'user_timestamp', 'event_id', 'eventId', 'uuid', 'event_type',
   'event_source_name', 'debug', 'session_id', 'sessionId', 'log_index',
   'integration_version', 'consent',
@@ -170,7 +172,7 @@ export const BASE_METADATA_FIELDS = new Set([
 ]);
 
 /** Keep the fields allowed at `level` (allowlist) and stamp the consent field. */
-export function filterFields(record, level, metadataFields) {
+function filterFields(record, level, metadataFields) {
   if (level === OFF) return {};
   let result;
   if (level === FULL) {
@@ -182,3 +184,22 @@ export function filterFields(record, level, metadataFields) {
   result[CONSENT_FIELD] = consentValue(level);
   return result;
 }
+
+module.exports = {
+  OFF,
+  METADATA,
+  FULL,
+  LEVELS,
+  POLICY_VERSION,
+  POLICY_URL,
+  CONSENT_FIELD,
+  PROJECT_FILE,
+  BASE_METADATA_FIELDS,
+  consentPath,
+  writePrivateFile,
+  readConsent,
+  writeConsent,
+  effectiveLevel,
+  consentValue,
+  filterFields,
+};

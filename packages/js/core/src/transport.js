@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * Size-limited delivery to AnoSys ingestion — JS port of Python
  * `anosys_sdk_core/transport.py`. Ingestion drops request bodies above 10 MB,
@@ -7,13 +9,13 @@
  * collection.
  */
 
-import fs from 'node:fs';
+const fs = require('node:fs');
 
-import { writePrivateFile } from './privacy.js';
+const { writePrivateFile } = require('./privacy.js');
 
-export const DEFAULT_MAX_BATCH_BYTES = 10000000;
+const DEFAULT_MAX_BATCH_BYTES = 10000000;
 const TARGET_RATIO = 0.95;
-export const PERMANENT_STATUS = new Set([400, 401, 403, 404, 413, 422]);
+const PERMANENT_STATUS = new Set([400, 401, 403, 404, 413, 422]);
 const PAUSE_STATUS = new Set([401, 403]);
 const TRUNCATE_FIRST = ['cvs199', 'raw', 'tool_use_result', 'cvs26', 'file_states'];
 
@@ -22,19 +24,19 @@ const log = {
 };
 
 /** Request-body limit from ANOSYS_MAX_BATCH_BYTES (default 10,000,000). */
-export function maxBatchBytes() {
+function maxBatchBytes() {
   const v = parseInt(process.env.ANOSYS_MAX_BATCH_BYTES ?? DEFAULT_MAX_BATCH_BYTES, 10);
   return Number.isFinite(v) && v > 1024 ? v : DEFAULT_MAX_BATCH_BYTES;
 }
 
 const target = (limit) => Math.floor((limit || maxBatchBytes()) * TARGET_RATIO);
 
-export function jsonSize(value) {
+function jsonSize(value) {
   return Buffer.byteLength(JSON.stringify(value), 'utf8');
 }
 
 /** The record if it fits, a copy with its largest strings truncated, or null (logged). */
-export function fitRecord(record, limit = null) {
+function fitRecord(record, limit = null) {
   const t = target(limit);
   if (jsonSize([record]) <= t) return record;
   const result = { ...record };
@@ -59,7 +61,7 @@ export function fitRecord(record, limit = null) {
 }
 
 /** Split records into request bodies under the byte limit. */
-export function chunkRecords(records, limit = null) {
+function chunkRecords(records, limit = null) {
   const t = target(limit);
   const chunks = [];
   let current = [];
@@ -80,7 +82,7 @@ export function chunkRecords(records, limit = null) {
   return chunks;
 }
 
-export const isPermanent = (status) => PERMANENT_STATUS.has(status);
+const isPermanent = (status) => PERMANENT_STATUS.has(status);
 
 async function defaultPost(url, body, headers, timeout) {
   const res = await fetch(url, {
@@ -96,7 +98,7 @@ async function defaultPost(url, body, headers, timeout) {
  * POST records in size-limited batches.
  * Resolves to { sent, retryable, pause } — pause is 401/403 when collection should stop.
  */
-export async function sendRecords(url, records, { headers = {}, timeout = 15, limit = null, post = defaultPost } = {}) {
+async function sendRecords(url, records, { headers = {}, timeout = 15, limit = null, post = defaultPost } = {}) {
   let sent = 0;
   const retryable = [];
   let pause = null;
@@ -124,13 +126,13 @@ export async function sendRecords(url, records, { headers = {}, timeout = 15, li
 }
 
 /** Stop building payloads for `seconds` after a 401/403. */
-export function pauseCollection(marker, status, seconds = 6 * 3600) {
+function pauseCollection(marker, status, seconds = 6 * 3600) {
   try {
     writePrivateFile(marker, JSON.stringify({ until: Date.now() / 1000 + seconds, status }));
   } catch { /* best effort */ }
 }
 
-export function isPaused(marker) {
+function isPaused(marker) {
   try {
     const data = JSON.parse(fs.readFileSync(marker, 'utf8'));
     if (Date.now() / 1000 < Number(data.until || 0)) return true;
@@ -140,7 +142,7 @@ export function isPaused(marker) {
 }
 
 /** Records waiting for a retry, bounded by total size, age and attempts (0600 JSONL). */
-export class PendingQueue {
+class PendingQueue {
   constructor(file, { maxBytes = 50000000, maxAgeSeconds = 24 * 3600, maxAttempts = 5 } = {}) {
     this.path = file;
     this.maxBytes = maxBytes;
@@ -197,7 +199,7 @@ export class PendingQueue {
 }
 
 /** Send queued retries plus `records`; requeue only what is retryable. Resolves to the count accepted. */
-export async function deliver(url, records, queue, pauseMarker, options = {}) {
+async function deliver(url, records, queue, pauseMarker, options = {}) {
   if (isPaused(pauseMarker)) return 0;
   const pending = queue.load();
   let sent = 0;
@@ -219,3 +221,17 @@ export async function deliver(url, records, queue, pauseMarker, options = {}) {
   return sent;
 }
 
+module.exports = {
+  DEFAULT_MAX_BATCH_BYTES,
+  PERMANENT_STATUS,
+  isPermanent,
+  maxBatchBytes,
+  jsonSize,
+  fitRecord,
+  chunkRecords,
+  pauseCollection,
+  isPaused,
+  sendRecords,
+  deliver,
+  PendingQueue,
+};

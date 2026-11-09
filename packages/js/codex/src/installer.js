@@ -5,8 +5,18 @@ const path = require('path');
 const os = require('os');
 const https = require('https');
 
-const HOOK_COMMAND = 'anosys-codex run';
+const HOOK_COMMAND = 'anosys-codex run'; // legacy form, still recognized on uninstall
 const INGESTION_URL = 'https://api.anosys.ai/ingestion';
+// Markers of every hook form this package (Python or JS) has ever written
+const HOOK_MARKERS = ['anosys-codex', 'anosys_sdk_codex', 'anosys-sdk-codex'];
+// Codex runs a single notify command; another one already configured is kept
+// and called after ours (the convention the Codex Computer Use wrapper uses).
+const PREVIOUS_NOTIFY_FLAG = '--previous-notify';
+
+/** The notify command: this Node binary and our CLI by absolute path, never a bare PATH lookup. */
+function hookCommand() {
+  return [process.execPath, path.join(__dirname, 'cli.js'), 'run'];
+}
 
 function getCodexHome() {
   const custom = (process.env.CODEX_HOME || '').trim();
@@ -89,71 +99,92 @@ function writeTomlAtomic(filePath, data) {
   fs.renameSync(tmpPath, filePath);
 }
 
+// Also this copy's own CLI path, which in a source checkout carries no package name
+const isOurs = (value) => HOOK_MARKERS.some(m => String(value).includes(m))
+  || String(value).includes(path.join(__dirname, 'cli.js'));
+
+/** True if the AnoSys hook appears anywhere in notify, including chained inside another wrapper. */
 function hasAnosysHook(data) {
-  const notifyList = data.notify;
-  if (Array.isArray(notifyList)) {
-    return notifyList.some(x => String(x).includes('anosys-codex'));
-  }
-  return false;
+  return isOurs(JSON.stringify(data.notify ?? []));
 }
 
-function updateCodexConfig(hookCmd, customPath) {
-  const filePath = customPath || getConfigPath();
-  const dir = path.dirname(filePath);
-  fs.mkdirSync(dir, { recursive: true });
+/** The notify command without the AnoSys hook, or null when nothing is left. */
+function notifyWithoutOurs(notify) {
+  let items = notify;
+  if (typeof items === 'string') items = [items];
+  if (!Array.isArray(items) || !items.length) return null;
+  items = items.map(String);
+  const flag = items.indexOf(PREVIOUS_NOTIFY_FLAG);
+  const prevValue = flag !== -1 ? items[flag + 1] : null;
+  const head = flag !== -1 ? items.slice(0, flag) : items;
 
-  let content = '';
-  if (fs.existsSync(filePath)) {
-    content = fs.readFileSync(filePath, 'utf8');
+  if (head.some(isOurs)) {
+    if (!prevValue) return null;
+    try {
+      const previous = JSON.parse(prevValue);
+      return hasAnosysHook({ notify: previous }) ? notifyWithoutOurs(previous) : previous;
+    } catch {
+      return null;
+    }
   }
-
-  const data = loadToml(filePath);
-  if (hasAnosysHook(data)) {
-    return false; // already present
+  if (prevValue && isOurs(prevValue)) {
+    let inner = null;
+    try { inner = notifyWithoutOurs(JSON.parse(prevValue)); } catch { inner = null; }
+    const rest = [...items.slice(0, flag), ...items.slice(flag + 2)];
+    return inner ? [...rest, PREVIOUS_NOTIFY_FLAG, JSON.stringify(inner)] : rest;
   }
+  return items;
+}
 
-  const notifyArgs = Array.isArray(hookCmd)
-    ? hookCmd
-    : (typeof hookCmd === 'string' && hookCmd.trim())
-      ? (hookCmd.includes(' ') ? hookCmd.trim().split(/\s+/) : [hookCmd.trim()])
-      : ['anosys-codex', 'run'];
+// One top-level `notify = [...]` line (its strings may themselves contain brackets)
+const NOTIFY_LINE = /^[ \t]*notify[ \t]*=[^\n]*(?:\n|$)/m;
 
-  const serialized = notifyArgs.map(x => `"${String(x).replace(/"/g, '\\"')}"`).join(', ');
-  const notifyLine = `notify = [${serialized}]`;
-  const notifyRegex = /^[ \t]*notify[ \t]*=[ \t]*\[.*?\][ \t]*(?:\r?\n|$)/m;
-
-  let newContent;
-  if (notifyRegex.test(content)) {
-    newContent = content.replace(notifyRegex, `${notifyLine}\n`);
-  } else {
-    newContent = content ? `${notifyLine}\n\n${content}` : `${notifyLine}\n`;
-  }
-
-  const tmpPath = path.join(dir, `.tmp_${Date.now()}_config.toml`);
-  fs.writeFileSync(tmpPath, newContent, 'utf8');
+function writeAtomic(filePath, content) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmpPath = path.join(path.dirname(filePath), `.tmp_${Date.now()}_config.toml`);
+  fs.writeFileSync(tmpPath, content, 'utf8');
   fs.renameSync(tmpPath, filePath);
+}
+
+function setNotify(filePath, notify) {
+  const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+  const line = notify ? `notify = [${notify.map(v => JSON.stringify(v)).join(', ')}]\n` : '';
+  let next;
+  if (NOTIFY_LINE.test(content)) next = content.replace(NOTIFY_LINE, line);
+  else next = line ? (content ? `${line}\n${content}` : line) : content;
+  writeAtomic(filePath, next);
+}
+
+/**
+ * Register the hook in notify. A notify command already there is kept and
+ * chained after ours; re-running replaces an older AnoSys entry.
+ */
+function updateCodexConfig(hookArgs = null, customPath = null) {
+  const filePath = customPath || getConfigPath();
+  const data = loadToml(filePath);
+  const current = data.notify;
+  let existing;
+  if (hasAnosysHook(data)) existing = notifyWithoutOurs(current);
+  else if (Array.isArray(current) && current.length) existing = current.map(String);
+  else existing = typeof current === 'string' && current ? [current] : null;
+  const ours = Array.isArray(hookArgs) ? hookArgs : hookCommand();
+  const notify = existing ? [...ours, PREVIOUS_NOTIFY_FLAG, JSON.stringify(existing)] : ours;
+  if (JSON.stringify(current) === JSON.stringify(notify)) return false;
+  setNotify(filePath, notify);
   return true;
 }
 
-function removeCodexConfig(customPath) {
+/** Remove only the AnoSys part of notify; other tools' notify commands stay. */
+function removeCodexConfig(customPath = null) {
   const filePath = customPath || getConfigPath();
   if (!fs.existsSync(filePath)) return false;
-
   const data = loadToml(filePath);
   if (!hasAnosysHook(data)) return false;
-
-  const content = fs.readFileSync(filePath, 'utf8');
-  const dir = path.dirname(filePath);
-  const notifyRegex = /^[ \t]*notify[ \t]*=[ \t]*\[.*?\][ \t]*(?:\r?\n|$)/m;
-  const newContent = content.replace(notifyRegex, '');
-
-  const tmpPath = path.join(dir, `.tmp_${Date.now()}_config.toml`);
-  fs.writeFileSync(tmpPath, newContent, 'utf8');
-  fs.renameSync(tmpPath, filePath);
+  setNotify(filePath, notifyWithoutOurs(data.notify));
   return true;
 }
 
-function updateCodexEnv({ apiKey = '', redaction = false, endpointUrl = INGESTION_URL, customPath }) {
+function updateCodexEnv({ apiKey = '', endpointUrl = INGESTION_URL, customPath } = {}) {
   const filePath = customPath || getEnvPath();
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
@@ -161,13 +192,13 @@ function updateCodexEnv({ apiKey = '', redaction = false, endpointUrl = INGESTIO
   const lines = [
     '# AnoSys Codex CLI configuration',
     `export ANOSYS_HOOK_ENDPOINT_URL="${endpointUrl}"`,
-    `export REDACTION="${redaction ? 'true' : 'false'}"`
-  ];
+  ]; // what is collected is set with `anosys-codex privacy`
   if (apiKey) {
     lines.push(`export ANOSYS_HOOK_APIKEY="${apiKey}"`);
   }
 
   fs.writeFileSync(filePath, lines.join('\n') + '\n', { encoding: 'utf8', mode: 0o600 });
+  fs.chmodSync(filePath, 0o600);
 }
 
 function removeCodexEnv(customPath) {
@@ -218,6 +249,10 @@ function validateApiKey(apiKey, keyType = 'cc') {
 
 module.exports = {
   HOOK_COMMAND,
+  HOOK_MARKERS,
+  PREVIOUS_NOTIFY_FLAG,
+  hookCommand,
+  notifyWithoutOurs,
   INGESTION_URL,
   getCodexHome,
   getConfigPath,

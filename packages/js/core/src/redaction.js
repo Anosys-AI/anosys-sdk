@@ -1,6 +1,8 @@
+'use strict';
+
 /** Secret-shaped strings scrubbed from hook content even at `full` (best effort). Mirrors Python redaction.py. */
 
-export const SECRET_REPLACEMENT = '[SECRET]';
+const SECRET_REPLACEMENT = '[SECRET]';
 
 const SECRET_PATTERNS = [
   /sk-ant-[A-Za-z0-9_-]{20,}/g,
@@ -18,7 +20,7 @@ const SECRET_PATTERNS = [
 const ASSIGNMENT = /((?:api[_-]?key|apikey|secret|password|passwd|token|authorization)["']?\s*[:=]\s*["']?(?:bearer\s+)?)[A-Za-z0-9_\-/+=.]{12,}/gi;
 
 /** Replace secret-shaped substrings in a string, or in every string inside an object/array. */
-export function scrubSecrets(value) {
+function scrubSecrets(value) {
   if (typeof value === 'string') {
     let out = value;
     for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, SECRET_REPLACEMENT);
@@ -30,3 +32,8 @@ export function scrubSecrets(value) {
   }
   return value;
 }
+
+module.exports = {
+  SECRET_REPLACEMENT,
+  scrubSecrets,
+};
