@@ -156,9 +156,12 @@ def test_encrypted_value_is_replaced_whole_not_cut(monkeypatch):
 def test_post_record_fits_and_posts():
     from anosys_sdk_core.transport import post_record
     calls = []
-    post = lambda url, json, timeout, headers: calls.append(json) or "ok"
+
+    def post(url, json, timeout, headers):
+        calls.append(json)
+        return "ok"
+
     assert post_record("u", {"cvs199": "y" * 5000, "a": 1}, post=post) == "ok"
-    import os
     os.environ["ANOSYS_MAX_BATCH_BYTES"] = "2048"
     try:
         assert post_record("u", {"cvs199": "y" * 5000, "a": 1}, post=post) == "ok"
