@@ -9,10 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from anosys_sdk_antigravity.constants import HOOK_NAME, INTEGRATION_VERSION
 from anosys_sdk_antigravity.hook_runner import (
-    clear_pending_records,
-    load_pending_records,
     load_state,
-    save_pending_records,
     save_state,
 )
 from anosys_sdk_antigravity.installer import (
@@ -241,7 +238,6 @@ def test_transform_antigravity_turn():
         session_id="conv-12345",
         turn_id="conv-12345_0",
         hook_metadata=hook_meta,
-        redact=False,
     )
 
     # Named variables
@@ -285,38 +281,6 @@ def test_transform_antigravity_turn():
     assert "kubectl apply" in payload["cvs90"]
 
 
-def test_transform_antigravity_turn_redaction():
-    turn = {
-        "user_input": "Secret token is ABC123XYZ",
-        "final_response": "Processed secret token.",
-        "model_name": "gemini-2.5-pro",
-        "start_ms": 1000,
-        "end_ms": 2000,
-        "tool_steps": [
-            {
-                "name": "run_command",
-                "args": {"CommandLine": "curl -H 'Auth: Bearer ABC123XYZ'"},
-                "output": "Sensitive output with ABC123XYZ",
-                "duration_ms": 500,
-            }
-        ],
-    }
-
-    payload = transform_antigravity_turn(
-        turn=turn,
-        session_id="conv-sec",
-        turn_id="conv-sec_0",
-        hook_metadata={"workspacePaths": ["/proj"]},
-        redact=True,
-    )
-
-    assert payload["user_prompt"] == "[REDACTED]"
-    assert payload["assistant_text"] == "[REDACTED]"
-    assert payload["cvs4"] == "[REDACTED]"
-    assert payload["cvs5"] == "[REDACTED]"
-    assert "ABC123XYZ" not in payload["cvs199"]
-
-
 def test_installer_hooks_config_lifecycle(tmp_path: Path):
     hooks_file = tmp_path / "hooks.json"
 
@@ -354,12 +318,12 @@ def test_installer_hooks_config_lifecycle(tmp_path: Path):
 
 def test_installer_env_lifecycle(tmp_path: Path):
     env_file = tmp_path / "anosys-env.json"
-    update_env_config(env_file, api_key="test-api-key", endpoint_url="https://api.test/ingest", redaction=True)
+    update_env_config(env_file, api_key="test-api-key", endpoint_url="https://api.test/ingest")
 
     data = load_json(env_file)
     assert data["ANOSYS_HOOK_APIKEY"] == "test-api-key"
     assert data["ANOSYS_HOOK_ENDPOINT_URL"] == "https://api.test/ingest"
-    assert data["REDACTION"] == "true"
+    assert "REDACTION" not in data
 
     removed = remove_env_config(env_file)
     assert removed is True
@@ -380,21 +344,6 @@ def test_hook_runner_state(tmp_path: Path, monkeypatch):
     reloaded = load_state("conv-xyz")
     assert reloaded["last_emitted_turn"] == 2
     assert len(reloaded["processed_turns"]) == 3
-
-
-def test_hook_runner_pending_records(tmp_path: Path, monkeypatch):
-    import anosys_sdk_antigravity.hook_runner as hr
-    monkeypatch.setattr(hr, "PENDING_FILE", tmp_path / "pending_records.jsonl")
-
-    records = [{"turn_id": "t1", "prompt": "p1"}, {"turn_id": "t2", "prompt": "p2"}]
-    save_pending_records(records)
-
-    loaded = load_pending_records()
-    assert len(loaded) == 2
-    assert loaded[0]["turn_id"] == "t1"
-
-    clear_pending_records()
-    assert len(load_pending_records()) == 0
 
 
 def test_validate_api_key_mock():

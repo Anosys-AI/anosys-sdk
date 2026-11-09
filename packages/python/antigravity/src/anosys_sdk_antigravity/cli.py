@@ -5,6 +5,9 @@ Commands:
   install    Register the AnoSys tracing hook in ~/.gemini/config/hooks.json
   uninstall  Remove the AnoSys tracing hook from hooks.json
   status     Show current hook registration and configuration status
+  privacy    Show or change what is collected (off | metadata | full)
+  doctor     Show installed copies, the active hook and local files
+  purge      Delete local queued records and logs
   run        Execute hook handler (invoked by Antigravity on PreInvocation/Stop)
 """
 
@@ -14,9 +17,11 @@ import argparse
 import os
 import sys
 
+from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
+from anosys_sdk_core.privacy import effective_level
+
 from anosys_sdk_antigravity.constants import (
     DEFAULT_INGESTION_URL,
-    HOOK_COMMAND,
     HOOK_NAME,
 )
 from anosys_sdk_antigravity.installer import (
@@ -24,6 +29,7 @@ from anosys_sdk_antigravity.installer import (
     get_env_path,
     get_hooks_path,
     has_anosys_hook,
+    hook_command,
     load_json,
     remove_env_config,
     remove_hooks_config,
@@ -50,14 +56,6 @@ def cmd_install(args: argparse.Namespace) -> None:
     workspace = getattr(args, "workspace", False)
     hooks_path = get_hooks_path(workspace=workspace)
     env_path = get_env_path(workspace=workspace)
-
-    redaction = getattr(args, "redaction", False)
-    if not redaction and not getattr(args, "no_redaction", False):
-        if yes:
-            redaction = False
-        else:
-            choice = _prompt("Enable content redaction? (y/N): ", "n").lower()
-            redaction = choice == "y"
 
     api_key = (
         getattr(args, "api_key_flag", None)
@@ -90,8 +88,8 @@ def cmd_install(args: argparse.Namespace) -> None:
     if auto_update:
         print(f"\nUpdating {hooks_path} ...")
         backup_path = backup(hooks_path)
-        update_hooks_config(hooks_path, command=HOOK_COMMAND)
-        update_env_config(env_path, api_key=api_key, endpoint_url=endpoint_url, redaction=redaction)
+        update_hooks_config(hooks_path)
+        update_env_config(env_path, api_key=api_key, endpoint_url=endpoint_url)
 
         if backup_path:
             print(f"  Backed up original settings -> {backup_path}")
@@ -100,15 +98,18 @@ def cmd_install(args: argparse.Namespace) -> None:
         if api_key:
             masked = ("*" * (len(api_key) - 4)) + api_key[-4:] if len(api_key) > 4 else "****"
             print(f"  Logs API key: {masked}")
-        print(f"  Redaction: {'enabled' if redaction else 'disabled'}")
-        print("\n✅ Antigravity hook installed successfully.\n")
+        level, source = effective_level()
+        print(f"  Collecting: {level} (from {source})")
+        print("\n✅ Antigravity hook installed successfully.")
+        print("\nBy default only metadata is sent (no prompts, answers, commands or files).")
+        print("To send full content, accept the data-collection policy: anosys-antigravity privacy full\n")
     else:
         print("\n================================================================")
         print(f"Add the following to your {hooks_path} file:")
         sample = {
             HOOK_NAME: {
-                "PreInvocation": [{"type": "command", "command": f"{HOOK_COMMAND} pre_invocation", "timeout": 30}],
-                "Stop": [{"type": "command", "command": f"{HOOK_COMMAND} stop", "timeout": 30}],
+                "PreInvocation": [{"type": "command", "command": f"{hook_command()} pre_invocation", "timeout": 30}],
+                "Stop": [{"type": "command", "command": f"{hook_command()} stop", "timeout": 30}],
             }
         }
         import json
@@ -117,7 +118,6 @@ def cmd_install(args: argparse.Namespace) -> None:
         env_sample = {
             "ANOSYS_HOOK_APIKEY": api_key,
             "ANOSYS_HOOK_ENDPOINT_URL": endpoint_url,
-            "REDACTION": "true" if redaction else "false",
         }
         print(json.dumps(env_sample, indent=2))
         print("================================================================\n")
@@ -186,6 +186,24 @@ def cmd_run(args: argparse.Namespace) -> None:
     run()
 
 
+def _purge_paths():
+    from anosys_sdk_antigravity import hook_runner as h
+    return [h.PENDING_FILE, h.LOG_FILE, h.LOG_FILE.with_name(h.LOG_FILE.name + ".1"),
+            h.LOG_FILE.with_name(h.LOG_FILE.name + ".2"), h.PAUSE_FILE]
+
+
+def _doctor() -> None:
+    from anosys_sdk_antigravity import hook_runner as h
+    hooks_path = get_hooks_path(workspace=False)
+    data = load_json(hooks_path)
+    print_doctor(
+        "anosys-antigravity", ["anosys-antigravity"], "anosys_sdk_antigravity.cli",
+        str(data.get(HOOK_NAME)) if has_anosys_hook(data) else None,
+        {"hooks": hooks_path, "env file": get_env_path(workspace=False),
+         "pending queue": h.PENDING_FILE, "log": h.LOG_FILE},
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="anosys-antigravity",
@@ -198,8 +216,9 @@ def main(argv: list[str] | None = None) -> None:
     p_install.add_argument("api_key_pos", nargs="?", default=None, metavar="api_key", help="AnoSys logs API key (optional positional argument)")
     p_install.add_argument("--api-key", dest="api_key_flag", default=None, metavar="KEY", help="AnoSys logs API key (flag)")
     p_install.add_argument("-y", "--yes", action="store_true", default=False, help="Non-interactive mode")
-    p_install.add_argument("--redaction", action="store_true", default=False, help="Enable content redaction")
-    p_install.add_argument("--no-redaction", action="store_true", default=False, help="Disable content redaction")
+    # Kept so old install commands still work; collection is set with `privacy`
+    p_install.add_argument("--redaction", action="store_true", default=False, help=argparse.SUPPRESS)
+    p_install.add_argument("--no-redaction", action="store_true", default=False, help=argparse.SUPPRESS)
     p_install.add_argument("--endpoint-url", default=DEFAULT_INGESTION_URL, help="Ingestion endpoint URL")
     p_install.add_argument("--workspace", action="store_true", default=False, help="Target workspace .agents/hooks.json")
     p_install.add_argument("--auto-update", dest="auto_update", action="store_true", default=None)
@@ -215,6 +234,9 @@ def main(argv: list[str] | None = None) -> None:
     p_status = subparsers.add_parser("status", help="Check hook installation status")
     p_status.add_argument("--workspace", action="store_true", default=False, help="Check workspace .agents/hooks.json")
     p_status.set_defaults(func=cmd_status)
+
+    add_privacy_parser(subparsers, "anosys-antigravity")
+    add_maintenance_parsers(subparsers, _purge_paths, _doctor)
 
     # run
     p_run = subparsers.add_parser("run", help="Run the hook handler")

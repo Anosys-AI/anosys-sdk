@@ -11,10 +11,23 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from anosys_sdk_core.privacy import BASE_METADATA_FIELDS
+
 from anosys_sdk_antigravity.constants import INTEGRATION_VERSION
 
 OS_USER = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
-REDACTION = os.environ.get("REDACTION", "false").lower() == "true"
+# Fields sent at the `metadata` level: the shared allowlist plus Antigravity's
+# own metadata and the CV columns that hold it. Content (prompts, answers,
+# commands, viewed/written paths, queries, subagent tasks, errors, the active
+# document and the raw turn in cvs199) is `full`-only.
+METADATA_FIELDS = BASE_METADATA_FIELDS | {
+    "active_document_language", "cursor_line", "client_timestamp_iso", "termination_reason",
+    "llm_step_count", "fully_idle", "execution_num", "workspace_paths",
+    "cvs1", "cvs2", "cvs6", "cvs9", "cvs12", "cvs13", "cvs16", "cvs17", "cvs18", "cvs19",
+    "cvs32", "cvs33", "cvs71", "cvs72", "cvs93",
+    "cvn1", "cvn2", "cvn3", "cvn6", "cvn7", "cvn8", "cvn25", "cvn26", "cvn27", "cvn28", "cvn39", "cvn41",
+    "cvb1", "cvb2", "cvb3",
+}
 
 
 def extract_tool_details(tool_steps: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -99,20 +112,14 @@ def transform_antigravity_turn(
     session_id: str,
     turn_id: str,
     hook_metadata: Optional[Dict[str, Any]] = None,
-    redact: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """
     Transform an Antigravity turn into AnoSys ingestion format (dual named & CV schema).
     """
-    do_redact = REDACTION if redact is None else redact
     meta = hook_metadata or {}
 
     user_prompt = str(turn.get("user_input") or "")
     assistant_text = str(turn.get("final_response") or "")
-
-    if do_redact:
-        user_prompt = "[REDACTED]"
-        assistant_text = "[REDACTED]"
 
     # Resolve model
     model = (
@@ -144,9 +151,6 @@ def transform_antigravity_turn(
     tool_steps_clean: List[Dict[str, Any]] = []
     for tc in tool_steps:
         entry = dict(tc)
-        if do_redact:
-            entry["args"] = "[REDACTED]"
-            entry["output"] = "[REDACTED]"
         tool_steps_clean.append(entry)
 
     # Raw audit context
@@ -166,18 +170,6 @@ def transform_antigravity_turn(
     }
 
     raw_to_serialize = raw_data
-    if do_redact:
-        try:
-            raw_str = json.dumps(raw_data, default=str)
-            orig_prompt = str(turn.get("user_input") or "")
-            orig_resp = str(turn.get("final_response") or "")
-            if orig_prompt:
-                raw_str = raw_str.replace(orig_prompt, "[REDACTED]")
-            if orig_resp:
-                raw_str = raw_str.replace(orig_resp, "[REDACTED]")
-            raw_to_serialize = json.loads(raw_str)
-        except Exception:
-            raw_to_serialize = raw_data
 
     # Hook metadata fields
     termination_reason = meta.get("terminationReason")

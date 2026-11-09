@@ -35,4 +35,4 @@ def test_workspace_credentials_override_global_but_not_environment(tmp_path):
         )
         config = json.loads(result.stdout)
         assert config["api_key"] == expected
-        assert config["redaction"] is True
+        assert "redaction" not in config  # collection level comes from `privacy` (core)
