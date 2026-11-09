@@ -25,7 +25,17 @@ const ANOSYS_ENV_KEYS = new Set([
   'OTEL_EXPORTER_OTLP_ENDPOINT',
   'OTEL_EXPORTER_OTLP_HEADERS',
   'OTEL_EXPORTER_OTLP_ANOSYS_APIKEY', // legacy — kept for clean uninstall
+  'OTEL_METRICS_INCLUDE_ACCOUNT_UUID',
+  'REDACTION', // legacy — collection is set with `anosys-sdk-claude-code privacy`
 ]);
+
+// Markers of every Stop-hook form this package has ever written
+const HOOK_MARKERS = ['anosys-sdk-claude-code', 'anosys_sdk_claude_code'];
+
+/** The Stop-hook command: this Node and this CLI by absolute path, never npx or a PATH lookup. */
+function hookCommand() {
+  return `"${process.execPath}" "${path.join(__dirname, 'cli.js')}" run`;
+}
 
 const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');
 const BACKUP_PATH = SETTINGS_PATH + '.bak';
@@ -86,7 +96,9 @@ function removeEnv(settings) {
 
 function isAnosysHookEntry(entry) {
   if (!entry || typeof entry !== 'object') return false;
-  return String(entry.owner || '').toLowerCase() === 'anosys';
+  if (String(entry.owner || '').toLowerCase() === 'anosys') return true;
+  const command = String(entry.command || '');
+  return HOOK_MARKERS.some(m => command.includes(m)) || command.includes(path.join(__dirname, 'cli.js'));
 }
 
 function stripAnosysFromGroup(group) {
@@ -211,6 +223,10 @@ async function validateApiKey(apiKey, type) {
 }
 
 module.exports = {
+  ANOSYS_ENV_KEYS,
+  HOOK_MARKERS,
+  hookCommand,
+  isAnosysHookEntry,
   SETTINGS_PATH,
   BACKUP_PATH,
   loadSettings,

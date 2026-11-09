@@ -23,13 +23,17 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { transformRecord, encryptPayload } = require('./mapper');
+const {
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields,
+  isPaused, scrubSecrets,
+} = require('anosys-sdk-core');
+const { METADATA_FIELDS, UNHANDLED_COUNTS, transformRecord } = require('./mapper');
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const INGESTION_URL = 'https://api.anosys.ai/ingestion';
-const API_KEY = process.env.ANOSYS_HOOK_APIKEY || '';
+const INGESTION_URL = process.env.ANOSYS_HOOK_ENDPOINT_URL || 'https://api.anosys.ai/ingestion';
+const API_KEY = process.env.ANOSYS_HOOK_APIKEY || process.env.ANOSYS_HOOK_API_KEY || '';
 const DRY_RUN = (process.env.ANOSYS_HOOK_DRY_RUN || 'false').toLowerCase() === 'true';
 const EXPLICIT_TRANSCRIPT = process.env.ANOSYS_HOOK_TRANSCRIPT || '';
 
@@ -37,40 +41,27 @@ const STATE_DIR = path.join(os.homedir(), '.claude', 'state');
 const STATE_FILE = path.join(STATE_DIR, 'hook_state.json');
 const PENDING_RECORDS_FILE = path.join(STATE_DIR, 'pending_records.jsonl');
 const LOG_FILE = path.join(STATE_DIR, 'hook.log');
+const PAUSE_FILE = path.join(STATE_DIR, 'anosys_paused.json');
+
+// Content fields scrubbed for secrets before sending at `full`
+const CONTENT_FIELDS = [
+  'user_prompt', 'assistant_text', 'last_prompt', 'tool_use_result', 'commands',
+  'written_paths', 'file_states', 'summary_content', 'task_description', 'cvs199',
+  'cvs4', 'cvs5', 'cvs24', 'cvs26',
+];
 
 // ---------------------------------------------------------------------------
 // Logging (mirrors Python's logging.basicConfig → file + stderr)
 // ---------------------------------------------------------------------------
 fs.mkdirSync(STATE_DIR, { recursive: true });
 
-function _formatLogLine(level, msg) {
-  const ts = new Date().toISOString().replace('T', ' ').replace('Z', '');
-  return `${ts} [${level}] ${msg}`;
-}
-
+// The hook log records ids, sizes and status codes only, never prompts or payloads.
+const writeLog = createHookLog(LOG_FILE);
 const log = {
-  _write(line) {
-    try { fs.appendFileSync(LOG_FILE, line + '\n', 'utf8'); } catch (_) { }
-  },
-  debug(msg, ...args) {
-    const line = _formatLogLine('DEBUG', _sprintf(msg, args));
-    this._write(line);
-  },
-  info(msg, ...args) {
-    const line = _formatLogLine('INFO', _sprintf(msg, args));
-    this._write(line);
-    process.stderr.write(line + '\n');
-  },
-  warning(msg, ...args) {
-    const line = _formatLogLine('WARNING', _sprintf(msg, args));
-    this._write(line);
-    process.stderr.write(line + '\n');
-  },
-  error(msg, ...args) {
-    const line = _formatLogLine('ERROR', _sprintf(msg, args));
-    this._write(line);
-    process.stderr.write(line + '\n');
-  },
+  debug() { /* debug lines are not written */ },
+  info(msg, ...args) { writeLog('INFO', _sprintf(msg, args)); },
+  warning(msg, ...args) { writeLog('WARNING', _sprintf(msg, args)); },
+  error(msg, ...args) { writeLog('ERROR', _sprintf(msg, args)); },
 };
 
 /** Very simple %-style sprintf that handles %s and %d. */
@@ -212,179 +203,65 @@ function saveState(state) {
  * Load pending records from the local storage file.
  * @returns {object[]}
  */
-function loadPendingRecords() {
-  if (!fs.existsSync(PENDING_RECORDS_FILE)) return [];
-  const records = [];
-  try {
-    const lines = fs.readFileSync(PENDING_RECORDS_FILE, 'utf8').split('\n');
-    for (const line of lines) {
-      if (line.trim()) {
-        records.push(JSON.parse(line));
-      }
+/** The current session's transcript and its subagents. Never other sessions. */
+function sessionTranscripts(primary) {
+  const results = [primary];
+  const subagentsDir = path.join(primary.path.replace(/\.jsonl$/, ''), 'subagents');
+  if (fs.existsSync(subagentsDir) && fs.statSync(subagentsDir).isDirectory()) {
+    for (const f of fs.readdirSync(subagentsDir).filter(n => n.endsWith('.jsonl')).sort()) {
+      const agentId = path.basename(f, '.jsonl');
+      const meta = _loadAgentMeta(path.join(subagentsDir, `${agentId}.meta.json`));
+      results.push({
+        path: path.join(subagentsDir, f),
+        state_key: `${primary.session_id}:subagent:${agentId}`,
+        session_id: primary.session_id,
+        is_agent: true,
+        agent_id: agentId,
+        agent_type: meta.agentType,
+        agent_description: meta.description,
+      });
     }
-  } catch (e) {
-    log.error('Failed to load pending records: %s', e);
   }
-  return records;
+  return results;
 }
 
-/**
- * Save records to the pending storage file (append by default).
- * @param {object[]} records
- * @param {boolean} overwrite
- */
-function savePendingRecords(records, overwrite = false) {
-  try {
-    const mode = overwrite ? 'w' : 'a';
-    const flag = overwrite ? 'w' : 'a';
-    const content = records.map(r => JSON.stringify(r)).join('\n') + '\n';
-    fs.writeFileSync(PENDING_RECORDS_FILE, content, { encoding: 'utf8', flag });
-    log.info(
-      'Saved %s records to pending storage (%s): %s',
-      records.length,
-      overwrite ? 'overwrite' : 'append',
-      PENDING_RECORDS_FILE
-    );
-  } catch (e) {
-    log.error('Failed to save pending records: %s', e);
-  }
-}
-
-/**
- * Clear the pending storage file after successful upload.
- */
-function clearPendingRecords() {
-  try {
-    if (fs.existsSync(PENDING_RECORDS_FILE)) {
-      fs.unlinkSync(PENDING_RECORDS_FILE);
-      log.info('Cleared pending records.');
+/** Apply the collection level, scrub secrets at `full`, then encrypt. */
+function prepareRecord(mapped, level) {
+  const record = filterFields(mapped, level, METADATA_FIELDS);
+  if (level === FULL) {
+    for (const field of CONTENT_FIELDS) {
+      if (record[field] !== undefined && record[field] !== null) record[field] = scrubSecrets(record[field]);
     }
-  } catch (e) {
-    log.error('Failed to clear pending records: %s', e);
   }
+  return encryptPayload(record);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 3. POST records to endpoint
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * POST mapped record payloads in batches of 100.
- * Returns a list of records that failed to post.
- *
- * Uses Node's built-in https/http module to avoid external dependencies.
- * @param {object[]} payloads
- * @returns {Promise<object[]>} failed records
- */
-async function postRecordsBatch(payloads) {
-  if (!payloads.length) return [];
-
+/** Deliver records (and queued retries) within the size limit. Resolves to the count accepted. */
+async function send(records, options = {}) {
+  if (DRY_RUN) {
+    log.info('[DRY RUN] Would send %s record(s)', records.length);
+    return records.length;
+  }
   const headers = { 'Content-Type': 'application/json' };
-  if (API_KEY) {
-    headers['anosys-apikey'] = API_KEY;
-  }
-
-  const failedRecords = [];
-  const batchSize = 100;
-
-  for (let i = 0; i < payloads.length; i += batchSize) {
-    const chunk = payloads.slice(i, i + batchSize);
-    const preparedChunk = chunk.map(r => encryptPayload(r));
-
-    if (DRY_RUN) {
-      log.info('[DRY RUN] Would POST chunk of %s records', preparedChunk.length);
-      continue;
-    }
-
-    try {
-      await _httpPost(INGESTION_URL, preparedChunk, headers);
-      log.info('Batch POST success — sent %s records', chunk.length);
-    } catch (e) {
-      log.error('Batch POST failed — trying to send %s records: %s', chunk.length, e);
-      failedRecords.push(...chunk);
-    }
-  }
-
-  return failedRecords;
+  if (API_KEY) headers['anosys-apikey'] = API_KEY;
+  return deliver(INGESTION_URL, records, new PendingQueue(PENDING_RECORDS_FILE), PAUSE_FILE, { headers, ...options });
 }
 
-/**
- * Minimal HTTP(S) POST helper using Node built-ins.
- * @param {string} url
- * @param {object} bodyObj
- * @param {object} headers
- * @returns {Promise<void>}
- */
-function _httpPost(url, bodyObj, headers) {
-  return new Promise((resolve, reject) => {
-    const body = JSON.stringify(bodyObj);
-    const parsed = new URL(url);
-    const lib = parsed.protocol === 'https:' ? require('https') : require('http');
-
-    const req = lib.request(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-        path: parsed.pathname + (parsed.search || ''),
-        method: 'POST',
-        headers: {
-          ...headers,
-          'Content-Length': Buffer.byteLength(body),
-        },
-        timeout: 15000,
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve();
-          } else {
-            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
-          }
-        });
-      }
-    );
-
-    req.on('error', reject);
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timed out'));
-    });
-
-    req.write(body);
-    req.end();
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 4. Main
-// ═══════════════════════════════════════════════════════════════════════════
-async function main() {
+async function main(options = {}) {
   // Add a small delay to ensure Claude Code has finished flushing logs to disk.
-  await new Promise(r => setTimeout(r, 500));
+  await new Promise(r => setTimeout(r, options.delayMs ?? 500));
 
-  log.info('='.repeat(60));
-  log.info('anosys_claude_hook.js invoked at %s', new Date().toISOString());
-
-  // -- 1. Resend pending records first ----------------------------------
-  const pending = loadPendingRecords();
-  if (pending.length) {
-    log.info('Found %s pending records from previous runs. Attempting resend...', pending.length);
-    const failedPending = await postRecordsBatch(pending);
-    if (!failedPending.length) {
-      clearPendingRecords();
-    } else {
-      log.warning('%s records still failed after resend. Updating storage.', failedPending.length);
-      savePendingRecords(failedPending, true); // overwrite
-    }
+  const { level, source } = effectiveLevel();
+  if (level === OFF) {
+    log.info('Collection is off (%s); nothing sent', source);
+    return;
+  }
+  if (isPaused(PAUSE_FILE)) {
+    log.info('Collection paused after an authorization error; nothing sent');
+    return;
   }
 
-  // -- 2. Identify primary transcript ----------------------------------
-  const stdinCtx = getStdinContext();
-  if (stdinCtx) {
-    log.info('Received context from stdin: %s', JSON.stringify(stdinCtx));
-  }
+  const stdinCtx = options.stdinCtx !== undefined ? options.stdinCtx : getStdinContext();
 
   // Priority: 1. Explicit Env Var, 2. stdin transcriptPath/sessionId, 3. Automatic detection
   let providedPath = EXPLICIT_TRANSCRIPT;
@@ -422,32 +299,14 @@ async function main() {
   }
 
   const currentSessionId = primaryTranscript.session_id;
-  log.info('Targeting transcript: %s (Session: %s)', primaryTranscript.path, currentSessionId);
 
   // In DRY_RUN mode ignore persisted state so every record is processed from scratch.
-  let state = DRY_RUN ? {} : loadState();
-  let sessionState = state[currentSessionId] || {};
+  const state = DRY_RUN ? {} : loadState();
+  let sessionState = {};
 
-  // Check if we should do a full scan (once per session "startup")
-  const fullScanDone = sessionState.full_scan_done || false;
-
-  let transcripts;
-  if (!fullScanDone) {
-    log.info('First run for session %s. Performing global transcript scan...', currentSessionId);
-    transcripts = findAllTranscripts();
-  } else {
-    // Process current session's transcript AND any of its subagent transcripts
-    const allKnown = findAllTranscripts();
-    transcripts = [primaryTranscript, ...allKnown.filter(
-      t => t.is_agent && t.session_id === currentSessionId
-    )];
-  }
-
-  log.info(
-    'Processing %s transcript(s) (%s agent(s)).',
-    transcripts.length,
-    transcripts.filter(t => t.is_agent).length
-  );
+  // Only this session and its subagents: past sessions are never uploaded
+  const transcripts = sessionTranscripts(primaryTranscript);
+  log.info("Session %s at '%s' (%s): %s transcript(s)", currentSessionId, level, source, transcripts.length);
 
   // -- 3. Process each transcript ---------------------------------------
   const allMappedPayloads = [];
@@ -464,7 +323,7 @@ async function main() {
     try {
       content = fs.readFileSync(transcript.path, 'utf8');
     } catch (e) {
-      log.error('Failed to read transcript %s: %s', transcript.path, e);
+      log.error('Failed to read transcript %s: %s', transcript.state_key, e.name);
       continue;
     }
 
@@ -635,12 +494,15 @@ async function main() {
         const mapped = transformRecord(msg, incremental, currentContext);
         sessionMapped.push(mapped);
       } catch (e) {
-        log.error('Failed to map record in %s at line %s (UUID %s): %s', sessionId, i, uuid, e);
+        log.error('Failed to map record in %s at line %s: %s', sessionId, i, e.name);
       }
     }
 
     if (sessionMapped.length) {
-      allMappedPayloads.push(...sessionMapped);
+      for (const m of sessionMapped) {
+        const record = prepareRecord(m, level);
+        if (Object.keys(record).length) allMappedPayloads.push(record);
+      }
 
       let finalUuid = null;
       if (totalLines > 0) {
@@ -668,34 +530,19 @@ async function main() {
     state[stateKeyUpd] = existing;
   }
 
-  // Always mark the primary session's full scan as done.
-  const primaryStateKey = primaryTranscript.state_key;
-  if (state[primaryStateKey]) {
-    state[primaryStateKey].full_scan_done = true;
-  } else {
-    state[primaryStateKey] = { full_scan_done: true };
-  }
-
   if (!DRY_RUN) {
     saveState(state);
   } else {
     log.info('[DRY RUN] Skipping state save — state file unchanged.');
   }
 
-  if (!allMappedPayloads.length) {
-    log.info('No new records (mapped) to send.');
-    return;
+  if (Object.keys(UNHANDLED_COUNTS).length) {
+    log.info('Unrecognized record types (counted, not stored): %s', JSON.stringify(UNHANDLED_COUNTS));
   }
 
-  // POST mapped records. If they fail, persist to pending list.
-  const failedNew = await postRecordsBatch(allMappedPayloads);
-
-  if (failedNew.length) {
-    log.error('%s new records failed to POST. Saving to pending storage.', failedNew.length);
-    savePendingRecords(failedNew, false); // Append
-  } else {
-    log.info('Successfully sent %s new records and updated state.', allMappedPayloads.length);
-  }
+  // Also flushes queued retries; failed records go to the bounded queue
+  const sent = await send(allMappedPayloads, options);
+  log.info('Session %s: %s record(s) mapped, %s accepted', currentSessionId, allMappedPayloads.length, sent);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -709,4 +556,7 @@ if (require.main === module) {
     });
 }
 
-module.exports = { main, findAllTranscripts, findLatestTranscript, loadState, saveState };
+module.exports = {
+  main, findAllTranscripts, findLatestTranscript, loadState, saveState, sessionTranscripts, prepareRecord,
+  LOG_FILE, PENDING_RECORDS_FILE, PAUSE_FILE, STATE_FILE,
+};
