@@ -42,8 +42,8 @@ in that project's root. A project file can only lower the level, never raise it.
 
 `full` is used only when `~/.anosys/consent.json` (readable only by you) records
 acceptance of this exact policy version. If the version changes, collection falls
-back to `metadata` until you accept again. Every record carries a `consent`
-field, `full;2026-11-09` or `metadata;none`, so the level a record was collected
+back to `metadata` until you accept again. Every record carries a `consent` field (stored in column `cvs198`),
+`full;2026-11-09` or `metadata;none`, so the level a record was collected
 under is always known.
 
 Precedence, strongest first: `ANOSYS_DISABLE=1`, an explicit flag, a project

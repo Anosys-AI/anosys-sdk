@@ -34,7 +34,7 @@ METADATA_KEYS = {
     "input_tokens", "output_tokens", "total_tokens", "cache_read", "cache_creation", "reasoning_tokens",
     "cost_estimate", "incremental_input", "incremental_output", "incremental_total", "incremental_cost",
     "incremental_cache_read", "incremental_cache_creation", "tool_count", "has_thinking",
-    "integration_version", "os_user", "consent",
+    "integration_version", "os_user", "consent", "cvs198",
     "cvs1", "cvs2", "cvs9", "cvs12", "cvs19", "cvs32", "cvs33", "cvn1", "cvn2", "cvn3", "cvn4", "cvn5", "cvn7",
     "cvs200",
 }
@@ -62,6 +62,7 @@ def test_metadata_is_the_default_and_sends_no_content():
     record = hook_runner.prepare_record(mapped(), METADATA)
     assert set(record) == METADATA_KEYS
     assert record["consent"] == "metadata;none"
+    assert record["cvs198"] == "metadata;none"
     assert not CONTENT_KEYS & set(record)
 
 

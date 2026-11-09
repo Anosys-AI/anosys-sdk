@@ -38,6 +38,7 @@ test('metadata by default sends no content', () => {
   const out = hookRunner.prepareRecord(mapped(), METADATA);
   for (const k of CONTENT) assert.ok(!(k in out), k);
   assert.equal(out.consent, 'metadata;none');
+  assert.equal(out.cvs198, 'metadata;none');
   assert.equal(out.model, 'gemini-3-pro');
   const text = JSON.stringify(out);
   assert.ok(!text.includes('ghp_') && !text.includes('API_KEY'));

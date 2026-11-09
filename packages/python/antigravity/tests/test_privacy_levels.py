@@ -38,7 +38,7 @@ def mapped():
 def test_metadata_default_sends_no_content():
     out = hook_runner.prepare_record(mapped(), METADATA)
     assert not CONTENT & set(out)
-    assert out["consent"] == "metadata;none" and out["model"] == "gemini-3-pro"
+    assert out["consent"] == "metadata;none" and out["cvs198"] == "metadata;none" and out["model"] == "gemini-3-pro"
     assert "ghp_" not in json.dumps(out) and "API_KEY" not in json.dumps(out)
 
 

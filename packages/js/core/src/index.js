@@ -30,6 +30,7 @@ exports.LEVELS = privacy.LEVELS;
 exports.POLICY_VERSION = privacy.POLICY_VERSION;
 exports.POLICY_URL = privacy.POLICY_URL;
 exports.CONSENT_FIELD = privacy.CONSENT_FIELD;
+exports.CONSENT_COLUMN = privacy.CONSENT_COLUMN;
 exports.PROJECT_FILE = privacy.PROJECT_FILE;
 exports.BASE_METADATA_FIELDS = privacy.BASE_METADATA_FIELDS;
 exports.consentPath = privacy.consentPath;

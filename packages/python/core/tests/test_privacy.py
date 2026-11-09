@@ -72,10 +72,11 @@ def test_filter_fields_by_level():
     allowed = {"session_id", "input_tokens"}
     assert filter_fields(record, OFF, allowed) == {}
     meta = filter_fields(record, METADATA, allowed)
-    assert meta == {"session_id": "s", "input_tokens": 3, "consent": "metadata;none"}
+    assert meta == {"session_id": "s", "input_tokens": 3, "consent": "metadata;none", "cvs198": "metadata;none"}
     full = filter_fields(record, FULL, allowed)
     assert full["user_prompt"] == "secret" and full["brand_new_field"] == "x"
     assert full["consent"] == f"full;{POLICY_VERSION}"
+    assert full["cvs198"] == f"full;{POLICY_VERSION}"
 
 
 def test_unknown_fields_are_excluded_at_metadata():

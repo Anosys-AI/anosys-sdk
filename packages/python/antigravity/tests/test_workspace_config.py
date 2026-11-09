@@ -24,6 +24,7 @@ def test_workspace_credentials_override_global_but_not_environment(tmp_path):
     for key in ("ANOSYS_HOOK_APIKEY", "ANOSYS_API_KEY", "REDACTION"):
         env.pop(key, None)
     env["HOME"] = str(home)
+    env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
     code = ("import json; from anosys_sdk_antigravity.hook_runner import get_config; "
             "print(json.dumps(get_config()))")
     for override, expected in ((None, "workspace-key"), ("environment-key", "environment-key")):

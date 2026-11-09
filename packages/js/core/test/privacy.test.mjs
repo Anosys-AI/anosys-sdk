@@ -57,10 +57,11 @@ describe('filterFields', () => {
     const record = { session_id: 's', input_tokens: 3, user_prompt: 'secret', brand_new_field: 'x' };
     const allowed = new Set(['session_id', 'input_tokens']);
     assert.deepEqual(filterFields(record, OFF, allowed), {});
-    assert.deepEqual(filterFields(record, METADATA, allowed), { session_id: 's', input_tokens: 3, consent: 'metadata;none' });
+    assert.deepEqual(filterFields(record, METADATA, allowed), { session_id: 's', input_tokens: 3, consent: 'metadata;none', cvs198: 'metadata;none' });
     const full = filterFields(record, FULL, allowed);
     assert.equal(full.user_prompt, 'secret');
     assert.equal(full.consent, `full;${POLICY_VERSION}`);
+    assert.equal(full.cvs198, `full;${POLICY_VERSION}`);
     assert.ok(!('brand_new_field' in filterFields({ brand_new_field: 1 }, METADATA, BASE_METADATA_FIELDS)));
   });
 });

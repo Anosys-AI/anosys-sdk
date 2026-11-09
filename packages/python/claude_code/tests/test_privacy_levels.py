@@ -56,7 +56,7 @@ def test_legacy_cv_layout_metadata(monkeypatch):
     out = hook_runner.prepare_record(transform_record(ASSISTANT), METADATA)
     for content_col in ("cvs4", "cvs5", "cvs26", "cvs41", "cvs199"):
         assert content_col not in out
-    assert set(out) - {"consent", "timestamp", "user_timestamp", "event_id", "event_type",
+    assert set(out) - {"consent", "cvs198", "timestamp", "user_timestamp", "event_id", "event_type",
                        "event_source_name", "debug", "cvs200"} <= CV_METADATA_FIELDS
 
 

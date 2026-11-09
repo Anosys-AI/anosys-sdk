@@ -23,6 +23,7 @@ const RANK = { off: 0, metadata: 1, full: 2 };
 const POLICY_VERSION = '2026-11-09';
 const POLICY_URL = 'https://github.com/anosys-ai/anosys-sdk/blob/main/PRIVACY.md';
 const CONSENT_FIELD = 'consent';
+const CONSENT_COLUMN = 'cvs198';
 const PROJECT_FILE = '.anosys';
 
 function consentPath() {
@@ -135,7 +136,7 @@ function consentValue(level) {
 const BASE_METADATA_FIELDS = new Set([
   'timestamp', 'user_timestamp', 'event_id', 'eventId', 'uuid', 'event_type',
   'event_source_name', 'debug', 'session_id', 'sessionId', 'log_index',
-  'integration_version', 'consent',
+  'integration_version', 'consent', 'cvs198',
   'project', 'cwd', 'git_branch', 'os_user', 'slug', 'version', 'entrypoint',
   'original_branch', 'original_head_commit', 'worktree_branch', 'worktree_name',
   'worktree_path', 'worktree_original_cwd', 'tmux_session_name',
@@ -181,7 +182,9 @@ function filterFields(record, level, metadataFields) {
     const allowed = metadataFields instanceof Set ? metadataFields : new Set(metadataFields);
     result = Object.fromEntries(Object.entries(record).filter(([k]) => allowed.has(k)));
   }
-  result[CONSENT_FIELD] = consentValue(level);
+  const val = consentValue(level);
+  result[CONSENT_FIELD] = val;
+  result[CONSENT_COLUMN] = val;
   return result;
 }
 
@@ -193,6 +196,7 @@ module.exports = {
   POLICY_VERSION,
   POLICY_URL,
   CONSENT_FIELD,
+  CONSENT_COLUMN,
   PROJECT_FILE,
   BASE_METADATA_FIELDS,
   consentPath,

@@ -39,6 +39,7 @@ export const BASE_KEY_MAPPING = {
   llm_input_messages: 'gen_ai_input_messages', llm_output_messages: 'gen_ai_output_messages',
   input: 'llm_input', output: 'llm_output', error: 'cvs3', caller: 'cvs4',
   error_type: 'cvs10', error_message: 'cvs11', error_stack: 'cvs12',
+  consent: 'cvs198', consent_level: 'cvs198',
   raw: 'cvs199', from_source: 'cvs200', source: 'cvs200', is_streaming: 'cvb2',
   is_agent: 'cvb1', events: 'otel_events',
   llm_model_name: 'cvs16', 'gen_ai.request.tool_choice': 'cvs15',

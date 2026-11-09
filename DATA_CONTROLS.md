@@ -30,7 +30,7 @@ The same commands exist for `anosys-codex` and `anosys-antigravity`. Other switc
 | `ANOSYS_COLLECTION_LEVEL=off\|metadata\|full` | Level for environments without the consent file; `full` still needs consent |
 | `ANOSYS_CONSENT_FILE` | Location of the consent file (default `~/.anosys/consent.json`) |
 
-Every hook record carries `consent` (`full;<policy version>` or `<level>;none`).
+Every hook record carries `consent` (`full;<policy version>` or `<level>;none`), stored in `cvs198`.
 
 At `metadata` only allow-listed fields leave the machine; a new upstream field is
 excluded until it is added to the list. At `full`, credential-shaped strings are

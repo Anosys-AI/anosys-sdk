@@ -48,6 +48,7 @@ POLICY_VERSION = "2026-11-09"
 POLICY_URL = "https://github.com/anosys-ai/anosys-sdk/blob/main/PRIVACY.md"
 
 CONSENT_FIELD = "consent"
+CONSENT_COLUMN = "cvs198"
 PROJECT_FILE = ".anosys"
 
 
@@ -186,7 +187,7 @@ BASE_METADATA_FIELDS: Set[str] = {
     # identity and timing
     "timestamp", "user_timestamp", "event_id", "eventId", "uuid", "event_type",
     "event_source_name", "debug", "session_id", "sessionId", "log_index",
-    "integration_version", "consent",
+    "integration_version", "consent", "cvs198",
     # workspace (kept at metadata and disclosed in PRIVACY.md)
     "project", "cwd", "git_branch", "os_user", "slug", "version", "entrypoint",
     "original_branch", "original_head_commit", "worktree_branch", "worktree_name",
@@ -243,5 +244,7 @@ def filter_fields(record: Dict[str, Any], level: str, metadata_fields: Iterable[
     else:
         allowed = set(metadata_fields)
         result = {k: v for k, v in record.items() if k in allowed}
-    result[CONSENT_FIELD] = consent_value(level)
+    val = consent_value(level)
+    result[CONSENT_FIELD] = val
+    result[CONSENT_COLUMN] = val
     return result

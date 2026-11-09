@@ -98,7 +98,9 @@ export const BASE_KEY_MAPPING = {
   error_message:  'cvs11',
   error_stack:    'cvs12',
 
-  // Source tracking
+  // Source and privacy tracking
+  consent:     'cvs198',
+  consent_level: 'cvs198',
   raw:         'cvs199',
   from_source: 'cvs200',
   source:      'cvs200',
