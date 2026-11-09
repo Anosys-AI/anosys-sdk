@@ -2,14 +2,13 @@ import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { BatchSpanProcessor, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai';
-import axios from 'axios';
 
-import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
+import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { extractSpanInfo } from './hooks.js';
-import { OFF, fitRecord, prepareAppRecord, resolveAppLevel } from 'anosys-sdk-core';
+import { OFF, prepareAppRecord, resolveAppLevel, sendAppRecord } from 'anosys-sdk-core';
 
-let _logApiUrl = DEFAULT_API_URL;
+let _logApiUrl = null; // set by setupTracing; null = nothing is sent
 let _tracingInitialized = false;
 let _captureLevel = 'full'; // set by AnosysOpenAILogger (see anosys-sdk-core capture.js)
 
@@ -44,9 +43,8 @@ export class AnosysHttpExporter {
         // Level filtering, cvs198 and encryption in one place
         const payloadToSend = prepareAppRecord(data, _captureLevel);
         if (!payloadToSend) continue;
-        // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
-        const fitted = fitRecord(payloadToSend);
-        if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });
+        // size-limited, in the background: never blocks the instrumented call
+        sendAppRecord(_logApiUrl, payloadToSend);
 
       } catch (e) {
         if (e.response) {

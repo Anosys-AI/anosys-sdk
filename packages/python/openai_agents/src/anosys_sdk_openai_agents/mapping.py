@@ -18,13 +18,21 @@ from anosys_sdk_core.util.batching import assign, reassign
 # Agents-specific key mapping
 AGENTS_KEY_MAPPING = {
     **BASE_KEY_MAPPING,
+    "g1": "g1",
+    "cvs3": "cvs3",  # Error
     # Metadata and Status
     "cvs60": "cvs60",  # Object type (trace/trace.span)
     "cvs61": "cvs61",  # Source (span_start/span_end)
     "cvs62": "cvs62",  # Handoffs
     "cvs63": "cvs63",  # Tools
     "cvs64": "cvs64",  # Output type
+    "cvs65": "cvs65",  # Speech group input
+    "cvs66": "cvs66",  # Transcription output
     "cvs67": "cvs67",  # MCP data
+    "cvs68": "cvs68",  # Guardrail triggered
+    "cvs69": "cvs69",  # Model
+    "cvs70": "cvs70",  # Model config
+    "cvs71": "cvs71",  # (reserved by the JS mapping, kept aligned)
     "cvs72": "cvs72",  # Data
     "cvs73": "cvs73",  # Format
     "cvs74": "cvs74",  # First content at

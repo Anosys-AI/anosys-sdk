@@ -2,18 +2,17 @@ import { trace } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { BatchSpanProcessor, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai';
-import axios from 'axios';
 
-import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
+import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { span2json, extractOtelSpanInfo } from './mapping.js';
 import { safeSerialize, cleanNulls } from './utils.js';
-import { OFF, fitRecord, prepareAppRecord, resolveAppLevel } from 'anosys-sdk-core';
+import { OFF, prepareAppRecord, resolveAppLevel, sendAppRecord } from 'anosys-sdk-core';
 
 // Agents-specific descriptive columns kept at `metadata` (agent hierarchy, handoffs, model, ids)
 export const AGENTS_METADATA_COLUMNS = ['cvs62', 'cvs64', 'cvs68', 'cvs69', 'cvs77', 'cvs78', 'cvs79', 'llm_token_count'];
 
-let _logApiUrl = DEFAULT_API_URL;
+let _logApiUrl = null; // set by setupTracing; null = nothing is sent
 let _tracingInitialized = false;
 let _captureLevel = 'full'; // set by AnosysOpenAIAgentsLogger (see anosys-sdk-core capture.js)
 
@@ -37,9 +36,8 @@ export class AnosysHttpExporter {
         // Level filtering, cvs198 and encryption in one place
         const payloadToSend = prepareAppRecord(cleaned, _captureLevel, AGENTS_METADATA_COLUMNS);
         if (!payloadToSend) continue;
-        // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
-        const fitted = fitRecord(payloadToSend);
-        if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });
+        // size-limited, in the background: never blocks the instrumented call
+        sendAppRecord(_logApiUrl, payloadToSend);
         log.debug('Successfully sent: %s | %s', spanSource, spanName);
 
       } catch (e) {
@@ -130,7 +128,7 @@ export class AnosysOpenAIAgentsLogger {
     _captureLevel = level;
     this.captureLevel = level;
     log.info('AnoSys OpenAI Agents collection level: %s (%s)', level, source);
-    this._logApiUrl = DEFAULT_API_URL;
+    this._logApiUrl = null;
     this._ready = this._init();
   }
 
@@ -170,9 +168,8 @@ export class AnosysOpenAIAgentsLogger {
       // Content dropped at metadata, cvs198 and encryption in one place
       const payloadToSend = prepareAppRecord(transformed, _captureLevel, AGENTS_METADATA_COLUMNS);
       if (!payloadToSend) return;
-      // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
-      const fitted = fitRecord(payloadToSend);
-      if (fitted) await axios.post(this._logApiUrl, fitted, { timeout: 5000 });
+      await this._ready; // records wait for the endpoint instead of going to a default
+      sendAppRecord(this._logApiUrl ?? _logApiUrl, payloadToSend);
 
     } catch (e) {
       log.error('Error logging trace:', e.message);

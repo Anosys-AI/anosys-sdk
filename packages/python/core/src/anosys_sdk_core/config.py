@@ -46,36 +46,39 @@ def get_env_bool(var_name: str, default: bool = True) -> bool:
         return bool(value_str)
 
 
-def resolve_api_key(api_key: Optional[str] = None, timeout: int = 30) -> str:
+def resolve_api_key(api_key: Optional[str] = None, timeout: int = 10) -> str:
     """
-    Resolve the API key to get the logging endpoint URL.
-    
+    Resolve the API key to the ingestion URL for this key.
+
+    Returns "" when there is no key or it cannot be resolved: nothing is sent
+    then (telemetry is never posted to a default site).
+
     Args:
         api_key: AnoSys API key (defaults to ANOSYS_API_KEY env var)
         timeout: Request timeout in seconds
-        
-    Returns:
-        The resolved API URL for logging
     """
     if api_key is None:
         api_key = os.getenv('ANOSYS_API_KEY')
-    
+
     if not api_key:
-        logger.warning("ANOSYS_API_KEY not found. Please obtain your API key from "
+        explicit = os.getenv("ANOSYS_API_URL", "").strip()
+        if explicit:
+            return explicit  # a self-hosted endpoint set on purpose
+        logger.warning("ANOSYS_API_KEY not found; AnoSys telemetry is disabled. Get a key at "
                        "https://console.anosys.ai/collect/integrationoptions")
-        return DEFAULT_API_URL
-    
+        return ""
+
     try:
-        response = requests.get(
-            f"{API_KEY_RESOLVER_URL}?apikey={api_key}",
-            timeout=timeout
-        )
+        response = requests.get(API_KEY_RESOLVER_URL, params={"apikey": api_key}, timeout=timeout)
         response.raise_for_status()
-        data = response.json()
-        return data.get("apiUrl", DEFAULT_API_URL)
-    except requests.exceptions.RequestException as e:
-        logger.error("Failed to resolve API key: %s", e)
-        return DEFAULT_API_URL
+        url = response.json().get("apiUrl") or ""
+        if not url:
+            logger.error("The AnoSys API key was not recognised; telemetry is disabled")
+        return url
+    except (requests.exceptions.RequestException, ValueError) as e:
+        # the key is never logged
+        logger.error("Could not resolve the AnoSys API key (%s); telemetry is disabled", type(e).__name__)
+        return ""
 
 
 def get_api_url(override_url: Optional[str] = None) -> str:

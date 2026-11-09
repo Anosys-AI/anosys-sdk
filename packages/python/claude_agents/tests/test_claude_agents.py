@@ -155,7 +155,7 @@ def test_wrap_query_is_idempotent():
 def test_http_exporter_posts_spans_with_consent(exporter, monkeypatch):
     """Regression: the exporter must not fail on every span (it referenced an undefined name)."""
     posted = []
-    monkeypatch.setattr(instrumentor, "post_record", lambda url, data, timeout=5: posted.append(data))
+    monkeypatch.setattr(instrumentor, "send_app_record", lambda url, data: posted.append(data))
     monkeypatch.setattr(instrumentor, "_log_api_url", "https://example.invalid/ingest")
     _run(exporter, WIRE_RUN)
     instrumentor.AnosysHttpExporter().export(exporter.get_finished_spans())
@@ -165,7 +165,7 @@ def test_http_exporter_posts_spans_with_consent(exporter, monkeypatch):
 
 def test_http_exporter_metadata_level_sends_no_content(exporter, monkeypatch):
     posted = []
-    monkeypatch.setattr(instrumentor, "post_record", lambda url, data, timeout=5: posted.append(data))
+    monkeypatch.setattr(instrumentor, "send_app_record", lambda url, data: posted.append(data))
     monkeypatch.setitem(instrumentor._run_settings, "level", "metadata")
     _run(exporter, WIRE_RUN)
     instrumentor.AnosysHttpExporter().export(exporter.get_finished_spans())

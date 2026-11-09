@@ -32,7 +32,6 @@
     "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@opentelemetry/instrumentation-openai": "^0.7.0",
-    "axios": "^1.7.0",
     "dotenv": "^16.0.0",
     "anosys-sdk-core": "^2.0.0"
   },

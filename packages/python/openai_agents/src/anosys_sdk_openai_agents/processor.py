@@ -20,7 +20,6 @@ from opentelemetry.sdk.trace.export import (
     SpanExportResult,
 )
 from traceai_openai_agents import OpenAIAgentsInstrumentor, TraceConfig
-import requests
 
 from agents import TracingProcessor
 
@@ -29,7 +28,7 @@ from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.context import clean_contextvars
 from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
 from anosys_sdk_core.privacy import FULL, OFF
-from anosys_sdk_core.transport import post_record
+from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_openai_agents.mapping import span2json, extract_otel_span_info
 from anosys_sdk_openai_agents.utils import safe_serialize, clean_nulls
 
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Module-level state
 _lock = threading.Lock()
 _tracing_initialized = False
-_log_api_url = "https://www.anosys.ai"
+_log_api_url = ""  # set by setup_tracing; empty = nothing is sent
 _capture_level = "full"  # set by AnosysOpenAIAgentsLogger (see anosys_sdk_core.capture)
 
 # Agents-specific descriptive columns kept at ``metadata`` (agent hierarchy and
@@ -78,20 +77,12 @@ class AnosysHttpExporter(SpanExporter):
                 if encrypted_data is None:
                     continue
                 
-                # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
-                response = post_record(_log_api_url, encrypted_data, timeout=5)
-                if response is not None:
-                    response.raise_for_status()
+                # size-limited, in the background: never blocks the instrumented call
+                send_app_record(_log_api_url, encrypted_data)
                 logger.info(f"[ANOSYS]✅ Successfully sent to backend: {span_source} | {span_name}")
                 
-            except requests.exceptions.HTTPError as e:
-                logger.error(f"[ANOSYS]❌ HTTP Export failed ({e.response.status_code}): {e}")
-                try:
-                    logger.error(f"[ANOSYS]❌ Response: {e.response.text[:500]}")
-                except Exception:
-                    pass
             except Exception as e:
-                logger.error(f"[ANOSYS]❌ Export failed (Unexpected): {e}")
+                logger.error("[ANOSYS] Export failed (%s)", type(e).__name__)  # no span content in logs
         
         return SpanExportResult.SUCCESS
     
@@ -308,13 +299,11 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             encrypted_transformed = prepare_app_record(cleaned_transformed, _capture_level, AGENTS_METADATA_COLUMNS)
             if encrypted_transformed is None:
                 return
-            # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
-            response = post_record(self.log_api_url, encrypted_transformed, timeout=5)
-            if response is not None:
-                response.raise_for_status()
+            # size-limited, in the background: never blocks the instrumented call
+            send_app_record(self.log_api_url, encrypted_transformed)
             
         except Exception as e:
-            logger.error("Error logging trace: %s", e)
+            logger.error("[ANOSYS] Error logging trace (%s)", type(e).__name__)  # no span content in logs
     
     def on_trace_start(self, trace) -> None:
         """Called when a trace begins."""

@@ -71,6 +71,7 @@ function fitRecord(record, limit = null) {
  * application SDKs, which send one span or call per request.
  */
 async function postRecord(url, record, { timeout = 5, headers = {}, post = defaultPost } = {}) {
+  if (!url) return null; // no ingestion endpoint (missing or unresolvable API key)
   const fitted = fitRecord(record);
   if (fitted === null) return null;
   return post(url, fitted, headers, timeout);

@@ -1,19 +1,18 @@
 import { trace } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { BatchSpanProcessor, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import axios from 'axios';
 
-import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
+import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { spanToJson } from './genai.js';
 import { extractSpanInfo, isAnthropicSpan } from './hooks.js';
-import { FULL, OFF, fitRecord, prepareAppRecord, resolveAppLevel } from 'anosys-sdk-core';
+import { FULL, OFF, prepareAppRecord, resolveAppLevel, sendAppRecord } from 'anosys-sdk-core';
 
 // Read by the Anthropic SDK when a client is constructed
 export const CONTENT_MODE_ENV = 'ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE';
 
-let _logApiUrl = DEFAULT_API_URL;
-let _logApiUrlReady = Promise.resolve(DEFAULT_API_URL);
+let _logApiUrl = null; // null = nothing is sent
+let _logApiUrlReady = Promise.resolve(null);
 let _tracingInitialized = false;
 let _provider = null;
 let _captureContent = true;
@@ -72,9 +71,8 @@ export class AnosysHttpExporter {
         const payloadToSend = prepareAppRecord(data, this._getLevel());
         if (!payloadToSend) continue;
         await _logApiUrlReady;
-        // fitted under ANOSYS_MAX_BATCH_BYTES (10 MB); null when too large even after truncation
-        const fitted = fitRecord(payloadToSend);
-        if (fitted) await axios.post(_logApiUrl, fitted, { timeout: 5000 });
+        // size-limited, in the background: never blocks the instrumented call
+        sendAppRecord(_logApiUrl, payloadToSend);
       } catch (e) {
         if (e.response) {
           log.error('HTTP export failed (%d): %s', e.response.status, e.message);
@@ -147,7 +145,7 @@ export function getAnthropicOpenTelemetryOptions() {
 
 /** Set the ingestion URL; a promise holds exports until it resolves. */
 export function setLogApiUrl(apiUrl) {
-  _logApiUrlReady = Promise.resolve(apiUrl).then((url) => { _logApiUrl = url ?? DEFAULT_API_URL; return _logApiUrl; });
+  _logApiUrlReady = Promise.resolve(apiUrl).then((url) => { _logApiUrl = url ?? null; return _logApiUrl; });
   return _logApiUrlReady;
 }
 

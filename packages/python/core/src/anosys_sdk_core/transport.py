@@ -125,6 +125,8 @@ def post_record(url: str, record: Dict[str, Any], timeout: float = 5,
     the response, or None when the record had to be dropped. Used by the
     application SDKs, which send one span or call per request.
     """
+    if not url:
+        return None  # no ingestion endpoint (missing or unresolvable API key)
     fitted = fit_record(record)
     if fitted is None:
         return None
@@ -132,6 +134,95 @@ def post_record(url: str, record: Dict[str, Any], timeout: float = 5,
         import requests
         post = requests.post
     return post(url, json=fitted, timeout=timeout, headers=headers)
+
+
+# ── background sending for the application SDKs ────────────────────────────────
+
+class BackgroundSender:
+    """
+    Sends application records off the caller's thread.
+
+    Instrumented code (an LLM call, a decorated function, a span end) must not
+    wait on AnoSys. Records go to a bounded in-memory queue drained by one
+    daemon thread; when the queue is full the record is dropped (warned once),
+    so memory stays bounded when ingestion is slow or down. Nothing is written
+    to disk and nothing is retried: application telemetry is best effort.
+    At exit the queue is drained for at most ``flush_seconds``.
+    """
+
+    def __init__(self, max_queue: int = 1000, timeout: float = 5, flush_seconds: float = 2):
+        import queue
+        import threading
+
+        self._queue: "queue.Queue" = queue.Queue(maxsize=max_queue)
+        self._timeout = timeout
+        self._flush_seconds = flush_seconds
+        self._lock = threading.Lock()
+        self._thread: Optional["threading.Thread"] = None
+        self._warned_full = False
+        self.post: Optional[Callable] = None  # injectable for tests
+
+    def _ensure_thread(self) -> None:
+        import atexit
+        import threading
+
+        with self._lock:
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = threading.Thread(target=self._run, name="anosys-sender", daemon=True)
+                self._thread.start()
+                atexit.register(self.flush)
+
+    def submit(self, url: str, record: Dict[str, Any]) -> bool:
+        """Queue one record; False when it was dropped (no endpoint or queue full)."""
+        import queue
+
+        if not url or record is None:
+            return False
+        try:
+            self._queue.put_nowait((url, record))
+        except queue.Full:
+            if not self._warned_full:
+                self._warned_full = True
+                logger.warning("AnoSys send queue is full; telemetry is being dropped")
+            return False
+        self._ensure_thread()
+        return True
+
+    def _run(self) -> None:
+        while True:
+            url, record = self._queue.get()
+            try:
+                response = post_record(url, record, timeout=self._timeout, post=self.post)
+                status = getattr(response, "status_code", 200) if response is not None else None
+                if status is not None and status >= 400:
+                    logger.error("AnoSys rejected a record (HTTP %s)", status)
+            except Exception as e:  # never surfaces to the instrumented application
+                logger.error("AnoSys send failed (%s)", type(e).__name__)
+            finally:
+                self._queue.task_done()
+
+    def flush(self, seconds: Optional[float] = None) -> bool:
+        """Wait (bounded) for queued records to be sent. True when the queue emptied."""
+        deadline = time.monotonic() + (self._flush_seconds if seconds is None else seconds)
+        while self._queue.unfinished_tasks and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return not self._queue.unfinished_tasks
+
+
+_SENDER = BackgroundSender()
+
+
+def send_app_record(url: str, record: Optional[Dict[str, Any]]) -> bool:
+    """
+    The one way application SDKs send a prepared (filtered, encrypted) record:
+    in the background, size-limited, never blocking or raising in the caller.
+    """
+    return _SENDER.submit(url, record)
+
+
+def flush_app_records(seconds: float = 2) -> bool:
+    """Wait up to ``seconds`` for background records (tests, short-lived scripts)."""
+    return _SENDER.flush(seconds)
 
 
 # ── failure classification ────────────────────────────────────────────────────

@@ -23,13 +23,12 @@ from opentelemetry.sdk.trace.export import (
     SpanExporter,
     SpanExportResult,
 )
-import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
 from anosys_sdk_core.privacy import FULL, OFF
-from anosys_sdk_core.transport import post_record
+from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_claude_agents.hooks import extract_span_info
 from anosys_sdk_claude_agents.mapping import CLAUDE_AGENTS_SCOPE
 from anosys_sdk_claude_agents.tracer import AgentRunTracer
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Module-level state
 _lock = threading.Lock()
 _tracing_initialized = False
-_log_api_url = "https://www.anosys.ai"
+_log_api_url = ""  # set by setup_tracing; empty = nothing is sent
 _tracer: Optional[trace.Tracer] = None
 _run_settings = {"capture_content": True, "emit_llm_spans": False, "agent_name": None, "level": "full"}
 _originals: dict = {}
@@ -89,15 +88,11 @@ class AnosysHttpExporter(SpanExporter):
                 data = prepare_app_record(data, _run_settings["level"])
                 if data is None:
                     continue
-                # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
-                response = post_record(_log_api_url, data, timeout=5)
-                if response is not None:
-                    response.raise_for_status()
+                # size-limited, in the background: never blocks the instrumented call
+                send_app_record(_log_api_url, data)
 
-            except requests.exceptions.HTTPError as e:
-                logger.error("HTTP export failed (%s): %s", e.response.status_code, e)
             except Exception as e:
-                logger.error("Export failed: %s", e)
+                logger.error("AnoSys export failed (%s)", type(e).__name__)  # no span content in logs
 
         return SpanExportResult.SUCCESS
 

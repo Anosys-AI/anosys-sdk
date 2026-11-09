@@ -65,7 +65,7 @@ class AnosysClient:
             response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:
-            logger.error("POST failed: %s", e)
+            logger.error("AnoSys POST failed (%s)", type(e).__name__)  # no URL or payload in logs
             return None
     
     def send_batch(self, items: list) -> list:

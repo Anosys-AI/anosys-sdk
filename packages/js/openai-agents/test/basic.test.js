@@ -94,10 +94,12 @@ describe('mapping.assign', () => {
     assert.equal(vars.name, 'hello');
   });
 
-  it('converts numeric strings to numbers', () => {
+  it('keeps numeric strings as strings (same as Python; ids and codes keep their form)', () => {
     const vars = {};
-    assign(vars, 'n', '99');
-    assert.equal(vars.n, 99);
+    assign(vars, 'n', '0099');
+    assert.equal(vars.n, '0099');
+    assign(vars, 'm', 99);
+    assert.equal(vars.m, 99);
   });
 });
 

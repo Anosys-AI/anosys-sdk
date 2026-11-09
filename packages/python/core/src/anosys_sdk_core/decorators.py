@@ -18,7 +18,7 @@ import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.capture import current_app_level, prepare_app_record
-from anosys_sdk_core.transport import post_record
+from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
 from anosys_sdk_core.util.json import to_json_fallback, to_str_or_none
 from anosys_sdk_core.util.batching import assign, reassign
@@ -26,7 +26,7 @@ from anosys_sdk_core.util.batching import assign, reassign
 logger = logging.getLogger(__name__)
 
 # Global configuration
-_log_api_url: str = "https://www.anosys.ai"
+_log_api_url: str = ""  # set by setup_api; empty = nothing is sent
 _key_to_cvs: Dict[str, str] = BASE_KEY_MAPPING.copy()
 _starting_indices: Dict[str, int] = DEFAULT_STARTING_INDICES.copy()
 
@@ -80,7 +80,7 @@ def _log_payload(
                  source, caller_info['function'], caller_info['file'], caller_info['line'])
 
     if error_info:
-        logger.debug("Error occurred: %s", error_info['message'])
+        logger.debug("Error occurred: %s", error_info['type'])
     else:
         out_str = str(output)
         if len(out_str) > 200:
@@ -114,13 +114,11 @@ def _log_payload(
         mapped_data = prepare_app_record(reassign(variables, _key_to_cvs, _starting_indices), current_app_level()[0])
         if mapped_data is None:
             return  # collection is off
-        # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
-        response = post_record(_log_api_url, mapped_data, timeout=5)
-        if response is not None:
-            response.raise_for_status()
-        logger.debug("Logged successfully")
+        # size-limited, in the background: never blocks the decorated function
+        send_app_record(_log_api_url, mapped_data)
+        logger.debug("Queued for AnoSys")
     except Exception as e:
-        logger.error("POST failed: %s", e)
+        logger.error("AnoSys logging failed (%s)", type(e).__name__)
 
 
 def _handle_logging_sync(func: Callable, args: tuple, kwargs: dict, source: Optional[str]) -> Any:
@@ -268,12 +266,10 @@ def anosys_raw_logger(data: Optional[Dict[str, Any]] = None) -> Optional[request
         mapped_data = prepare_app_record(reassign(data, _key_to_cvs, _starting_indices), current_app_level()[0])
         if mapped_data is None:
             return None  # collection is off
-        # fitted under ANOSYS_MAX_BATCH_BYTES; None when too large even after truncation
-        response = post_record(_log_api_url, mapped_data, timeout=5)
-        if response is not None:
-            response.raise_for_status()
-        logger.debug("Raw logger: data logged successfully")
-        return response
+        # size-limited, in the background: never blocks the caller
+        send_app_record(_log_api_url, mapped_data)
+        logger.debug("Raw logger: queued for AnoSys")
+        return None
     except Exception as err:
-        logger.error("POST failed: %s", err)
+        logger.error("AnoSys logging failed (%s)", type(err).__name__)
         return None

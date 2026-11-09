@@ -283,7 +283,7 @@ def test_openai_agents_encryption_exports():
 def _processor(monkeypatch, level, **attrs):
     from anosys_sdk_openai_agents import processor as proc
     posted = []
-    monkeypatch.setattr(proc, "post_record", lambda url, data, timeout=5: posted.append(data))
+    monkeypatch.setattr(proc, "send_app_record", lambda url, data: posted.append(data))
     monkeypatch.setattr(proc, "_capture_level", level)
     monkeypatch.delenv("ANOSYS_ENCRYPTION_KEY", raising=False)
     p = object.__new__(proc.AnosysOpenAIAgentsLogger)
