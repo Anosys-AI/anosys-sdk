@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from anosys_sdk_core.hook_cli import setup_hook_logging
-from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record
+from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record, write_private_file
 from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
 
 from anosys_sdk_claude_code.mapper import METADATA_FIELDS, UNHANDLED_COUNTS, transform_record
@@ -145,7 +145,7 @@ def load_state() -> dict:
 def save_state(state: dict):
     try:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        STATE_FILE.write_text(json.dumps(state, indent=2), encoding='utf-8')
+        write_private_file(STATE_FILE, json.dumps(state, indent=2))  # 0600
     except OSError as e:
         log.warning("Could not save hook state (%s)", type(e).__name__)
 

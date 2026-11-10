@@ -256,3 +256,30 @@ def test_queue_is_dropped_when_collection_is_off(tmp_path, monkeypatch):
     deliver("u", [], queue, tmp_path / "pause.json", post=lambda *a, **k: sent.append(1) or Response(200),
             metadata_fields={"session_id"})
     assert sent == [] and queue.load() == []
+
+
+def test_truncated_json_column_stays_valid_json():
+    """Audit 4.1.3: a JSON column cut to fit is still valid JSON."""
+    out = fit_record({"tool_use_result": json.dumps({"stdout": "x" * 5000}), "session_id": "s"}, limit=2048)
+    assert out is not None
+    json.loads(out["tool_use_result"])
+
+
+def test_escape_heavy_value_is_truncated_not_dropped():
+    """Audit 4.1.3: values whose JSON form is longer than their text (newlines, quotes) still fit."""
+    out = fit_record({"cvs199": '\n"' * 4000, "session_id": "s"}, limit=2048)
+    assert out is not None and json_size([out]) <= 2048
+
+
+def test_truncated_record_keeps_its_retry_history(tmp_path, monkeypatch):
+    """Audit 4.1.4: a record fitted to a copy still counts its attempts, so it expires."""
+    monkeypatch.setenv("ANOSYS_MAX_BATCH_BYTES", "2048")
+    queue = PendingQueue(tmp_path / "pending.jsonl")
+    queue.save(PendingQueue.entries_for([{"cvs199": "x" * 5000}]))
+
+    def down(url, json, headers, timeout):
+        return Response(503)
+
+    for _ in range(2):
+        deliver("u", [], queue, tmp_path / "pause.json", post=down, budget=5)
+    assert queue.load()[0]["attempts"] == 3

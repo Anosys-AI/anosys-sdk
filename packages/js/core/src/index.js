@@ -43,6 +43,7 @@ exports.filterFields = privacy.filterFields;
 exports.prepareHookRecord = privacy.prepareHookRecord;
 exports.SECRET_REPLACEMENT = redaction.SECRET_REPLACEMENT;
 exports.scrubSecrets = redaction.scrubSecrets;
+exports.redactPii = redaction.redactPii;
 exports.DEFAULT_MAX_BATCH_BYTES = transport.DEFAULT_MAX_BATCH_BYTES;
 exports.PERMANENT_STATUS = transport.PERMANENT_STATUS;
 exports.isPermanent = transport.isPermanent;

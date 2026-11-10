@@ -44,18 +44,26 @@ function fitRecord(record, limit = null) {
   order.push(...Object.keys(result)
     .filter(k => typeof result[k] === 'string' && !order.includes(k))
     .sort((a, b) => result[b].length - result[a].length));
+  const { JSON_COLUMNS } = require('./encryption.js');
   for (const key of order) {
-    const excess = jsonSize([result]) - t;
-    if (excess <= 0) break;
-    const value = result[key];
+    if (jsonSize([result]) <= t) break;
+    const value = record[key];
     const mark = `...[truncated: original ${Buffer.byteLength(value, 'utf8')} bytes]`;
+    // JSON columns must stay valid JSON: the cut text is stored as a JSON string
+    const wrap = JSON_COLUMNS.has(key) ? (text) => JSON.stringify(text) : (text) => text;
     if (value.startsWith('enc2:') || value.startsWith('"enc2:')) {
       // a cut ciphertext cannot be decrypted: replace the whole value
-      result[key] = mark.replace(/^\.+/, '');
+      result[key] = wrap(mark.replace(/^\.+/, ''));
       continue;
     }
-    const keep = Math.max(0, value.length - excess - mark.length - 64);
-    result[key] = value.slice(0, keep) + mark;
+    let text = value;
+    // escaped characters take more bytes than characters, so cut until it fits
+    for (let i = 0; i < 6; i++) {
+      const excess = jsonSize([result]) - t;
+      if (excess <= 0 || !text) break;
+      text = text.slice(0, Math.max(0, text.length - excess - mark.length - 64));
+      result[key] = wrap(text + mark);
+    }
   }
   if (jsonSize([result]) <= t) {
     log.warn(`Record over the ${t}-byte limit was truncated`);
@@ -78,7 +86,8 @@ async function postRecord(url, record, { timeout = 5, headers = {}, post = defau
 }
 
 /** Split records into request bodies under the byte limit. */
-function chunkRecords(records, limit = null) {
+/** Request bodies as [original, fitted] pairs, so failures can be traced to the original. */
+function chunkPairs(records, limit = null) {
   const t = target(limit);
   const chunks = [];
   let current = [];
@@ -92,11 +101,15 @@ function chunkRecords(records, limit = null) {
       current = [];
       size = 2;
     }
-    current.push(fitted);
+    current.push([record, fitted]);
     size += s;
   }
   if (current.length) chunks.push(current);
   return chunks;
+}
+
+function chunkRecords(records, limit = null) {
+  return chunkPairs(records, limit).map((chunk) => chunk.map(([, fitted]) => fitted));
 }
 
 const isPermanent = (status) => PERMANENT_STATUS.has(status);
@@ -122,16 +135,18 @@ async function sendRecords(url, records, { headers = {}, timeout = 15, limit = n
   const retryable = [];
   let pause = null;
   let unreachable = false;
-  for (const chunk of chunkRecords(records, limit)) {
+  for (const pairs of chunkPairs(records, limit)) {
+    const chunk = pairs.map(([, fitted]) => fitted);
+    const originals = pairs.map(([original]) => original); // retries keep their queue history
     if (pause !== null) break;
     const remaining = deadline === null ? null : (deadline - Date.now()) / 1000;
-    if (unreachable || (remaining !== null && remaining < 0.5)) { retryable.push(...chunk); continue; }
+    if (unreachable || (remaining !== null && remaining < 0.5)) { retryable.push(...originals); continue; }
     let status;
     try {
       ({ status } = await post(url, chunk, headers, remaining === null ? timeout : Math.min(timeout, remaining)));
     } catch (e) {
       log.warn(`Ingestion unreachable (${e.name || 'Error'}); ${chunk.length} record(s) kept for retry`);
-      retryable.push(...chunk);
+      retryable.push(...originals);
       unreachable = true;
       continue;
     }
@@ -142,7 +157,7 @@ async function sendRecords(url, records, { headers = {}, timeout = 15, limit = n
       if (PAUSE_STATUS.has(status)) pause = status;
     } else {
       log.warn(`Ingestion returned ${status}; ${chunk.length} record(s) kept for retry`);
-      retryable.push(...chunk);
+      retryable.push(...originals);
     }
   }
   return { sent, retryable, pause };

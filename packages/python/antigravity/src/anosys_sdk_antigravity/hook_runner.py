@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from anosys_sdk_core.hook_cli import setup_hook_logging
-from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record
+from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record, write_private_file
 from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
 
 from anosys_sdk_antigravity.constants import (
@@ -104,7 +104,7 @@ def load_state(session_id: str) -> Dict[str, Any]:
 def save_state(session_id: str, state: Dict[str, Any]) -> None:
     try:
         sf = get_session_state_file(session_id)
-        sf.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        write_private_file(sf, json.dumps(state, indent=2))  # 0600
     except Exception as e:
         log.error("Failed to save state for %s: %s", session_id, type(e).__name__)
 

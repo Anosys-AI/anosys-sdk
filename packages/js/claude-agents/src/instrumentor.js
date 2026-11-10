@@ -130,15 +130,16 @@ export class AnosysClaudeAgentsLogger {
       this.ready = Promise.resolve();
     } else if (!_tracingInitialized) {
       _tracingInitialized = true;
-      setupTracing(resolveApiKey(), useBatchProcessor, this.getUserContext);
-      this.ready = this._init();
+      const url = resolveApiKey(); // resolved once, shared by the exporter and the decorators
+      setupTracing(url, useBatchProcessor, this.getUserContext);
+      this.ready = this._init(url);
     } else {
       this.ready = Promise.resolve();
     }
   }
 
-  async _init() {
-    this.logApiUrl = await setLogApiUrl(resolveApiKey());
+  async _init(url) {
+    this.logApiUrl = await setLogApiUrl(url);
     await setupApi({ path: this.logApiUrl });
   }
 

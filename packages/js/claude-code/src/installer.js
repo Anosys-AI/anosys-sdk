@@ -57,6 +57,7 @@ function backup(filePath = SETTINGS_PATH) {
     const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
     const backupPath = `${filePath}.${timestamp}.bak`;
     fs.copyFileSync(filePath, backupPath);
+    try { fs.chmodSync(backupPath, 0o600); } catch { /* backups can hold the API key */ }
     return backupPath;
   }
   return null;
@@ -67,7 +68,7 @@ function writeAtomic(filePath, data) {
   fs.mkdirSync(dir, { recursive: true });
   const tmpPath = filePath + '.tmp.' + process.pid;
   try {
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmpPath, filePath);
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch (_) { }

@@ -61,21 +61,32 @@ function createDecorators({ keyToCvs = BASE_KEY_MAPPING, startingIndices = DEFAU
     }
   }
 
+  /**
+   * Wrap a function so each call is logged. Sync functions stay sync, async ones return
+   * their promise, `this` is preserved, and the caller is read per call. Logging never
+   * changes or delays the result.
+   */
   function anosysLogger(source = null) {
     return function decorator(fn) {
-      const callerInfo = getCallerInfo();
-      return async function wrapped(...args) {
-        let output = null;
-        let errorInfo = null;
+      const name = source ?? fn.name ?? 'anonymous';
+      return function wrapped(...args) {
+        const callerInfo = getCallerInfo();
+        const errorInfo = (e) => ({ type: e?.constructor?.name ?? 'Error', message: e?.message, stack: e?.stack ?? '' });
+        let result;
         try {
-          output = await fn(...args);
-          return output;
+          result = fn.apply(this, args);
         } catch (e) {
-          errorInfo = { type: e?.constructor?.name ?? 'Error', message: e?.message, stack: e?.stack ?? '' };
+          logPayload(name, args, null, errorInfo(e), callerInfo);
           throw e;
-        } finally {
-          logPayload(source ?? fn.name ?? 'anonymous', args, output, errorInfo, callerInfo);
         }
+        if (result && typeof result.then === 'function') {
+          return result.then(
+            (value) => { logPayload(name, args, value, null, callerInfo); return value; },
+            (e) => { logPayload(name, args, null, errorInfo(e), callerInfo); throw e; },
+          );
+        }
+        logPayload(name, args, result, null, callerInfo);
+        return result;
       };
     };
   }

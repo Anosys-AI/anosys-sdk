@@ -15,7 +15,8 @@ PATTERNS: Dict[str, Pattern] = {
     "phone": re.compile(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'),
     "ssn": re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
     "credit_card": re.compile(r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'),
-    "api_key": re.compile(r'\b(sk-|pk-|api[-_]?key)[a-zA-Z0-9]{20,}\b', re.IGNORECASE),
+    # provider keys, including the dashed forms (sk-proj-..., sk-ant-api03-..., sk-svcacct-...)
+    "api_key": re.compile(r'\b(?:sk|pk|rk)-[A-Za-z0-9_-]{20,}|\bapi[-_]?key[A-Za-z0-9_-]{20,}', re.IGNORECASE),
 }
 
 # Placeholder text for redacted content

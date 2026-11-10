@@ -33,7 +33,29 @@ function scrubSecrets(value) {
   return value;
 }
 
+// PII patterns (pii_redaction), same as Python redaction.PATTERNS
+const PII_PATTERNS = {
+  email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+  phone: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
+  ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
+  credit_card: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
+  api_key: /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{20,}|\bapi[-_]?key[A-Za-z0-9_-]{20,}/gi,
+};
+const REDACTED = '[REDACTED]';
+
+/** Replace PII-shaped substrings (Python redact_string). Best effort. */
+function redactPii(text, patterns = null) {
+  if (typeof text !== 'string') return text;
+  let out = text;
+  for (const name of patterns ?? Object.keys(PII_PATTERNS)) {
+    if (PII_PATTERNS[name]) out = out.replace(PII_PATTERNS[name], REDACTED);
+  }
+  return out;
+}
+
 module.exports = {
+  REDACTED,
+  redactPii,
   SECRET_REPLACEMENT,
   scrubSecrets,
 };

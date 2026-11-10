@@ -66,6 +66,7 @@ def backup(path: Path | None = None) -> Optional[Path]:
         timestamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
         backup_path = path.with_name(f"{path.name}.{timestamp}.bak")
         shutil.copy2(path, backup_path)
+        os.chmod(backup_path, 0o600)  # backups can hold the API key
         return backup_path
     return None
 

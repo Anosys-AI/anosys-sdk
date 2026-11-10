@@ -1,7 +1,10 @@
-export function safeSerialize(obj) {
+export function safeSerialize(obj, seen = new WeakSet()) {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') return obj;
-  if (Array.isArray(obj)) return obj.map(safeSerialize);
+  if (typeof obj !== 'object') return String(obj);
+  if (seen.has(obj)) return '[Circular]';
+  seen.add(obj);
+  if (Array.isArray(obj)) return obj.map((v) => safeSerialize(v, seen));
 
   // Plain object or class instance
   const result = {};
@@ -10,7 +13,7 @@ export function safeSerialize(obj) {
     : (obj.export ? obj.export() : obj);
 
   for (const [key, value] of Object.entries(source ?? {})) {
-    result[key] = safeSerialize(value);
+    result[key] = safeSerialize(value, seen);
   }
   return result;
 }

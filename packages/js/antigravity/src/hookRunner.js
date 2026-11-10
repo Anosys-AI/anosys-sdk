@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets,
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets, writePrivateFile,
 } = require('anosys-sdk-core');
 const { GLOBAL_CONFIG_DIR, GLOBAL_ENV_FILE, DEFAULT_INGESTION_URL } = require('./constants');
 const { parseTranscript } = require('./transcript');
@@ -102,7 +102,7 @@ function loadState(sessionId) {
 function saveState(sessionId, state) {
   try {
     const sf = getSessionStateFile(sessionId);
-    fs.writeFileSync(sf, JSON.stringify(state, null, 2), 'utf-8');
+    writePrivateFile(sf, JSON.stringify(state, null, 2)); // 0600
   } catch (err) {
     log('ERROR', `Failed to save state for ${sessionId}: ${err.name}`);
   }

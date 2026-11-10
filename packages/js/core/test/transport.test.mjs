@@ -193,3 +193,25 @@ describe('queued records follow the current level', () => {
     delete process.env.ANOSYS_CONSENT_FILE;
   });
 });
+
+describe('truncation keeps JSON valid and retry history (audit 4.1)', () => {
+  it('a cut JSON column is still valid JSON; escape-heavy values fit', () => {
+    const out = fitRecord({ tool_use_result: JSON.stringify({ stdout: 'x'.repeat(5000) }), session_id: 's' }, 2048);
+    assert.ok(out);
+    JSON.parse(out.tool_use_result);
+    const esc = fitRecord({ cvs199: '\n"'.repeat(4000), session_id: 's' }, 2048);
+    assert.ok(esc && jsonSize([esc]) <= 2048);
+  });
+
+  it('a truncated record keeps counting its attempts', async () => {
+    process.env.ANOSYS_MAX_BATCH_BYTES = '2048';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-attempts-'));
+    const queue = new PendingQueue(path.join(dir, 'pending.jsonl'));
+    queue.save(PendingQueue.entriesFor([{ cvs199: 'x'.repeat(5000) }]));
+    for (let i = 0; i < 2; i++) {
+      await deliver('u', [], queue, path.join(dir, 'pause.json'), { post: async () => ({ status: 503 }), budget: 5 });
+    }
+    delete process.env.ANOSYS_MAX_BATCH_BYTES;
+    assert.equal(queue.load()[0].attempts, 3);
+  });
+});

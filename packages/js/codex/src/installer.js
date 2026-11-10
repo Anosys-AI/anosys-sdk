@@ -40,6 +40,7 @@ function backup(customPath) {
     const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
     const backupPath = `${filePath}.${timestamp}.bak`;
     fs.copyFileSync(filePath, backupPath);
+    try { fs.chmodSync(backupPath, 0o600); } catch { /* backups can hold the API key */ }
     return backupPath;
   }
   return null;
@@ -142,7 +143,7 @@ const NOTIFY_LINE = /^[ \t]*notify[ \t]*=[^\n]*(?:\n|$)/m;
 function writeAtomic(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmpPath = path.join(path.dirname(filePath), `.tmp_${Date.now()}_config.toml`);
-  fs.writeFileSync(tmpPath, content, 'utf8');
+  fs.writeFileSync(tmpPath, content, { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(tmpPath, filePath);
 }
 

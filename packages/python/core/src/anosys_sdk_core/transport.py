@@ -77,19 +77,27 @@ def fit_record(record: Dict[str, Any], limit: Optional[int] = None) -> Optional[
         key=lambda k: len(result[k]),
         reverse=True,
     )
+    from anosys_sdk_core.encryption import JSON_COLUMNS
+
     for key in order:
-        excess = json_size([result]) - target
-        if excess <= 0:
+        if json_size([result]) <= target:
             break
-        value = result[key]
-        original = len(value.encode("utf-8"))
-        mark = TRUNCATION_MARK.format(size=original)
+        value = record[key]
+        mark = TRUNCATION_MARK.format(size=len(value.encode("utf-8")))
+        # JSON columns must stay valid JSON: the cut text is stored as a JSON string
+        wrap = (lambda text: json.dumps(text)) if key in JSON_COLUMNS else (lambda text: text)
         if _is_encrypted(value):
             # a cut ciphertext cannot be decrypted: replace the whole value
-            result[key] = mark.lstrip(".")
+            result[key] = wrap(mark.lstrip("."))
             continue
-        keep = max(0, len(value) - excess - len(mark) - 64)
-        result[key] = value[:keep] + mark
+        text = value
+        # escaped characters take more bytes than characters, so cut until it fits
+        for _ in range(6):
+            excess = json_size([result]) - target
+            if excess <= 0 or not text:
+                break
+            text = text[:max(0, len(text) - excess - len(mark) - 64)]
+            result[key] = wrap(text + mark)
     if json_size([result]) <= target:
         logger.warning("Record over the %d-byte limit was truncated", target)
         return result
@@ -97,11 +105,11 @@ def fit_record(record: Dict[str, Any], limit: Optional[int] = None) -> Optional[
     return None
 
 
-def chunk_records(records: List[Dict[str, Any]], limit: Optional[int] = None) -> List[List[Dict[str, Any]]]:
-    """Split records into request bodies under the byte limit (oversized ones fitted or dropped)."""
+def _chunk_pairs(records: List[Dict[str, Any]], limit: Optional[int] = None):
+    """Request bodies as (original, fitted) pairs, so failures can be traced to the original."""
     target = _target(limit)
-    chunks: List[List[Dict[str, Any]]] = []
-    current: List[Dict[str, Any]] = []
+    chunks = []
+    current = []
     current_size = 2  # "[]"
     for record in records:
         fitted = fit_record(record, limit)
@@ -111,11 +119,16 @@ def chunk_records(records: List[Dict[str, Any]], limit: Optional[int] = None) ->
         if current and current_size + size > target:
             chunks.append(current)
             current, current_size = [], 2
-        current.append(fitted)
+        current.append((record, fitted))
         current_size += size
     if current:
         chunks.append(current)
     return chunks
+
+
+def chunk_records(records: List[Dict[str, Any]], limit: Optional[int] = None) -> List[List[Dict[str, Any]]]:
+    """Split records into request bodies under the byte limit (oversized ones fitted or dropped)."""
+    return [[fitted for _, fitted in chunk] for chunk in _chunk_pairs(records, limit)]
 
 
 def post_record(url: str, record: Dict[str, Any], timeout: float = 5,
@@ -261,12 +274,14 @@ def send_records(
     retryable: List[Dict[str, Any]] = []
     pause: Optional[int] = None
     unreachable = False
-    for chunk in chunk_records(records, limit):
+    for pairs in _chunk_pairs(records, limit):
+        chunk = [fitted for _, fitted in pairs]
+        originals = [original for original, _ in pairs]  # retries keep their queue history
         if pause is not None:
             break  # the key is rejected; don't send (or queue) the rest
         remaining = None if deadline is None else deadline - time.monotonic()
         if unreachable or (remaining is not None and remaining < 0.5):
-            retryable.extend(chunk)  # out of time, or ingestion is down: keep for later
+            retryable.extend(originals)  # out of time, or ingestion is down: keep for later
             continue
         try:
             request_timeout = timeout if remaining is None else min(timeout, remaining)
@@ -274,7 +289,7 @@ def send_records(
             status = getattr(response, "status_code", 200)
         except Exception as e:  # timeout, connection error
             logger.warning("Ingestion unreachable (%s); %d record(s) kept for retry", type(e).__name__, len(chunk))
-            retryable.extend(chunk)
+            retryable.extend(originals)
             unreachable = True
             continue
         if status < 300:
@@ -285,7 +300,7 @@ def send_records(
                 pause = status
         else:
             logger.warning("Ingestion returned %d; %d record(s) kept for retry", status, len(chunk))
-            retryable.extend(chunk)
+            retryable.extend(originals)
     return sent, retryable, pause
 
 

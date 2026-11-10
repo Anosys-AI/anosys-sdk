@@ -5,7 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const {
-  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets,
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets, writePrivateFile,
 } = require('anosys-sdk-core');
 
 const { PREVIOUS_NOTIFY_FLAG, getCodexHome, getEnvPath } = require('./installer');
@@ -62,7 +62,7 @@ function loadState() {
 
 function saveState(state) {
   try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+    writePrivateFile(STATE_FILE, JSON.stringify(state, null, 2)); // 0600
   } catch (err) {
     log(`Failed to save state: ${err.name}`, 'ERROR');
   }

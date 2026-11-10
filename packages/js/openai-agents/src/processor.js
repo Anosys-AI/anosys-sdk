@@ -7,7 +7,7 @@ import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { span2json, extractOtelSpanInfo } from './mapping.js';
 import { safeSerialize, cleanNulls } from './utils.js';
-import { acceptsSpan, currentAppLevel, OFF, prepareAppRecord, resolveAppLevel, sendAppRecord, userContextValue } from 'anosys-sdk-core';
+import { acceptsSpan, APP_METADATA_STRING_COLUMNS, currentAppLevel, OFF, prepareAppRecord, redactPii, resolveAppLevel, sendAppRecord, userContextValue } from 'anosys-sdk-core';
 
 // Spans this exporter owns; everything else on a shared provider is left alone
 const AGENTS_SCOPES = ['@opentelemetry/instrumentation-openai', 'openai-agents', '@openai/agents'];
@@ -16,7 +16,15 @@ const AGENTS_SYSTEMS = ['openai'];
 // Agents-specific descriptive columns kept at `metadata` (agent hierarchy, handoffs, model, ids)
 export const AGENTS_METADATA_COLUMNS = ['cvs62', 'cvs64', 'cvs68', 'cvs69', 'cvs77', 'cvs78', 'cvs79', 'llm_token_count'];
 
+/** pii_redaction: redact PII patterns in content columns, never in ids or metadata. */
+function redactContent(record) {
+  const keep = new Set([...APP_METADATA_STRING_COLUMNS, ...AGENTS_METADATA_COLUMNS]);
+  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, typeof v === 'string' && !keep.has(k) ? redactPii(v) : v]));
+}
+
 let _logApiUrl = null; // set by setupTracing; null = nothing is sent
+let _logApiUrlReady = Promise.resolve(null); // exports wait for the key to resolve
+let _piiRedaction = false; // set by AnosysOpenAIAgentsLogger
 let _tracingInitialized = false;
 let _captureLevel = null; // set by AnosysOpenAIAgentsLogger; until then the shared level applies (anosys-sdk-core capture.js)
 
@@ -39,7 +47,8 @@ export class AnosysHttpExporter {
       if (!acceptsSpan(span, AGENTS_SCOPES, AGENTS_SYSTEMS)) continue;
       try {
         const data = extractOtelSpanInfo(span);
-        const cleaned = cleanNulls(data) ?? {};
+        let cleaned = cleanNulls(data) ?? {};
+        if (_piiRedaction) cleaned = redactContent(cleaned);
         try {
           const value = userContextValue(await this._getUserContext());
           if (value) cleaned.cvs5 = value;
@@ -53,6 +62,7 @@ export class AnosysHttpExporter {
         const payloadToSend = prepareAppRecord(cleaned, this._getLevel(), AGENTS_METADATA_COLUMNS);
         if (!payloadToSend) continue;
         // size-limited, in the background: never blocks the instrumented call
+        await _logApiUrlReady;
         sendAppRecord(this._getUrl(), payloadToSend);
         log.debug('Successfully sent: %s | %s', spanSource, spanName);
 
@@ -68,8 +78,9 @@ export class AnosysHttpExporter {
 
 // ── OTel tracing setup ────────────────────────────────────────────────────────
 
+/** `apiUrl` may be a promise: spans made before it resolves wait for it instead of being lost. */
 export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext = null) {
-  _logApiUrl = apiUrl;
+  _logApiUrlReady = Promise.resolve(apiUrl).then((url) => { _logApiUrl = url ?? null; return _logApiUrl; });
 
   const exporter = new AnosysHttpExporter(getUserContext);
   let provider;
@@ -134,26 +145,29 @@ export class AnosysOpenAIAgentsLogger {
    * @param {boolean}  [options.captureContent] - true: send inputs and outputs; false: metadata
    *   only. Omitted: follow ANOSYS_COLLECTION_LEVEL and a project `.anosys` file; full otherwise.
    */
-  constructor({ getUserContext = null, captureContent = null } = {}) {
+  constructor({ getUserContext = null, captureContent = null, piiRedaction = false } = {}) {
     this.getUserContext = getUserContext ?? (() => null);
+    _piiRedaction = Boolean(piiRedaction);
     const { level, source } = resolveAppLevel(captureContent);
     _captureLevel = level;
     this.captureLevel = level;
     log.info('AnoSys OpenAI Agents collection level: %s (%s)', level, source);
     this._logApiUrl = null;
-    this._ready = this._init();
-  }
-
-  async _init() {
-    if (_tracingInitialized || _captureLevel === OFF) return;
+    this._ready = Promise.resolve();
+    if (_tracingInitialized || level === OFF) return;
     _tracingInitialized = true;
-    this._logApiUrl = await resolveApiKey();
-    await setupApi({ path: this._logApiUrl });
-    setupTracing(this._logApiUrl, false, this.getUserContext);
+    // Instrument now (synchronously), so calls made right after the constructor are
+    // traced; their spans wait for the key to resolve before they are sent.
+    const url = resolveApiKey();
+    setupTracing(url, false, this.getUserContext);
+    this._ready = url.then(async (resolved) => {
+      this._logApiUrl = resolved;
+      await setupApi({ path: resolved });
+    });
   }
 
-  _getUserContextSafe() {
-    try { return this.getUserContext(); } catch { return null; }
+  async _getUserContextSafe() {
+    try { return await this.getUserContext(); } catch { return null; }
   }
 
   async _logSummary(data) {
@@ -167,7 +181,7 @@ export class AnosysOpenAIAgentsLogger {
         data: cleaned,
       };
 
-      const userCtx = this._getUserContextSafe();
+      const userCtx = await this._getUserContextSafe();
       if (userCtx) {
         payload.user_context = {
           session_id: (typeof userCtx === 'object' ? (userCtx.session_id ?? 'unknown_session') : 'unknown_session'),
@@ -176,7 +190,8 @@ export class AnosysOpenAIAgentsLogger {
         };
       }
 
-      const transformed = span2json(payload);
+      let transformed = span2json(payload);
+      if (_piiRedaction) transformed = redactContent(transformed);
       // Content dropped at metadata, cvs198 and encryption in one place
       const payloadToSend = prepareAppRecord(transformed, _captureLevel ?? currentAppLevel().level, AGENTS_METADATA_COLUMNS);
       if (!payloadToSend) return;
@@ -189,10 +204,15 @@ export class AnosysOpenAIAgentsLogger {
   }
 
   // TracingProcessor interface
-  onTraceStart(traceObj)  { this._logSummary({ ...safeSerialize(traceObj), source: 'on_trace_start' }); }
-  onTraceEnd(traceObj)    { this._logSummary({ ...safeSerialize(traceObj), source: 'on_trace_end'   }); }
-  onSpanStart(span)       { this._logSummary({ ...safeSerialize(span),     source: 'on_span_start'  }); }
-  onSpanEnd(span)         { this._logSummary({ ...safeSerialize(span),     source: 'on_span_end'    }); }
+  // Serialising user objects can throw (getters, cycles); it must never break the agent run
+  _record(obj, source) {
+    try { this._logSummary({ ...safeSerialize(obj), source }); } catch (e) { log.error(`Error logging trace (${e?.name || 'Error'})`); }
+  }
+
+  onTraceStart(traceObj)  { this._record(traceObj, 'on_trace_start'); }
+  onTraceEnd(traceObj)    { this._record(traceObj, 'on_trace_end'); }
+  onSpanStart(span)       { this._record(span, 'on_span_start'); }
+  onSpanEnd(span)         { this._record(span, 'on_span_end'); }
   forceFlush()            { return Promise.resolve(); }
   shutdown()              { return Promise.resolve(); }
 }

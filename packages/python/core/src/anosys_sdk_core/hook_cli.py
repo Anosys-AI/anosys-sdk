@@ -171,7 +171,7 @@ def setup_hook_logging(log_file: Path, name: str) -> logging.Logger:
             os.chmod(log_file, stat.S_IRUSR | stat.S_IWUSR)
         except OSError:
             pass
-        handler: logging.Handler = logging.handlers.RotatingFileHandler(
+        handler: logging.Handler = _PrivateRotatingFileHandler(
             log_file, maxBytes=5_000_000, backupCount=2, encoding="utf-8")
     except OSError:
         # read-only home, full disk, ...: the hook still runs, without a log
@@ -185,6 +185,14 @@ def setup_hook_logging(log_file: Path, name: str) -> logging.Logger:
         logging.getLogger(core).addHandler(handler)
         logging.getLogger(core).setLevel(logging.INFO)
     return logger
+
+
+class _PrivateRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """Rotating log whose files are always created readable only by the user (0600)."""
+
+    def _open(self):
+        fd = os.open(self.baseFilename, os.O_CREAT | os.O_APPEND | os.O_WRONLY, stat.S_IRUSR | stat.S_IWUSR)
+        return os.fdopen(fd, "a", encoding=self.encoding)
 
 
 def run_hook_safely(fn, logger: Optional[logging.Logger] = None) -> None:

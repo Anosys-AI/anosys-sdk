@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const {
-  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets,
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets, writePrivateFile,
 } = require('anosys-sdk-core');
 const { METADATA_FIELDS, UNHANDLED_COUNTS, transformRecord } = require('./mapper');
 
@@ -199,7 +199,7 @@ function loadState() {
 function saveState(state) {
   try {
     fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+    writePrivateFile(STATE_FILE, JSON.stringify(state, null, 2)); // 0600
   } catch (e) {
     log.warning('Could not save hook state (%s)', e.code || e.name);
   }

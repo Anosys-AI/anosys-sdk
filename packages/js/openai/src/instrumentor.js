@@ -13,6 +13,7 @@ const OPENAI_SCOPES = ['@opentelemetry/instrumentation-openai', 'openinference.i
 const OPENAI_SYSTEMS = ['openai'];
 
 let _logApiUrl = null; // set by setupTracing; null = nothing is sent
+let _logApiUrlReady = Promise.resolve(null); // exports wait for the key to resolve
 let _tracingInitialized = false;
 let _captureLevel = null; // set by AnosysOpenAILogger; until then the shared level applies (anosys-sdk-core capture.js)
 
@@ -49,6 +50,7 @@ export class AnosysHttpExporter {
         const payloadToSend = prepareAppRecord(data, this._getLevel());
         if (!payloadToSend) continue;
         // size-limited, in the background: never blocks the instrumented call
+        await _logApiUrlReady;
         sendAppRecord(this._getUrl(), payloadToSend);
 
       } catch (e) {
@@ -61,8 +63,9 @@ export class AnosysHttpExporter {
   shutdown() { return Promise.resolve(); }
 }
 
+/** `apiUrl` may be a promise: spans made before it resolves wait for it instead of being lost. */
 export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext = null) {
-  _logApiUrl = apiUrl;
+  _logApiUrlReady = Promise.resolve(apiUrl).then((url) => { _logApiUrl = url ?? null; return _logApiUrl; });
 
   const exporter = new AnosysHttpExporter(getUserContext);
   const spanProcessors = [];
@@ -106,14 +109,16 @@ export class AnosysOpenAILogger {
     _captureLevel = level;
     this.captureLevel = level;
     log.info('AnoSys OpenAI collection level: %s (%s)', level, source);
-    this._init();
-  }
-
-  async _init() {
-    if (_tracingInitialized || _captureLevel === OFF) return;
+    this.ready = Promise.resolve();
+    if (_tracingInitialized || level === OFF) return;
     _tracingInitialized = true;
-    this.logApiUrl = await resolveApiKey();
-    await setupApi({ path: this.logApiUrl });
-    setupTracing(this.logApiUrl, false, this.getUserContext);
+    // Instrument now (synchronously), so calls made right after the constructor are
+    // traced; their spans wait for the key to resolve before they are sent.
+    const url = resolveApiKey();
+    setupTracing(url, false, this.getUserContext);
+    this.ready = url.then(async (resolved) => {
+      this.logApiUrl = resolved;
+      await setupApi({ path: resolved });
+    });
   }
 }

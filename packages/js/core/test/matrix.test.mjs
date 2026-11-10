@@ -171,3 +171,16 @@ describe('JS application SDK matrix', () => {
     assert.ok(!all.includes('secret prompt') && !all.includes('the answer') && !all.includes('sk-proj'));
   });
 });
+
+describe('anosysLogger keeps the function as it is (audit 4.1)', () => {
+  it('sync stays sync, this is kept, async stays async', async () => {
+    const { createDecorators } = await import('../src/decorators.js');
+    const d = createDecorators();
+    const obj = { factor: 3, times: d.anosysLogger('unit')(function times(x) { return this.factor * x; }) };
+    assert.equal(obj.times(2), 6);                         // not a Promise
+    const later = d.anosysLogger('unit')(async (x) => x + 1);
+    assert.equal(await later(1), 2);
+    const boom = d.anosysLogger('unit')(() => { throw new RangeError('x'); });
+    assert.throws(() => boom(), RangeError);
+  });
+});

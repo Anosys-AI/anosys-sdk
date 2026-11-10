@@ -47,7 +47,7 @@ function writeJsonAtomic(filePath, data) {
   fs.mkdirSync(dir, { recursive: true });
   const tmpPath = path.join(dir, `.hooks_${Date.now()}_${Math.random().toString(36).slice(2)}.tmp`);
   try {
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
     fs.renameSync(tmpPath, filePath);
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch {}
@@ -60,6 +60,7 @@ function backup(filePath) {
     const ts = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
     const backupPath = `${filePath}.${ts}.bak`;
     fs.copyFileSync(filePath, backupPath);
+    try { fs.chmodSync(backupPath, 0o600); } catch { /* backups can hold the API key */ }
     return backupPath;
   }
   return null;

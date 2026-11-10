@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from anosys_sdk_core.hook_cli import setup_hook_logging
-from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record
+from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record, write_private_file
 from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
 
 from anosys_sdk_codex.installer import PREVIOUS_NOTIFY_FLAG, get_codex_home, get_env_path
@@ -77,7 +77,7 @@ def load_state() -> Dict[str, Any]:
 
 def save_state(state: Dict[str, Any]) -> None:
     try:
-        STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        write_private_file(STATE_FILE, json.dumps(state, indent=2))  # 0600
     except Exception as e:
         log.error("Failed to save state: %s", type(e).__name__)
 
