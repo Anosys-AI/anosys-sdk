@@ -95,3 +95,32 @@ def test_open_telemetry_options_carry_sdk_provider(monkeypatch):
     provider = TracerProvider()
     monkeypatch.setattr(instrumentor.trace, "get_tracer_provider", lambda: provider)
     assert get_anthropic_open_telemetry_options()["tracer_provider"] is provider
+
+
+def test_exporter_user_context_does_not_leak_session_id_to_conversation_id(monkeypatch):
+    captured = []
+    monkeypatch.setattr(instrumentor, "send_app_record", lambda url, data: captured.append(data))
+    monkeypatch.setattr(instrumentor, "_log_api_url", "http://fake-api/ingest")
+    monkeypatch.setattr(instrumentor, "_capture_level", "metadata")
+
+    exporter = instrumentor.AnosysHttpExporter(
+        get_user_context=lambda: {"session_id": "secret-session-id-4321", "token": "secret-token"}
+    )
+    span = SimpleNamespace(
+        instrumentation_scope=SimpleNamespace(name="com.anthropic.sdk.python"),
+        attributes={"gen_ai.operation.name": "chat", "gen_ai.provider.name": "anthropic"},
+        to_json=lambda indent=None: json.dumps({
+            "name": "anthropic.messages.create",
+            "attributes": {"gen_ai.operation.name": "chat", "gen_ai.provider.name": "anthropic"},
+            "status": {},
+            "events": [],
+            "resource": {"attributes": {"service.name": "svc"}},
+        }),
+    )
+    exporter.export([span])
+    assert len(captured) == 1
+    rec = captured[0]
+    # At metadata: cvs5 is dropped and session_id MUST NOT be in gen_ai_conversation_id
+    assert "cvs5" not in rec
+    assert rec.get("gen_ai_conversation_id") is None
+    assert "secret-session-id-4321" not in json.dumps(rec)

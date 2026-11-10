@@ -103,27 +103,20 @@ class BridgeLoggerProvider {
   }
 
   getLogger(name, version, options) {
-    const delegate = this._delegateProvider && typeof this._delegateProvider.getLogger === 'function'
-      ? this._delegateProvider.getLogger(name, version, options)
+    const provider = this._delegateProvider || logs.getLoggerProvider();
+    const delegate = provider && typeof provider.getLogger === 'function' && !(provider instanceof BridgeLoggerProvider)
+      ? provider.getLogger(name, version, options)
       : null;
     return new BridgeLogger(delegate);
   }
 }
 
 function installBridgeLogger() {
-  if (_bridgeInstalled) return;
-  _bridgeInstalled = true;
+  if (!_instrumentation) return;
   try {
-    let existing = null;
-    const current = logs.getLoggerProvider();
-    if (current && !(current instanceof BridgeLoggerProvider)
-        && current.constructor?.name !== 'ProxyLoggerProvider'
-        && current.constructor?.name !== 'NoopLoggerProvider') {
-      existing = current;
-    }
-    logs.setGlobalLoggerProvider(new BridgeLoggerProvider(existing));
+    _instrumentation.setLoggerProvider(new BridgeLoggerProvider());
   } catch (err) {
-    log.warn('Could not register AnoSys BridgeLoggerProvider:', err);
+    log.warn('Could not register AnoSys BridgeLoggerProvider on instrumentation:', err);
   }
 }
 
@@ -242,8 +235,6 @@ export class AnosysHttpExporter {
 export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext = null, captureLevel = null, extraSpanProcessors = []) {
   _logApiUrlReady = Promise.resolve(apiUrl).then((url) => { _logApiUrl = url ?? null; return _logApiUrl; });
 
-  installBridgeLogger();
-
   if (_activeExporter) {
     if (getUserContext) _activeExporter._getUserContext = getUserContext;
   }
@@ -291,9 +282,11 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
   if (!_instrumentation) {
     _instrumentation = new OpenAIInstrumentation({ enrichTokens: true, captureMessageContent });
     _instrumentation.setTracerProvider(provider);
+    installBridgeLogger();
     _instrumentation.enable();
   } else {
     _instrumentation.setConfig({ enrichTokens: true, captureMessageContent });
+    installBridgeLogger();
   }
 
   // Ensure default and loaded OpenAI classes are patched
