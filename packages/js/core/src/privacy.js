@@ -97,8 +97,12 @@ function projectLevel(cwd) {
   }
 }
 
-/** The level to collect at and where it came from: { level, source }. */
+/** The level to collect at and where it came from: { level, source }. Supports (explicit, cwd) or ({ explicit, cwd }). */
 function effectiveLevel(explicit = null, cwd = null) {
+  if (explicit && typeof explicit === 'object') {
+    cwd = explicit.cwd ?? cwd;
+    explicit = explicit.explicit ?? explicit.level ?? null;
+  }
   if (['1', 'true', 'yes'].includes((process.env.ANOSYS_DISABLE || '').trim().toLowerCase())) {
     return { level: OFF, source: 'ANOSYS_DISABLE' };
   }

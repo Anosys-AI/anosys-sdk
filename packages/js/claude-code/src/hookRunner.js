@@ -249,21 +249,12 @@ async function send(records, options = {}) {
 }
 
 async function main(options = {}) {
+  const isDryRun = options.dryRun !== undefined ? options.dryRun : DRY_RUN;
   // Add a small delay to ensure Claude Code has finished flushing logs to disk.
   await new Promise(r => setTimeout(r, options.delayMs ?? 500));
 
   const stdinCtx = options.stdinCtx !== undefined ? options.stdinCtx : getStdinContext();
   let stdinCwd = (stdinCtx && stdinCtx.cwd) || null;
-
-  const { level, source } = effectiveLevel({ cwd: stdinCwd });
-  if (level === OFF) {
-    log.info('Collection is off (%s); nothing sent', source);
-    return;
-  }
-  if (isPaused(PAUSE_FILE)) {
-    log.info('Collection paused after an authorization error; nothing sent');
-    return;
-  }
 
   // Priority: 1. Explicit Env Var, 2. stdin transcriptPath/sessionId, 3. Automatic detection
   let providedPath = EXPLICIT_TRANSCRIPT;
@@ -303,11 +294,53 @@ async function main(options = {}) {
   const currentSessionId = primaryTranscript.session_id;
 
   // In DRY_RUN mode ignore persisted state so every record is processed from scratch.
-  const state = DRY_RUN ? {} : loadState();
-  let sessionState = {};
+  const state = isDryRun ? {} : loadState();
 
   // Only this session and its subagents: past sessions are never uploaded
   const transcripts = sessionTranscripts(primaryTranscript);
+
+  const { level, source } = effectiveLevel(null, stdinCwd);
+  if (level === OFF) {
+    log.info('Collection is off (%s); nothing sent', source);
+    if (!isDryRun) {
+      for (const t of transcripts) {
+        try {
+          const content = fs.readFileSync(t.path, 'utf-8');
+          const allLines = content.trim().split('\n');
+          const totalLines = (allLines.length && allLines[0]) ? allLines.length : 0;
+          let lastUuid = null;
+          if (totalLines > 0) {
+            for (let i = allLines.length - 1; i >= 0; i--) {
+              const line = allLines[i].trim();
+              if (!line) continue;
+              try {
+                const msg = JSON.parse(line);
+                lastUuid = msg.uuid || msg.messageId || msg.id || null;
+                if (lastUuid) break;
+              } catch {}
+            }
+          }
+          state[t.state_key] = {
+            ...(state[t.state_key] || {}),
+            last_line: totalLines,
+            last_message_uuid: lastUuid,
+            last_run: new Date().toISOString(),
+            is_agent: t.is_agent,
+          };
+        } catch (e) {
+          log.error('Failed to update watermark when OFF for %s: %s', t.state_key, e.name);
+        }
+      }
+      saveState(state);
+    }
+    return;
+  }
+  if (isPaused(PAUSE_FILE)) {
+    log.info('Collection paused after an authorization error; nothing sent');
+    return;
+  }
+
+  let sessionState = {};
   log.info("Session %s at '%s' (%s): %s transcript(s)", currentSessionId, level, source, transcripts.length);
 
   // -- 3. Process each transcript ---------------------------------------
@@ -505,7 +538,7 @@ async function main(options = {}) {
     if (sessionMapped.length) {
       const sessionCwd = currentContext.cwd || stdinCwd;
       if (sessionCwd && !stdinCwd) stdinCwd = sessionCwd;
-      const { level: sessLevel } = effectiveLevel({ cwd: sessionCwd });
+      const { level: sessLevel } = effectiveLevel(null, sessionCwd);
       if (sessLevel !== OFF) {
         for (const m of sessionMapped) {
           const record = prepareRecord(m, sessLevel);
@@ -540,14 +573,14 @@ async function main(options = {}) {
   log.info('Session %s: %s record(s) mapped, %s accepted', currentSessionId, allMappedPayloads.length, sent);
 
   // Only advance last_line watermark if delivery wasn't paused by an auth failure
-  if (!DRY_RUN && !isPaused(PAUSE_FILE)) {
+  if (!isDryRun && !isPaused(PAUSE_FILE)) {
     for (const [stateKeyUpd, updateData] of sessionUpdates) {
       const existing = state[stateKeyUpd] || {};
       Object.assign(existing, updateData);
       state[stateKeyUpd] = existing;
     }
     saveState(state);
-  } else if (DRY_RUN) {
+  } else if (isDryRun) {
     log.info('[DRY RUN] Skipping state save — state file unchanged.');
   }
 }

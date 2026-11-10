@@ -122,7 +122,10 @@ def find_latest_transcript() -> Optional[TranscriptInfo]:
 
 def get_stdin_context() -> Optional[dict]:
     import select
-    if not select.select([sys.stdin], [], [], 0.1)[0]:
+    try:
+        if not select.select([sys.stdin], [], [], 0.1)[0]:
+            return None
+    except Exception:
         return None
     try:
         data = sys.stdin.read()
@@ -193,14 +196,6 @@ async def main():
     stdin_ctx = get_stdin_context()
     stdin_cwd = (stdin_ctx or {}).get('cwd')
 
-    level, source = effective_level(cwd=stdin_cwd)
-    if level == OFF:
-        log.info("Collection is off (%s); nothing sent", source)
-        return
-    if is_paused(PAUSE_FILE):
-        log.info("Collection paused after an authorization error; nothing sent")
-        return
-
     provided_path = EXPLICIT_TRANSCRIPT
     if not provided_path and stdin_ctx:
         provided_path = stdin_ctx.get('transcriptPath') or stdin_ctx.get('transcript_path') or ''
@@ -228,6 +223,45 @@ async def main():
 
     # Only this session and its subagents: past sessions are never uploaded
     transcripts = session_transcripts(primary_transcript)
+
+    level, source = effective_level(cwd=stdin_cwd)
+    if level == OFF:
+        log.info("Collection is off (%s); nothing sent", source)
+        if not DRY_RUN:
+            for t in transcripts:
+                try:
+                    content = t.path.read_text(encoding='utf-8')
+                    all_lines = content.strip().split('\n')
+                    total_lines = len(all_lines) if (all_lines and all_lines[0]) else 0
+                    f_uuid = None
+                    if total_lines > 0:
+                        for line in reversed(all_lines):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                msg = json.loads(line)
+                                f_uuid = msg.get('uuid') or msg.get('messageId') or msg.get('id')
+                                if f_uuid:
+                                    break
+                            except Exception:
+                                continue
+                    s = state.get(t.state_key, {})
+                    s.update({
+                        'last_line': total_lines,
+                        'last_message_uuid': f_uuid,
+                        'last_run': time.strftime('%Y-%m-%dT%H:%M:%S'),
+                        'is_agent': t.is_agent,
+                    })
+                    state[t.state_key] = s
+                except Exception as e:
+                    log.error("Failed to update watermark when OFF for %s: %s", t.state_key, type(e).__name__)
+            save_state(state)
+        return
+    if is_paused(PAUSE_FILE):
+        log.info("Collection paused after an authorization error; nothing sent")
+        return
+
     log.info("Session %s at '%s' (%s): %d transcript(s)", current_sid, level, source, len(transcripts))
 
     all_mapped_payloads = []

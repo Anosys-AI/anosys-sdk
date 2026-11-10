@@ -69,9 +69,6 @@ export class AnosysHttpExporter {
           const value = userContextValue(uctx);
           if (value) {
             cleaned.cvs5 = value;
-            if (uctx && typeof uctx === 'object' && uctx.session_id && !cleaned.gen_ai_conversation_id) {
-              cleaned.gen_ai_conversation_id = String(uctx.session_id);
-            }
           }
         } catch { /* user context errors must not block export */ }
 

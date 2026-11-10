@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from anosys_sdk_core.hook_cli import setup_hook_logging
-from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record, write_private_file
+from anosys_sdk_core.privacy import OFF, _rank_lower, effective_level, prepare_hook_record, write_private_file
 from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
 
 from anosys_sdk_antigravity.constants import (
@@ -79,14 +79,14 @@ def load_env_config(path: Optional[Path] = None, allowed: Optional[frozenset] = 
 
 
 def load_runtime_environment(cwd: Optional[Path | str] = None) -> None:
-    """Prefer the nearest workspace config, then fill gaps from global config."""
+    """Load user global config first so repository files cannot override user credentials."""
+    load_env_config()
     base = Path(cwd) if cwd else Path.cwd()
     for directory in (base, *base.parents):
         workspace_config = directory / ".agents" / "anosys-env.json"
         if workspace_config.is_file():
             load_env_config(workspace_config, WORKSPACE_ALLOWED_KEYS)
             break
-    load_env_config()
 
 
 load_runtime_environment()
@@ -243,7 +243,9 @@ def run() -> None:
         ws_cwd = ws_paths[0] if isinstance(ws_paths, list) and ws_paths else input_json.get("cwd")
         if ws_cwd:
             load_runtime_environment(cwd=ws_cwd)
-        level, source = effective_level(explicit=_workspace_ceiling, cwd=ws_cwd)
+        level, source = effective_level(cwd=ws_cwd)
+        if _workspace_ceiling and _rank_lower(_workspace_ceiling, level):
+            level, source = _workspace_ceiling, "workspace ceiling"
         if level == OFF:
             log.info("Collection is off (%s); nothing sent", source)
         elif is_paused(PAUSE_FILE):

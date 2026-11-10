@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 
-def test_workspace_credentials_override_global_but_not_environment(tmp_path):
+def test_user_credentials_take_precedence_over_workspace(tmp_path):
     home = tmp_path / "home"
     global_config = home / ".gemini" / "config"
     global_config.mkdir(parents=True)
@@ -27,7 +27,7 @@ def test_workspace_credentials_override_global_but_not_environment(tmp_path):
     env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
     code = ("import json; from anosys_sdk_antigravity.hook_runner import get_config; "
             "print(json.dumps(get_config()))")
-    for override, expected in ((None, "workspace-key"), ("environment-key", "environment-key")):
+    for override, expected in ((None, "global-key"), ("environment-key", "environment-key")):
         if override:
             env["ANOSYS_HOOK_APIKEY"] = override
         result = subprocess.run(

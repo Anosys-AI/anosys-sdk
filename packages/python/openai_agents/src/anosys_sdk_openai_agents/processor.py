@@ -49,7 +49,7 @@ from agents import TracingProcessor
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.context import clean_contextvars
-from anosys_sdk_core.capture import accepts_span, current_app_level, prepare_app_record, resolve_app_level
+from anosys_sdk_core.capture import accepts_span, current_app_level, prepare_app_record, resolve_app_level, user_context_value
 from anosys_sdk_core.privacy import FULL, OFF
 from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_openai_agents.mapping import span2json, extract_otel_span_info
@@ -134,9 +134,6 @@ class AnosysHttpExporter(SpanExporter):
                         val = user_context_value(user_ctx)
                         if val:
                             cleaned_data["cvs5"] = val
-                            sid = user_ctx.get("session_id") if isinstance(user_ctx, dict) else getattr(user_ctx, "session_id", None)
-                            if sid and not cleaned_data.get("gen_ai_conversation_id"):
-                                cleaned_data["gen_ai_conversation_id"] = str(sid)
                 except Exception:
                     pass
                 # Level filtering, cvs198 and encryption in one place

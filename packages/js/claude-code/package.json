@@ -13,7 +13,7 @@
   "exports": {
     ".": "./src/hookRunner.js",
     "./mapper": "./src/mapper.js",
-    "./*": "./*"
+    "./package.json": "./package.json"
   },
   "bin": {
     "anosys-sdk-claude-code": "src/cli.js"

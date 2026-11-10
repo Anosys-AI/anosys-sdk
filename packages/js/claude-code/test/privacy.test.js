@@ -122,6 +122,32 @@ describe('transcripts', () => {
     assert.ok(!log.includes('sk-ant') && !log.includes('Use key'));
     assert.equal(fs.statSync(hookRunner.LOG_FILE).mode & 0o777, 0o600);
   });
+
+  it('advances watermark when collection level is off (B3 fix)', async () => {
+    const transcript = path.join(TMP, 'projects', 'app', 'off-session.jsonl');
+    const lines = [
+      JSON.stringify({ uuid: 'u1', type: 'user', message: { content: 'secret 1' } }),
+      JSON.stringify({ uuid: 'u2', type: 'assistant', message: { content: 'secret 2' } }),
+    ];
+    fs.writeFileSync(transcript, lines.join('\n') + '\n');
+
+    const origDisable = process.env.ANOSYS_DISABLE;
+    const origDryRun = hookRunner.DRY_RUN;
+    try {
+      process.env.ANOSYS_DISABLE = '1';
+      hookRunner.DRY_RUN = false;
+
+      await hookRunner.main({ delayMs: 0, dryRun: false, stdinCtx: { transcript_path: transcript, session_id: 'off-session' } });
+
+      const state = hookRunner.loadState();
+      assert.ok(state['off-session'], 'state must record off-session');
+      assert.equal(state['off-session'].last_line, 2);
+      assert.equal(state['off-session'].last_message_uuid, 'u2');
+    } finally {
+      if (origDisable !== undefined) process.env.ANOSYS_DISABLE = origDisable; else delete process.env.ANOSYS_DISABLE;
+      hookRunner.DRY_RUN = origDryRun;
+    }
+  });
 });
 
 describe('installer', () => {

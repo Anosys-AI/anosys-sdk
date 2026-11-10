@@ -84,3 +84,25 @@ def test_full_extracts_commands_and_scrubs_secrets():
 def mapped_from(turn):
     return transform_antigravity_turn(turn, session_id="s1", turn_id="s1_0",
                                       hook_metadata={"workspacePaths": ["/Users/dev/app"]})
+
+
+def test_workspace_ceiling_cannot_elevate_off_to_metadata(tmp_path, monkeypatch):
+    """B2 fix: A workspace .agents/anosys-env.json with metadata must not elevate user's off to metadata."""
+    ws = tmp_path / "repo"
+    (ws / ".agents").mkdir(parents=True)
+    (ws / ".agents" / "anosys-env.json").write_text(json.dumps({
+        "ANOSYS_COLLECTION_LEVEL": "metadata"
+    }))
+    fake_consent = tmp_path / "consent.json"
+    fake_consent.write_text(json.dumps({"level": "off"}))
+    monkeypatch.setenv("ANOSYS_CONSENT_FILE", str(fake_consent))
+
+    import anosys_sdk_antigravity.hook_runner as hr
+    hr._workspace_ceiling = None
+    hr.load_runtime_environment(cwd=ws)
+
+    level, source = hr.effective_level(cwd=str(ws))
+    assert level == OFF
+    if hr._workspace_ceiling and hr._rank_lower(hr._workspace_ceiling, level):
+        level, source = hr._workspace_ceiling, "workspace ceiling"
+    assert level == OFF

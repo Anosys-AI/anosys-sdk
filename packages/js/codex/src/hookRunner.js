@@ -497,7 +497,7 @@ async function processNotification(rawInput, options = {}) {
   }
 
   const initialCwd = (event && typeof event === 'object' && event.cwd) ? event.cwd : null;
-  let { level, source } = effectiveLevel({ cwd: initialCwd });
+  let { level, source } = effectiveLevel(null, initialCwd);
   if (level === OFF) {
     log(`Collection is off (${source}); nothing sent`);
     return;
@@ -537,7 +537,7 @@ async function processNotification(rawInput, options = {}) {
 
   const turnCwd = turnData.cwd || initialCwd;
   if (turnCwd && turnCwd !== initialCwd) {
-    ({ level, source } = effectiveLevel({ cwd: turnCwd }));
+    ({ level, source } = effectiveLevel(null, turnCwd));
     if (level === OFF) {
       log(`Collection is off (${source}); nothing sent`);
       return;

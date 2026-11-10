@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createRequire } from 'node:module';
 
 import {
@@ -254,4 +257,22 @@ test('resolveApiKey prioritizes ANOSYS_API_URL even when ANOSYS_API_KEY is set',
     if (origUrl !== undefined) process.env.ANOSYS_API_URL = origUrl; else delete process.env.ANOSYS_API_URL;
     if (origKey !== undefined) process.env.ANOSYS_API_KEY = origKey; else delete process.env.ANOSYS_API_KEY;
   }
+});
+
+test('effectiveLevel supports options object ({ cwd }) and ({ explicit, cwd }) (B1 fix)', () => {
+  const { effectiveLevel } = require('../src/privacy.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-eff-test-'));
+  fs.writeFileSync(path.join(dir, '.anosys'), 'level=off\n');
+
+  // Both positional and options-object styles must respect the project .anosys file
+  const resPositional = effectiveLevel(null, dir);
+  assert.equal(resPositional.level, 'off');
+  assert.equal(resPositional.source, '.anosys');
+
+  const resObject = effectiveLevel({ cwd: dir });
+  assert.equal(resObject.level, 'off');
+  assert.equal(resObject.source, '.anosys');
+
+  const resBoth = effectiveLevel({ explicit: 'metadata', cwd: dir });
+  assert.equal(resBoth.level, 'off'); // project ceiling lowers metadata to off
 });

@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets, writePrivateFile,
+  FULL, OFF, RANK, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets, writePrivateFile,
 } = require('anosys-sdk-core');
 const { GLOBAL_CONFIG_DIR, GLOBAL_ENV_FILE, DEFAULT_INGESTION_URL } = require('./constants');
 const { parseTranscript } = require('./transcript');
@@ -69,6 +69,7 @@ function loadEnvConfig(envPath = GLOBAL_ENV_FILE, allowed = null) {
 }
 
 function loadRuntimeEnvironment(startDir = null) {
+  loadEnvConfig();
   let directory = startDir ? path.resolve(String(startDir)) : process.cwd();
   while (true) {
     const workspaceConfig = path.join(directory, '.agents', 'anosys-env.json');
@@ -80,7 +81,6 @@ function loadRuntimeEnvironment(startDir = null) {
     if (parent === directory) break;
     directory = parent;
   }
-  loadEnvConfig();
 }
 
 loadRuntimeEnvironment();
@@ -238,7 +238,11 @@ async function run() {
     const wsPaths = Array.isArray(inputJson.workspacePaths) ? inputJson.workspacePaths : [];
     const wsCwd = wsPaths[0] || inputJson.cwd || null;
     if (wsCwd) loadRuntimeEnvironment(wsCwd);
-    const { level, source } = effectiveLevel({ explicit: _workspaceCeiling, cwd: wsCwd });
+    let { level, source } = effectiveLevel(null, wsCwd);
+    if (_workspaceCeiling && (RANK[_workspaceCeiling] ?? 0) < (RANK[level] ?? 0)) {
+      level = _workspaceCeiling;
+      source = 'workspace ceiling';
+    }
     if (level === OFF) {
       log('INFO', `Collection is off (${source}); nothing sent`);
     } else if (isPaused(PAUSE_FILE)) {

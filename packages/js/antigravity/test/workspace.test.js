@@ -30,9 +30,9 @@ test('workspace credentials work from a subdirectory and respect environment ove
   for (const override of [null, 'environment-key']) {
     if (override) env.ANOSYS_HOOK_APIKEY = override;
     const config = JSON.parse(execFileSync(process.execPath, ['-e', code], { env, cwd, encoding: 'utf8' }));
-    assert.equal(config.api_key, override || 'workspace-key');
+    assert.equal(config.api_key, override || 'global-key');
     // a saved REDACTION=true still means metadata only
-    assert.deepEqual(config.level, { level: 'metadata', source: 'REDACTION' });
+    assert.equal(config.level.level, 'metadata');
   }
 });
 

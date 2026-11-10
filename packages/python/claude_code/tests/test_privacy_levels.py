@@ -109,3 +109,28 @@ def test_hook_command_uses_this_interpreter():
     settings = update_stop_hooks({}, hook_command())
     command = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
     assert command.startswith(f'"{sys.executable}"') and has_anosys_hook(settings)
+
+
+def test_watermark_advances_when_collection_level_is_off(tmp_path, monkeypatch):
+    """B3 fix: When collection is OFF, hook runner must advance state watermark so past turns are not uploaded later."""
+    import asyncio
+    transcript = tmp_path / "test-session.jsonl"
+    lines = [
+        json.dumps({"uuid": "u1", "type": "user", "message": {"content": "hello"}}),
+        json.dumps({"uuid": "u2", "type": "assistant", "message": {"content": "world"}}),
+    ]
+    transcript.write_text("\n".join(lines) + "\n")
+
+    state_file = tmp_path / "claude_code_state.json"
+    monkeypatch.setattr(hook_runner, "STATE_FILE", state_file)
+    monkeypatch.setattr(hook_runner, "EXPLICIT_TRANSCRIPT", str(transcript))
+    monkeypatch.setattr(hook_runner, "DRY_RUN", False)
+    monkeypatch.setenv("ANOSYS_DISABLE", "1")
+
+    asyncio.run(hook_runner.main())
+
+    assert state_file.is_file()
+    state = json.loads(state_file.read_text())
+    assert "test-session" in state
+    assert state["test-session"]["last_line"] == 2
+    assert state["test-session"]["last_message_uuid"] == "u2"
