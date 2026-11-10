@@ -1,2 +1,0 @@
-[console_scripts]
-anosys-claude-code = anosys_sdk_claude_code.cli:main
