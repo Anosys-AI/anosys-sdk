@@ -30,6 +30,7 @@ const DEFAULT_ENCRYPTED_COLUMNS = [
   'cvs199', 'cvs18', 'otel_events',
   // tool and file data
   'tool_use_result', 'cvs26', 'commands', 'written_paths', 'file_states',
+  'cvs90', 'cvs91', 'cvs76', 'cvs77', 'cvs78', 'cvs79',
   'ide_diagnostics', 'cvs30', 'file_attachments', 'hook_specific_output', 'mcp_meta',
   // model-written summaries, task text and errors
   'custom_title', 'ai_title', 'cvs40', 'cvs41', 'agent_description', 'cvs35',

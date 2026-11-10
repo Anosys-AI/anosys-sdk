@@ -193,15 +193,21 @@ test('antigravity serializes error objects and pairs tool durations across SYSTE
 
 test('prepareAppRecord scrubs secrets at full level', () => {
   const { prepareAppRecord } = require('../src/capture.js');
-  const record = {
-    otel_name: 'chat',
-    llm_input: 'my secret is sk-ant-api03-abcdefghijklmnopqrstuvwxyz and bearer token: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMCda8Yhe3iZaWbvV5XKSTbuAn0M',
-    gen_ai_request_model: 'claude-sonnet-4-6',
-  };
-  const prepared = prepareAppRecord(record, 'full');
-  assert.ok(!prepared.llm_input.includes('sk-ant-api03'));
-  assert.ok(prepared.llm_input.includes('[SECRET]'));
-  assert.equal(prepared.gen_ai_request_model, 'claude-sonnet-4-6');
+  const origKey = process.env.ANOSYS_ENCRYPTION_KEY;
+  delete process.env.ANOSYS_ENCRYPTION_KEY;
+  try {
+    const record = {
+      otel_name: 'chat',
+      llm_input: 'my secret is sk-ant-api03-abcdefghijklmnopqrstuvwxyz and bearer token: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMCda8Yhe3iZaWbvV5XKSTbuAn0M',
+      gen_ai_request_model: 'claude-sonnet-4-6',
+    };
+    const prepared = prepareAppRecord(record, 'full');
+    assert.ok(!prepared.llm_input.includes('sk-ant-api03'));
+    assert.ok(prepared.llm_input.includes('[SECRET]'));
+    assert.equal(prepared.gen_ai_request_model, 'claude-sonnet-4-6');
+  } finally {
+    if (origKey !== undefined) process.env.ANOSYS_ENCRYPTION_KEY = origKey;
+  }
 });
 
 test('codex and antigravity align thinking in cvb1 and error in cvb2', () => {
@@ -232,5 +238,20 @@ test('codex and antigravity align thinking in cvb1 and error in cvb2', () => {
     else process.env.ANOSYS_CODEX_PIXEL = prevCodex;
     if (prevAg === undefined) delete process.env.ANOSYS_ANTIGRAVITY_PIXEL;
     else process.env.ANOSYS_ANTIGRAVITY_PIXEL = prevAg;
+  }
+});
+
+test('resolveApiKey prioritizes ANOSYS_API_URL even when ANOSYS_API_KEY is set', async () => {
+  const { resolveApiKey } = require('../src/config.js');
+  const origUrl = process.env.ANOSYS_API_URL;
+  const origKey = process.env.ANOSYS_API_KEY;
+  try {
+    process.env.ANOSYS_API_URL = 'https://custom-anosys.internal/ingest';
+    process.env.ANOSYS_API_KEY = 'any-key';
+    const resolved = await resolveApiKey();
+    assert.equal(resolved, 'https://custom-anosys.internal/ingest');
+  } finally {
+    if (origUrl !== undefined) process.env.ANOSYS_API_URL = origUrl; else delete process.env.ANOSYS_API_URL;
+    if (origKey !== undefined) process.env.ANOSYS_API_KEY = origKey; else delete process.env.ANOSYS_API_KEY;
   }
 });

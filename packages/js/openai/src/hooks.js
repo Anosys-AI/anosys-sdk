@@ -131,10 +131,18 @@ export function extractSpanInfo(span) {
   const outputMessages = genAi.output?.messages ?? llm.output_messages;
   if (inputMessages)  assign(variables, 'gen_ai.input.messages',  JSON.stringify(inputMessages));
   if (outputMessages) assign(variables, 'gen_ai.output.messages', JSON.stringify(outputMessages));
-  assign(variables, 'llm_input',  toStrOrNull(attrs.input?.value ?? flattenMessages(inputMessages)));
-  assign(variables, 'llm_output', toStrOrNull(attrs.output?.value ?? flattenMessages(outputMessages)));
+  const toolInput = raw['gen_ai.tool.call.arguments'] ?? genAi.tool?.call?.arguments;
+  const toolOutput = raw['gen_ai.tool.call.result'] ?? genAi.tool?.call?.result;
+  assign(variables, 'llm_input',  toStrOrNull(attrs.input?.value ?? flattenMessages(inputMessages) ?? toolInput));
+  assign(variables, 'llm_output', toStrOrNull(attrs.output?.value ?? flattenMessages(outputMessages) ?? toolOutput));
   assign(variables, 'gen_ai.system_instructions', toStrOrNull(genAi.system_instructions ?? llm.system));
   assign(variables, 'gen_ai.tool.definitions',    toStrOrNull(genAi.tool?.definitions ?? llm.tools));
+
+  // Kind information
+  const spanKind = raw['gen_ai.span.kind'] ?? genAi.span?.kind ?? raw['span.kind'] ?? attrs.span?.kind ?? (raw['gen_ai.operation.name'] === 'execute_tool' || span.name?.startsWith('execute_tool') ? 'TOOL' : null);
+  if (spanKind) {
+    assign(variables, 'gen_ai.span.kind', toStrOrNull(spanKind));
+  }
 
   // User context and Model Config
   const userCtx = attrs.user_context ?? attrs.anosys?.user_context;

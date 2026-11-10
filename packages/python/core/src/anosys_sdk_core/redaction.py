@@ -65,7 +65,7 @@ SECRET_PATTERNS: List[Pattern] = [
     re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b"),  # JWT
     re.compile(r"(://[^/\s:@]+:)[^/\s@]{6,}(?=@)"),  # URL basic-auth credentials
     re.compile(
-        r"(?i)((?:api[_-]?key|apikey|secret|password|passwd|token|authorization)[\"']?\s*[:=]\s*[\"']?(?:bearer\s+)?)"
+        r"(?i)((?:api[_-]?key|apikey|secret|password|passwd|token|authorization)\\?[\"']?\s*[:=]\s*\\?[\"']?(?:bearer\s+)?)"
         r"[A-Za-z0-9_\-/+=.]{12,}"
     ),
 ]

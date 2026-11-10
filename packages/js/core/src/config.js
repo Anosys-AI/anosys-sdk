@@ -27,10 +27,10 @@ function createLogger(name) {
 const log = createLogger('core');
 
 async function resolveApiKey(apiKey = null, timeout = 10000) {
+  const explicit = (process.env.ANOSYS_API_URL || '').trim();
+  if (explicit) return explicit; // a self-hosted or test endpoint set on purpose
   const key = apiKey ?? process.env.ANOSYS_API_KEY;
   if (!key) {
-    const explicit = (process.env.ANOSYS_API_URL || '').trim();
-    if (explicit) return explicit; // a self-hosted endpoint set on purpose
     log.warn('ANOSYS_API_KEY not found; AnoSys telemetry is disabled. Get a key at https://console.anosys.ai/collect/integrationoptions');
     return null;
   }

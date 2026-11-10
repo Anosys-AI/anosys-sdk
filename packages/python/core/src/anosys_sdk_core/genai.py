@@ -153,8 +153,12 @@ def _has_reasoning(messages: Any) -> bool:
     if not isinstance(messages, list):
         return False
     for message in messages:
-        parts = message.get("parts") if isinstance(message, dict) else None
-        if isinstance(parts, list) and any(isinstance(p, dict) and p.get("type") == "reasoning" for p in parts):
+        if not isinstance(message, dict):
+            continue
+        blocks = message.get("parts") or message.get("content")
+        if isinstance(blocks, list) and any(
+            isinstance(p, dict) and p.get("type") in ("reasoning", "thinking") for p in blocks
+        ):
             return True
     return False
 
@@ -302,7 +306,7 @@ def extract_genai_span_info(
     assign(variables, "gen_ai.output.messages", output_messages)
     assign(variables, "gen_ai.system_instructions", system_instructions)
     assign(variables, "gen_ai.tool.definitions", tool_definitions)
-    if _has_reasoning(output_messages):
+    if bool(attributes.get("has_thinking")) or _has_reasoning(output_messages):
         assign(variables, "has_thinking", True)
 
     # Agents & Tools

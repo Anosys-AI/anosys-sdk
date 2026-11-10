@@ -18,6 +18,29 @@ from opentelemetry.sdk.trace.export import (
     SpanExporter,
     SpanExportResult,
 )
+try:
+    from fi_instrumentation.fi_types import SpanAttributes
+    _GENAI_FALLBACKS = {
+        "GEN_AI_INPUT_MESSAGES": "gen_ai.input.messages",
+        "GEN_AI_OUTPUT_MESSAGES": "gen_ai.output.messages",
+        "GEN_AI_PROMPTS": "gen_ai.prompts",
+        "GEN_AI_PROVIDER_NAME": "gen_ai.provider.name",
+        "GEN_AI_REQUEST_MODEL": "gen_ai.request.model",
+        "GEN_AI_REQUEST_PARAMETERS": "gen_ai.request.parameters",
+        "GEN_AI_SPAN_KIND": "gen_ai.span.kind",
+        "GEN_AI_TOOL_DEFINITIONS": "gen_ai.tool.definitions",
+        "GEN_AI_USAGE_INPUT_TOKENS": "gen_ai.usage.input_tokens",
+        "GEN_AI_USAGE_INPUT_TOKENS_CACHE_READ": "gen_ai.usage.input_tokens.cache_read",
+        "GEN_AI_USAGE_OUTPUT_TOKENS": "gen_ai.usage.output_tokens",
+        "GEN_AI_USAGE_OUTPUT_TOKENS_REASONING": "gen_ai.usage.output_tokens.reasoning",
+        "GEN_AI_USAGE_TOTAL_TOKENS": "gen_ai.usage.total_tokens",
+    }
+    for attr, val in _GENAI_FALLBACKS.items():
+        if not hasattr(SpanAttributes, attr):
+            setattr(SpanAttributes, attr, val)
+except Exception:
+    pass
+
 from traceai_openai import OpenAIInstrumentor
 
 from anosys_sdk_core.config import resolve_api_key
@@ -180,7 +203,7 @@ class AnosysOpenAILogger:
                 metadata only. None (default) follows ANOSYS_COLLECTION_LEVEL and a
                 project ``.anosys`` file (see anosys_sdk_core.capture); full otherwise.
         """
-        global _tracing_initialized, _capture_level
+        global _tracing_initialized, _capture_level, _log_api_url
 
         _capture_level, source = resolve_app_level(capture_content)
         self.capture_level = _capture_level
@@ -190,12 +213,14 @@ class AnosysOpenAILogger:
         
         # Resolve API URL
         self.log_api_url = resolve_api_key()
+        if self.log_api_url:
+            _log_api_url = self.log_api_url
+            setup_api(self.log_api_url)
         
         # Optional user context function
         self.get_user_context = get_user_context or (lambda: None)
         
         # Initialize tracing if not already done
         if not _tracing_initialized:
-            setup_api(self.log_api_url)
             setup_tracing(self.log_api_url, get_user_context=self.get_user_context)
             _tracing_initialized = True

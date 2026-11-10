@@ -65,13 +65,14 @@ def resolve_api_key(api_key: Optional[str] = None, timeout: int = 10) -> str:
         api_key: AnoSys API key (defaults to ANOSYS_API_KEY env var)
         timeout: Request timeout in seconds
     """
+    explicit = os.getenv("ANOSYS_API_URL", "").strip()
+    if explicit:
+        return explicit  # a self-hosted or test endpoint set on purpose
+
     if api_key is None:
         api_key = os.getenv('ANOSYS_API_KEY')
 
     if not api_key:
-        explicit = os.getenv("ANOSYS_API_URL", "").strip()
-        if explicit:
-            return explicit  # a self-hosted endpoint set on purpose
         logger.warning("ANOSYS_API_KEY not found; AnoSys telemetry is disabled. Get a key at "
                        "https://console.anosys.ai/collect/integrationoptions")
         return ""

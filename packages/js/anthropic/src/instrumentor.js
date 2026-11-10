@@ -191,15 +191,16 @@ export class AnosysAnthropicLogger {
       this.ready = Promise.resolve();
     } else if (!_tracingInitialized) {
       _tracingInitialized = true;
-      setupTracing(_logApiUrlReady, useBatchProcessor, this.getUserContext);
-      this.ready = this._init();
+      const url = _logApiUrl || resolveApiKey();
+      setupTracing(url, useBatchProcessor, this.getUserContext);
+      this.ready = this._init(url);
     } else {
       this.ready = Promise.resolve();
     }
   }
 
-  async _init() {
-    this.logApiUrl = await setLogApiUrl(resolveApiKey());
+  async _init(url = null) {
+    this.logApiUrl = await setLogApiUrl(url || resolveApiKey());
     await setupApi({ path: this.logApiUrl });
   }
 }

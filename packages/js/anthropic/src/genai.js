@@ -124,7 +124,10 @@ function systemText(systemInstructions) {
 function hasReasoning(messages) {
   messages = parseJson(messages);
   if (!Array.isArray(messages)) return false;
-  return messages.some(m => Array.isArray(m?.parts) && m.parts.some(p => p?.type === 'reasoning'));
+  return messages.some(m => {
+    const blocks = Array.isArray(m?.parts) ? m.parts : (Array.isArray(m?.content) ? m.content : null);
+    return Array.isArray(blocks) && blocks.some(p => p?.type === 'reasoning' || p?.type === 'thinking');
+  });
 }
 
 // ── Main span extraction ──────────────────────────────────────────────────────
@@ -256,7 +259,7 @@ export function extractGenAiSpanInfo(span, {
   assign(variables, 'gen_ai.output.messages', outputMessages);
   assign(variables, 'gen_ai.system_instructions', systemInstructions);
   assign(variables, 'gen_ai.tool.definitions', toolDefinitions);
-  if (hasReasoning(outputMessages)) assign(variables, 'has_thinking', true);
+  if (Boolean(attributes?.has_thinking) || hasReasoning(outputMessages)) assign(variables, 'has_thinking', true);
 
   // Agents & Tools
   assign(variables, 'gen_ai.agent.id', toStrOrNull(attributes['gen_ai.agent.id'] ?? attributes['anthropic.agent.id']));

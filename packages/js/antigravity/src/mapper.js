@@ -138,8 +138,8 @@ function extractToolDetails(toolSteps) {
 function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
   const meta = hookMetadata || {};
 
-  const userPrompt = String(turn.user_input || '');
-  const assistantText = String(turn.final_response || '');
+  const userPrompt = String(turn.user_input || turn.user_prompt || '');
+  const assistantText = String(turn.final_response || turn.assistant_output || '');
 
   const model = turn.model_name || meta.modelName || meta.model || 'gemini-2.5-pro';
 

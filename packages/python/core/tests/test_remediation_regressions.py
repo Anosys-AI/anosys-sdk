@@ -240,7 +240,8 @@ def test_antigravity_error_serialization_and_tool_pairing():
     assert json.loads(mapped["error_obj"]) == {"code": 500, "message": "boom"}
 
 
-def test_prepare_app_record_scrubs_secrets_at_full():
+def test_prepare_app_record_scrubs_secrets_at_full(monkeypatch):
+    monkeypatch.delenv("ANOSYS_ENCRYPTION_KEY", raising=False)
     from anosys_sdk_core.capture import prepare_app_record
     record = {
         "otel_name": "chat",
@@ -273,4 +274,11 @@ def test_cvb_schema_alignment_has_thinking_in_cvb1(monkeypatch):
     ag_mapped = transform_antigravity_turn(ag_turn, session_id="s1", turn_id="t1", hook_metadata={})
     assert ag_mapped["cvb1"] is True
     assert ag_mapped["cvb2"] is False
+
+
+def test_resolve_api_key_checks_anosys_api_url_first(monkeypatch):
+    from anosys_sdk_core.config import resolve_api_key
+    monkeypatch.setenv("ANOSYS_API_URL", "https://custom-anosys.internal/ingest")
+    monkeypatch.setenv("ANOSYS_API_KEY", "any-key")
+    assert resolve_api_key() == "https://custom-anosys.internal/ingest"
 

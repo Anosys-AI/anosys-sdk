@@ -219,7 +219,7 @@ class AnosysAnthropicLogger:
                 ``open_telemetry`` option of their own.
             use_batch_processor: If True, use BatchSpanProcessor
         """
-        global _tracing_initialized, _capture_content, _capture_level
+        global _tracing_initialized, _capture_content, _capture_level, _log_api_url
 
         _capture_level, source = resolve_app_level(capture_content)
         _capture_content = _capture_level == FULL
@@ -230,6 +230,9 @@ class AnosysAnthropicLogger:
 
         # Resolve API URL
         self.log_api_url = resolve_api_key()
+        if self.log_api_url:
+            _log_api_url = self.log_api_url
+            setup_api(self.log_api_url)
 
         # Optional user context function
         self.get_user_context = get_user_context or (lambda: None)
@@ -240,7 +243,6 @@ class AnosysAnthropicLogger:
 
         # Initialize tracing if not already done
         if not _tracing_initialized:
-            setup_api(self.log_api_url)
             setup_tracing(
                 self.log_api_url,
                 use_batch_processor=use_batch_processor,

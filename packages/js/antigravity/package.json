@@ -11,7 +11,9 @@
   },
   "main": "src/hookRunner.js",
   "exports": {
-    ".": "./src/hookRunner.js"
+    ".": "./src/hookRunner.js",
+    "./mapper": "./src/mapper.js",
+    "./*": "./*"
   },
   "bin": {
     "anosys-antigravity": "src/cli.js"

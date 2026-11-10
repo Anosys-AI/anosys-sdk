@@ -18,8 +18,8 @@ const SECRET_PATTERNS = [
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
 ];
 const URL_BASIC_AUTH = /(:\/\/[^/\s:@]+:)[^/\s@]{6,}(?=@)/g;
-// key = value assignments: keep the key, replace the value
-const ASSIGNMENT = /((?:api[_-]?key|apikey|secret|password|passwd|token|authorization)["']?\s*[:=]\s*["']?(?:bearer\s+)?)[A-Za-z0-9_\-/+=.]{12,}/gi;
+// key = value assignments: keep the key, replace the value (handles plain and JSON-escaped quotes)
+const ASSIGNMENT = /((?:api[_-]?key|apikey|secret|password|passwd|token|authorization)\\?["']?\s*[:=]\s*\\?["']?(?:bearer\s+)?)[A-Za-z0-9_\-/+=.]{12,}/gi;
 
 /** Replace secret-shaped substrings in a string, or in every string inside an object/array. */
 function scrubSecrets(value) {

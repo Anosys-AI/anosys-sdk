@@ -201,13 +201,35 @@ See [content controls](DATA_CONTROLS.md) for coverage, default columns, size lim
 - [Antigravity setup](ANTIGRAVITY.md)
 - [Antigravity variables](ANTIGRAVITY_VARIABLES.md)
 
-## Development
+## Development & Isolated Testing Environment
+
+All test harnesses, Docker configurations, and live verification suites reside in the [`test/`](test/) directory.
+
+### Quick Start with Docker
+To run advanced tests, execute live environment tests against real LLM providers, or run provider-dependent notebooks in an isolated container without needing local Python/Node configurations:
+
+```bash
+cd test
+
+# 1. Spin up the environment and run all verification suites:
+docker compose up --build
+
+# 2. Run live tests against real providers & live AnoSys ingestion:
+docker compose run --rm anosys-test live
+
+# 3. Open an interactive bash shell in the isolated environment:
+docker compose run --rm anosys-test bash
+
+# 4. Start Jupyter Notebook server (mapped to port 8888) to run examples:
+docker compose run --rm -p 8888:8888 anosys-test jupyter
+```
+
+### Local Development
 
 ```bash
 make install-dev
 make test
-make lint
-make build-py
+bash test/run_all_tests.sh
 ```
 
 The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run npm pack --dry-run from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. Provider-dependent notebooks require credentials and are not integration tests of a live model service.
