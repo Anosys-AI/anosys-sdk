@@ -88,3 +88,5 @@ dmypy.json
 
 /testdata/
 /local-tests/
+testcases/.results/
+

@@ -1,4 +1,4 @@
-.PHONY: install install-dev test lint build clean \
+.PHONY: install install-dev test lint build clean healthcheck healthcheck-quick \
         install-py install-py-dev test-py lint-py build-py \
         install-js test-js build-js
 
@@ -72,3 +72,10 @@ clean:
 	rm -rf packages/js/node_modules
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type d -name .pytest_cache -exec rm -rf {} +
+
+# Release health check (see testcases/README.md)
+healthcheck:
+	testcases/run_all.sh
+
+healthcheck-quick:
+	testcases/run_all.sh --quick
