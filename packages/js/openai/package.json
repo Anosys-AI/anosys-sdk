@@ -29,6 +29,7 @@
   ],
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": ">=0.51.0 <1.0.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@opentelemetry/instrumentation-openai": "^0.7.0",
@@ -36,6 +37,6 @@
     "anosys-sdk-core": "^2.0.0"
   },
   "scripts": {
-    "test": "node --test test/basic.test.js test/slots.test.js"
+    "test": "node --test test/basic.test.js test/slots.test.js test/instrumentor.test.js"
   }
 }

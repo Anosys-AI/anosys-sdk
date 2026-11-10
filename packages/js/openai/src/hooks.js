@@ -130,6 +130,19 @@ export function extractSpanInfo(span) {
   let inputMessages  = genAi.input?.messages ?? llm.input_messages;
   let outputMessages = genAi.output?.messages ?? llm.output_messages;
 
+  if (typeof inputMessages === 'string') {
+    try {
+      const parsed = JSON.parse(inputMessages);
+      if (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) inputMessages = parsed;
+    } catch { /* keep as string */ }
+  }
+  if (typeof outputMessages === 'string') {
+    try {
+      const parsed = JSON.parse(outputMessages);
+      if (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) outputMessages = parsed;
+    } catch { /* keep as string */ }
+  }
+
   // Fallback to span events if instrumentation recorded messages as events
   if ((!inputMessages || !outputMessages) && Array.isArray(span.events)) {
     const extractedInputs = [];
@@ -155,8 +168,10 @@ export function extractSpanInfo(span) {
   if (outputMessages) assign(variables, 'gen_ai.output.messages', JSON.stringify(outputMessages));
   const toolInput = raw['gen_ai.tool.call.arguments'] ?? genAi.tool?.call?.arguments;
   const toolOutput = raw['gen_ai.tool.call.result'] ?? genAi.tool?.call?.result;
-  assign(variables, 'llm_input',  toStrOrNull(attrs.input?.value ?? flattenMessages(inputMessages) ?? toolInput));
-  assign(variables, 'llm_output', toStrOrNull(attrs.output?.value ?? flattenMessages(outputMessages) ?? toolOutput));
+  const rawLlmInput = raw['llm_input'] ?? attrs['llm_input'];
+  const rawLlmOutput = raw['llm_output'] ?? attrs['llm_output'];
+  assign(variables, 'llm_input',  toStrOrNull(rawLlmInput ?? attrs.input?.value ?? flattenMessages(inputMessages) ?? toolInput));
+  assign(variables, 'llm_output', toStrOrNull(rawLlmOutput ?? attrs.output?.value ?? flattenMessages(outputMessages) ?? toolOutput));
   assign(variables, 'gen_ai.system_instructions', toStrOrNull(genAi.system_instructions ?? llm.system));
   assign(variables, 'gen_ai.tool.definitions',    toStrOrNull(genAi.tool?.definitions ?? llm.tools));
 
