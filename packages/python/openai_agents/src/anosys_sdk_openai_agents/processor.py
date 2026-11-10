@@ -26,7 +26,7 @@ from agents import TracingProcessor
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
 from anosys_sdk_core.context import clean_contextvars
-from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
+from anosys_sdk_core.capture import accepts_span, current_app_level, prepare_app_record, resolve_app_level
 from anosys_sdk_core.privacy import FULL, OFF
 from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_openai_agents.mapping import span2json, extract_otel_span_info
@@ -39,7 +39,33 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _tracing_initialized = False
 _log_api_url = ""  # set by setup_tracing; empty = nothing is sent
-_capture_level = "full"  # set by AnosysOpenAIAgentsLogger (see anosys_sdk_core.capture)
+_capture_level = None  # set by AnosysOpenAIAgentsLogger; until then the shared level applies (anosys_sdk_core.capture)
+
+# Per-direction capture switches (set by AnosysOpenAIAgentsLogger) and the
+# columns each one controls. Raw spans and attribute blobs repeat everything,
+# so they go whenever any direction is switched off.
+_capture_flags = {"inputs": True, "outputs": True, "parameters": True}
+_pii = {"enabled": False}  # pii_redaction, applied on both the OTel and the processor path
+INPUT_COLUMNS = ("llm_input", "gen_ai_input_messages", "gen_ai_system_instructions", "llm_system", "cvs65")
+OUTPUT_COLUMNS = ("llm_output", "gen_ai_output_messages", "cvs66", "cvs72", "cvs76")
+PARAMETER_COLUMNS = ("llm_invocation_parameters", "cvs70")
+RAW_COLUMNS = ("cvs199", "cvs18", "otel_events")
+
+
+def _drop_uncaptured(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove the columns of every direction that is switched off."""
+    if all(_capture_flags.values()):
+        return record
+    drop = set(RAW_COLUMNS)
+    for flag, columns in (("inputs", INPUT_COLUMNS), ("outputs", OUTPUT_COLUMNS), ("parameters", PARAMETER_COLUMNS)):
+        if not _capture_flags[flag]:
+            drop.update(columns)
+    return {k: v for k, v in record.items() if k not in drop}
+
+
+# Spans this exporter owns; everything else on a shared provider is left alone
+AGENTS_SCOPES = ("traceai_openai_agents", "openinference.instrumentation.openai_agents", "openai.agents")
+AGENTS_SYSTEMS = ("openai",)
 
 # Agents-specific descriptive columns kept at ``metadata`` (agent hierarchy and
 # handoff paths, model, response ids); see span2json / extract_otel_span_info.
@@ -63,6 +89,8 @@ class AnosysHttpExporter(SpanExporter):
         global _log_api_url
         
         for span in spans:
+            if not accepts_span(span, AGENTS_SCOPES, AGENTS_SYSTEMS):
+                continue
             try:
                 data = extract_otel_span_info(span)
                 
@@ -71,9 +99,11 @@ class AnosysHttpExporter(SpanExporter):
                 logger.debug(f"[ANOSYS]📡 Exporting span from: {span_source} | Name: {span_name}")
                 
                 # Remove null values and empty containers
-                cleaned_data = clean_nulls(data)
+                cleaned_data = _drop_uncaptured(clean_nulls(data))
+                if _pii["enabled"]:
+                    cleaned_data = _redact_content(cleaned_data)
                 # Level filtering, cvs198 and encryption in one place
-                encrypted_data = prepare_app_record(cleaned_data, _capture_level, AGENTS_METADATA_COLUMNS)
+                encrypted_data = prepare_app_record(cleaned_data, _capture_level or current_app_level()[0], AGENTS_METADATA_COLUMNS)
                 if encrypted_data is None:
                     continue
                 
@@ -214,10 +244,10 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
         # One level for the whole integration. The explicit flags override it;
         # turning every flag off means metadata. (OPENAI_AGENTS_DONT_LOG_* only
         # control the Agents SDK's own debug logging, not traces, so they are not used.)
-        explicit = None
-        flags = [f for f in (capture_inputs, capture_outputs, capture_parameters) if f is not None]
-        if flags:
-            explicit = any(flags)
+        # Any flag True asks for content; all three False asks for metadata; a
+        # single False only switches off its own direction (the rest follows the level).
+        given = [f for f in (capture_inputs, capture_outputs, capture_parameters) if f is not None]
+        explicit = True if any(given) else (False if len(given) == 3 else None)
         _capture_level, source = resolve_app_level(explicit)
         is_full = _capture_level == FULL
         self.capture_inputs = is_full if capture_inputs is None else (capture_inputs and is_full)
@@ -225,6 +255,9 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
         self.capture_parameters = is_full if capture_parameters is None else (capture_parameters and is_full)
         self.pii_redaction = pii_redaction
         self.capture_level = _capture_level
+        _capture_flags.update(inputs=self.capture_inputs, outputs=self.capture_outputs,
+                              parameters=self.capture_parameters)
+        _pii["enabled"] = pii_redaction
         logger.info("[ANOSYS] OpenAI Agents collection level: %s (%s)", _capture_level, source)
 
         # Optional user context function
@@ -289,14 +322,11 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             transformed = span2json(payload)
             cleaned_transformed = clean_nulls(transformed)
 
+            cleaned_transformed = _drop_uncaptured(cleaned_transformed)
             if getattr(self, "pii_redaction", False):
                 cleaned_transformed = _redact_content(cleaned_transformed)
-            if not getattr(self, "capture_inputs", True):
-                cleaned_transformed.pop("llm_input", None)
-            if not getattr(self, "capture_outputs", True):
-                cleaned_transformed.pop("llm_output", None)
             # Level filtering (content dropped at metadata), cvs198 and encryption
-            encrypted_transformed = prepare_app_record(cleaned_transformed, _capture_level, AGENTS_METADATA_COLUMNS)
+            encrypted_transformed = prepare_app_record(cleaned_transformed, _capture_level or current_app_level()[0], AGENTS_METADATA_COLUMNS)
             if encrypted_transformed is None:
                 return
             # size-limited, in the background: never blocks the instrumented call

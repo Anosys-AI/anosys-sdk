@@ -31,7 +31,7 @@ const APP_METADATA_STRING_COLUMNS = new Set([
   'gen_ai_response_finish_reasons', 'gen_ai_output_type',
   'gen_ai_agent_id', 'gen_ai_agent_name', 'gen_ai_conversation_id',
   'gen_ai_data_source_id', 'llm_model',
-  'cvs10', 'cvs14', 'cvs16', 'cvs17', 'cvs19', 'cvs5',
+  'cvs10', 'cvs14', 'cvs16', 'cvs17', 'cvs19',
   CONSENT_COLUMN, 'cvs200',
 ]);
 
@@ -90,7 +90,9 @@ function finalizeAppRecord(record, level, extraAllowed = []) {
 /** finalizeAppRecord then encryption: the last step before posting an app record. */
 function prepareAppRecord(record, level, extraAllowed = []) {
   const result = finalizeAppRecord(record, level, extraAllowed);
-  return result === null ? null : encryptPayload(result);
+  if (result === null) return null;
+  // content = every column outside the metadata allowlist (descriptive, cvs*, dynamic)
+  return encryptPayload(result, new Set([...APP_METADATA_STRING_COLUMNS, ...extraAllowed]));
 }
 
 let cached = null;
@@ -101,7 +103,34 @@ function currentAppLevel() {
   return cached.value;
 }
 
+/**
+ * Whether an exporter owns `span`: it comes from one of the integration's instrumentation
+ * scopes, or it is a GenAI span the application made for that provider. Every other span on
+ * a shared tracer provider (HTTP, database, other vendors) is left alone.
+ */
+function acceptsSpan(span, scopePrefixes, systems) {
+  const name = span?.instrumentationScope?.name ?? span?.instrumentationLibrary?.name ?? '';
+  if (scopePrefixes.some((p) => name.startsWith(p))) return true;
+  const a = span?.attributes ?? {};
+  const system = String(a['gen_ai.system'] ?? a['llm.system'] ?? a['gen_ai.provider.name'] ?? '').toLowerCase();
+  return systems.includes(system);
+}
+
+const USER_CONTEXT_COLUMN = 'cvs5';
+
+/**
+ * The cvs5 value for a developer-supplied user context ({ session_id, token }), shared by
+ * every application exporter. cvs5 is content: dropped at metadata, encrypted at full.
+ */
+function userContextValue(ctx) {
+  if (!ctx || typeof ctx !== 'object') return null;
+  return JSON.stringify({ session_id: ctx.session_id ?? 'unknown_session', token: ctx.token ?? null });
+}
+
 module.exports = {
+  acceptsSpan,
+  USER_CONTEXT_COLUMN,
+  userContextValue,
   APP_SOURCE,
   APP_METADATA_STRING_COLUMNS,
   resolveAppLevel,

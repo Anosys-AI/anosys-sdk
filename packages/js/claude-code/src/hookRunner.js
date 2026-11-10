@@ -24,8 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const {
-  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields,
-  isPaused, scrubSecrets,
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets,
 } = require('anosys-sdk-core');
 const { METADATA_FIELDS, UNHANDLED_COUNTS, transformRecord } = require('./mapper');
 
@@ -43,12 +42,6 @@ const PENDING_RECORDS_FILE = path.join(STATE_DIR, 'pending_records.jsonl');
 const LOG_FILE = path.join(STATE_DIR, 'hook.log');
 const PAUSE_FILE = path.join(STATE_DIR, 'anosys_paused.json');
 
-// Content fields scrubbed for secrets before sending at `full`
-const CONTENT_FIELDS = [
-  'user_prompt', 'assistant_text', 'last_prompt', 'tool_use_result', 'commands',
-  'written_paths', 'file_states', 'summary_content', 'task_description', 'cvs199',
-  'cvs4', 'cvs5', 'cvs24', 'cvs26',
-];
 
 // ---------------------------------------------------------------------------
 // Logging (mirrors Python's logging.basicConfig → file + stderr)
@@ -240,13 +233,8 @@ function sessionTranscripts(primary) {
 
 /** Apply the collection level, scrub secrets at `full`, then encrypt. */
 function prepareRecord(mapped, level) {
-  const record = filterFields(mapped, level, METADATA_FIELDS);
-  if (level === FULL) {
-    for (const field of CONTENT_FIELDS) {
-      if (record[field] !== undefined && record[field] !== null) record[field] = scrubSecrets(record[field]);
-    }
-  }
-  return encryptPayload(record);
+  // Level filter, secret scrubbing and encryption: the shared core step
+  return prepareHookRecord(mapped, level, METADATA_FIELDS);
 }
 
 /** Deliver records (and queued retries) within the size limit. Resolves to the count accepted. */
@@ -257,7 +245,7 @@ async function send(records, options = {}) {
   }
   const headers = { 'Content-Type': 'application/json' };
   if (API_KEY) headers['anosys-apikey'] = API_KEY;
-  return deliver(INGESTION_URL, records, new PendingQueue(PENDING_RECORDS_FILE), PAUSE_FILE, { headers, ...options });
+  return deliver(INGESTION_URL, records, new PendingQueue(PENDING_RECORDS_FILE), PAUSE_FILE, { headers, metadataFields: METADATA_FIELDS, ...options });
 }
 
 async function main(options = {}) {

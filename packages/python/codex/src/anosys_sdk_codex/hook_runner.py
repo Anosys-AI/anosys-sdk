@@ -16,10 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from anosys_sdk_core.encryption import encrypt_payload
 from anosys_sdk_core.hook_cli import setup_hook_logging
-from anosys_sdk_core.privacy import FULL, OFF, effective_level, filter_fields
-from anosys_sdk_core.redaction import scrub_secrets
+from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record
 from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
 
 from anosys_sdk_codex.installer import PREVIOUS_NOTIFY_FLAG, get_codex_home, get_env_path
@@ -66,9 +64,6 @@ INGESTION_URL = os.environ.get("ANOSYS_HOOK_ENDPOINT_URL", "https://api.anosys.a
 API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "")
 DRY_RUN = os.environ.get("ANOSYS_HOOK_DRY_RUN", "false").lower() == "true"
 
-# Content fields scrubbed for secrets before sending at `full`
-CONTENT_FIELDS = ("user_prompt", "userPrompt", "assistant_text", "assistantText", "cvs4", "cvs5",
-                  "commands", "written_paths", "cvs199")
 
 
 def load_state() -> Dict[str, Any]:
@@ -96,13 +91,8 @@ def _headers() -> Dict[str, str]:
 
 
 def prepare_record(mapped: Dict[str, Any], level: str) -> Dict[str, Any]:
-    """Apply the collection level, scrub secrets at `full`, then encrypt."""
-    record = filter_fields(mapped, level, METADATA_FIELDS)
-    if level == FULL:
-        for field in CONTENT_FIELDS:
-            if record.get(field) is not None:
-                record[field] = scrub_secrets(record[field])
-    return encrypt_payload(record)
+    """Level filter, secret scrubbing and encryption: the shared core step."""
+    return prepare_hook_record(mapped, level, METADATA_FIELDS)
 
 
 def send(records: List[Dict[str, Any]]) -> int:
@@ -111,7 +101,7 @@ def send(records: List[Dict[str, Any]]) -> int:
         log.info("[DRY RUN] Would send %d record(s)", len(records))
         return len(records)
     queue = PendingQueue(PENDING_FILE)
-    return deliver(INGESTION_URL, records, queue, PAUSE_FILE, headers=_headers())
+    return deliver(INGESTION_URL, records, queue, PAUSE_FILE, headers=_headers(), metadata_fields=METADATA_FIELDS)
 
 
 def find_rollout_file(session_id: str) -> Optional[Path]:

@@ -152,10 +152,12 @@ def update_env_config(
     endpoint_url: str = DEFAULT_INGESTION_URL,
 ) -> None:
     """Write or update anosys-env.json configuration file."""
-    config: Dict[str, Any] = {
-        "ANOSYS_HOOK_APIKEY": api_key,
-        "ANOSYS_HOOK_ENDPOINT_URL": endpoint_url,
-    }  # what is collected is set with `anosys-antigravity privacy`
+    # What is collected is set with `anosys-antigravity privacy`. A custom
+    # endpoint is honoured only in the global file (workspace files are limited
+    # to the key, see hook_runner.WORKSPACE_ALLOWED_KEYS).
+    config: Dict[str, Any] = {"ANOSYS_HOOK_APIKEY": api_key}
+    if endpoint_url and endpoint_url != DEFAULT_INGESTION_URL:
+        config["ANOSYS_HOOK_ENDPOINT_URL"] = endpoint_url
     write_json_atomic(env_path, config)
     try:
         os.chmod(env_path, 0o600)

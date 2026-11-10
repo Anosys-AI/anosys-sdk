@@ -292,6 +292,8 @@ def _processor(monkeypatch, level, **attrs):
     p.capture_inputs = attrs.get("capture_inputs", True)
     p.capture_outputs = attrs.get("capture_outputs", True)
     p.pii_redaction = attrs.get("pii_redaction", False)
+    monkeypatch.setitem(proc._capture_flags, "inputs", p.capture_inputs)
+    monkeypatch.setitem(proc._capture_flags, "outputs", p.capture_outputs)
     return p, posted
 
 
@@ -333,3 +335,28 @@ def test_logger_flags_resolve_one_level(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ANOSYS_COLLECTION_LEVEL", raising=False)
     assert resolve_app_level(any([False, False])) == ("metadata", "argument")
+
+
+def test_processor_partial_capture_drops_raw_copies(monkeypatch):
+    p, posted = _processor(monkeypatch, "full", capture_outputs=False)
+    p._log_summary(FUNCTION_SPAN)
+    rec = posted[0]
+    assert "llm_output" not in rec and "cvs199" not in rec      # the raw span repeated the output
+    assert "result text" not in json.dumps(rec)
+    assert "llm_input" in rec
+
+
+def test_single_false_flag_does_not_switch_everything_off(monkeypatch, tmp_path):
+    from anosys_sdk_openai_agents import processor as proc
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANOSYS_COLLECTION_LEVEL", raising=False)
+    monkeypatch.setattr(proc, "_tracing_initialized", True)        # no instrumentation in tests
+    monkeypatch.setattr(proc, "resolve_api_key", lambda: "")
+    monkeypatch.setattr(proc, "_capture_flags", dict(proc._capture_flags))
+    monkeypatch.setattr(proc, "_pii", dict(proc._pii))
+    monkeypatch.setattr(proc, "_capture_level", proc._capture_level)
+    logger = proc.AnosysOpenAIAgentsLogger(capture_outputs=False)
+    assert logger.capture_level == "full"
+    assert logger.capture_inputs and logger.capture_parameters and not logger.capture_outputs
+    logger = proc.AnosysOpenAIAgentsLogger(capture_inputs=False, capture_outputs=False, capture_parameters=False)
+    assert logger.capture_level == "metadata"

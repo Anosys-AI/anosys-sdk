@@ -141,6 +141,31 @@ describe('JS application SDK matrix', () => {
     }
   });
 
+  it('unrelated host spans are not exported (audit 2.5)', async () => {
+    for (const pkg of ['anosys-sdk-openai', 'anosys-sdk-openai-agents']) {
+      const mod = await loadPackage(pkg);
+      const recs = await exportWith(mod.AnosysHttpExporter, 'full',
+        makeSpans('@opentelemetry/instrumentation-http', 'GET /users', { 'http.method': 'GET', 'http.target': '/users?email=a@b.c' }));
+      assert.equal(recs.length, 0, pkg);
+    }
+  });
+
+  it('full with a key encrypts every column outside the metadata allowlist (audit 2.2)', async () => {
+    const { prepareAppRecord, finalizeAppRecord } = await import('../src/capture.js');
+    process.env.ANOSYS_ENCRYPTION_KEY = 'pass';
+    process.env.ANOSYS_ENCRYPTION_SALT = 'ws';
+    const out = prepareAppRecord({ otel_name: 'chat', gen_ai_request_model: 'm', cvs6: 'args', cvs11: 'error text',
+      cvs105: 'dynamic', cvs5: '{"token":"t"}', llm_invocation_parameters: '{}', n: 3 }, 'full');
+    delete process.env.ANOSYS_ENCRYPTION_KEY;
+    delete process.env.ANOSYS_ENCRYPTION_SALT;
+    for (const col of ['cvs6', 'cvs11', 'cvs105', 'cvs5', 'llm_invocation_parameters']) {
+      assert.ok(/^"?enc2:/.test(out[col]), col);
+    }
+    assert.equal(out.otel_name, 'chat');
+    assert.equal(out.n, 3);
+    assert.equal(finalizeAppRecord({ cvs5: '{"token":"t"}' }, 'metadata').cvs5, undefined); // audit 2.4
+  });
+
   it('no prompt, answer or key appeared in any log line', () => {
     const all = logged.join('\n');
     assert.ok(!all.includes('secret prompt') && !all.includes('the answer') && !all.includes('sk-proj'));

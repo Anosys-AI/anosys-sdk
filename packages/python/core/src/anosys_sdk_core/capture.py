@@ -32,6 +32,7 @@ attribute blobs, dynamically mapped attributes) is dropped. Allowlist, never
 a denylist: a new attribute stays out until it is listed here.
 """
 
+import json
 import logging
 import os
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
@@ -62,7 +63,6 @@ APP_METADATA_STRING_COLUMNS = frozenset({
     "cvs16",   # llm_model_name
     "cvs17",   # service.name
     "cvs19",   # gen_ai.span.kind
-    "cvs5",    # developer-supplied user context (session id)
     # source and privacy tags
     CONSENT_COLUMN, "cvs200",
 })
@@ -161,4 +161,38 @@ def prepare_app_record(record: Dict[str, Any], level: str, extra_allowed: Iterab
     from anosys_sdk_core.encryption import encrypt_payload
 
     result = finalize_app_record(record, level, extra_allowed)
-    return None if result is None else encrypt_payload(result)
+    if result is None:
+        return None
+    # content = every column outside the metadata allowlist (descriptive, cvs*, dynamic)
+    return encrypt_payload(result, APP_METADATA_STRING_COLUMNS | frozenset(extra_allowed))
+
+
+USER_CONTEXT_COLUMN = "cvs5"
+
+
+def user_context_value(ctx: Any) -> Optional[str]:
+    """
+    The cvs5 value for a developer-supplied user context ({session_id, token}),
+    shared by every application exporter. cvs5 is content: dropped at
+    ``metadata`` and encrypted at ``full`` when a key is set.
+    """
+    if not ctx:
+        return None
+    get = (lambda k, d=None: ctx.get(k, d)) if isinstance(ctx, dict) else (lambda k, d=None: getattr(ctx, k, d))
+    return json.dumps({"session_id": get("session_id", "unknown_session"), "token": get("token")})
+
+
+def accepts_span(span: Any, scope_prefixes: Iterable[str], systems: Iterable[str]) -> bool:
+    """
+    Whether an exporter owns ``span``: it comes from one of the integration's
+    instrumentation scopes, or it is a GenAI span the application made for that
+    provider (``gen_ai.system`` / ``llm.system``). Every other span on a shared
+    tracer provider (HTTP, database, other vendors) is left alone.
+    """
+    scope = getattr(span, "instrumentation_scope", None) or getattr(span, "instrumentation_info", None)
+    name = (getattr(scope, "name", "") or "") if scope else ""
+    if any(name.startswith(p) for p in scope_prefixes):
+        return True
+    attrs = getattr(span, "attributes", None) or {}
+    system = str(attrs.get("gen_ai.system") or attrs.get("llm.system") or attrs.get("gen_ai.provider.name") or "").lower()
+    return system in set(systems)

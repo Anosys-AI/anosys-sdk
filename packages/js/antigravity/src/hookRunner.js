@@ -5,8 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields,
-  isPaused, scrubSecrets,
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets,
 } = require('anosys-sdk-core');
 const { GLOBAL_CONFIG_DIR, GLOBAL_ENV_FILE, DEFAULT_INGESTION_URL } = require('./constants');
 const { parseTranscript } = require('./transcript');
@@ -17,9 +16,6 @@ const PENDING_FILE = path.join(STATE_DIR, 'pending_records.jsonl');
 const PAUSE_FILE = path.join(STATE_DIR, 'anosys_paused.json');
 const LOG_FILE = path.join(STATE_DIR, 'anosys_hook.log');
 
-// Content fields scrubbed for secrets before sending at `full`
-const CONTENT_FIELDS = ['user_prompt', 'userPrompt', 'assistant_text', 'assistantText', 'cvs4', 'cvs5',
-  'commands', 'cvs90', 'cvs199', 'searched_queries', 'cvs77'];
 
 try {
   fs.mkdirSync(STATE_DIR, { recursive: true });
@@ -28,13 +24,28 @@ try {
 // The hook log records ids, sizes and status codes only, never prompts or payloads.
 const log = createHookLog(LOG_FILE);
 
-function loadEnvConfig(envPath = GLOBAL_ENV_FILE) {
+// A workspace file is part of the repository, so anyone who can commit to it
+// controls it. It may choose which AnoSys key the records are filed under and
+// lower collection; it can never raise the level, point at a consent file,
+// change the endpoint, encryption, proxies or certificates.
+const WORKSPACE_ALLOWED_KEYS = new Set([
+  'ANOSYS_HOOK_APIKEY', 'ANOSYS_HOOK_API_KEY', 'ANOSYS_HOOK_DRY_RUN',
+  'REDACTION', 'ANOSYS_DISABLE', 'ANOSYS_COLLECTION_LEVEL',
+]);
+const WORKSPACE_LEVELS = new Set(['off', 'metadata']); // ANOSYS_COLLECTION_LEVEL may only lower
+
+function loadEnvConfig(envPath = GLOBAL_ENV_FILE, allowed = null) {
   if (!fs.existsSync(envPath)) return;
   try {
     const raw = fs.readFileSync(envPath, 'utf-8');
     const data = JSON.parse(raw);
     if (data && typeof data === 'object') {
       for (const [k, v] of Object.entries(data)) {
+        if (allowed && (!allowed.has(k)
+            || (k === 'ANOSYS_COLLECTION_LEVEL' && !WORKSPACE_LEVELS.has(String(v).trim().toLowerCase())))) {
+          log('WARNING', `Ignored ${k} from the workspace settings file (not allowed there)`);
+          continue;
+        }
         if (!process.env[k] && v !== undefined && v !== null) {
           process.env[k] = String(v);
         }
@@ -50,7 +61,7 @@ function loadRuntimeEnvironment() {
   while (true) {
     const workspaceConfig = path.join(directory, '.agents', 'anosys-env.json');
     if (fs.existsSync(workspaceConfig)) {
-      loadEnvConfig(workspaceConfig);
+      loadEnvConfig(workspaceConfig, WORKSPACE_ALLOWED_KEYS);
       break;
     }
     const parent = path.dirname(directory);
@@ -99,13 +110,8 @@ function saveState(sessionId, state) {
 
 /** Apply the collection level, scrub secrets at `full`, then encrypt. */
 function prepareRecord(mapped, level) {
-  const record = filterFields(mapped, level, METADATA_FIELDS);
-  if (level === FULL) {
-    for (const field of CONTENT_FIELDS) {
-      if (record[field] !== undefined && record[field] !== null) record[field] = scrubSecrets(record[field]);
-    }
-  }
-  return encryptPayload(record);
+  // Level filter, secret scrubbing and encryption: the shared core step
+  return prepareHookRecord(mapped, level, METADATA_FIELDS);
 }
 
 /** Deliver records (and queued retries) within the size limit. Resolves to the count accepted. */
@@ -116,7 +122,7 @@ async function send(records, config, options = {}) {
   }
   const headers = { 'Content-Type': 'application/json' };
   if (config.api_key) headers['anosys-apikey'] = config.api_key;
-  return deliver(config.ingestion_url, records, new PendingQueue(PENDING_FILE), PAUSE_FILE, { headers, ...options });
+  return deliver(config.ingestion_url, records, new PendingQueue(PENDING_FILE), PAUSE_FILE, { headers, metadataFields: METADATA_FIELDS, ...options });
 }
 
 function readStdin() {

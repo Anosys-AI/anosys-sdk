@@ -12,10 +12,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from anosys_sdk_core.encryption import encrypt_payload
 from anosys_sdk_core.hook_cli import setup_hook_logging
-from anosys_sdk_core.privacy import FULL, OFF, effective_level, filter_fields
-from anosys_sdk_core.redaction import scrub_secrets
+from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record
 from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
 
 from anosys_sdk_antigravity.constants import (
@@ -34,13 +32,21 @@ LOG_FILE = STATE_DIR / "anosys_hook.log"
 # The hook log records ids, sizes and status codes only, never prompts or payloads.
 log = setup_hook_logging(LOG_FILE, "anosys_antigravity_hook")
 
-# Content fields scrubbed for secrets before sending at `full`
-CONTENT_FIELDS = ("user_prompt", "userPrompt", "assistant_text", "assistantText", "cvs4", "cvs5",
-                  "commands", "cvs90", "cvs199", "searched_queries", "cvs77")
 
 
-def load_env_config(path: Optional[Path] = None) -> None:
-    """Load credentials and settings from anosys-env.json if not present in env."""
+# A workspace file is part of the repository, so anyone who can commit to it
+# controls it. It may choose which AnoSys key the records are filed under and
+# lower collection; it can never raise the level, point at a consent file,
+# change the endpoint, encryption, proxies or certificates.
+WORKSPACE_ALLOWED_KEYS = frozenset({
+    "ANOSYS_HOOK_APIKEY", "ANOSYS_HOOK_API_KEY", "ANOSYS_HOOK_DRY_RUN",
+    "REDACTION", "ANOSYS_DISABLE", "ANOSYS_COLLECTION_LEVEL",
+})
+WORKSPACE_LEVELS = frozenset({"off", "metadata"})  # ANOSYS_COLLECTION_LEVEL may only lower
+
+
+def load_env_config(path: Optional[Path] = None, allowed: Optional[frozenset] = None) -> None:
+    """Load settings from an anosys-env.json if not present in env (``allowed`` limits the keys)."""
     p = path or GLOBAL_ENV_FILE
     if not p.is_file():
         return
@@ -48,6 +54,10 @@ def load_env_config(path: Optional[Path] = None) -> None:
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             for k, v in data.items():
+                if allowed is not None and (k not in allowed or (
+                        k == "ANOSYS_COLLECTION_LEVEL" and str(v).strip().lower() not in WORKSPACE_LEVELS)):
+                    log.warning("Ignored %s from the workspace settings file (not allowed there)", k)
+                    continue
                 if k not in os.environ and v is not None:
                     os.environ[k] = str(v)
     except Exception as e:
@@ -60,7 +70,7 @@ def load_runtime_environment() -> None:
     for directory in (cwd, *cwd.parents):
         workspace_config = directory / ".agents" / "anosys-env.json"
         if workspace_config.is_file():
-            load_env_config(workspace_config)
+            load_env_config(workspace_config, WORKSPACE_ALLOWED_KEYS)
             break
     load_env_config()
 
@@ -100,13 +110,8 @@ def save_state(session_id: str, state: Dict[str, Any]) -> None:
 
 
 def prepare_record(mapped: Dict[str, Any], level: str) -> Dict[str, Any]:
-    """Apply the collection level, scrub secrets at `full`, then encrypt."""
-    record = filter_fields(mapped, level, METADATA_FIELDS)
-    if level == FULL:
-        for field in CONTENT_FIELDS:
-            if record.get(field) is not None:
-                record[field] = scrub_secrets(record[field])
-    return encrypt_payload(record)
+    """Level filter, secret scrubbing and encryption: the shared core step."""
+    return prepare_hook_record(mapped, level, METADATA_FIELDS)
 
 
 def send(records: List[Dict[str, Any]], config: Dict[str, Any]) -> int:
@@ -117,7 +122,8 @@ def send(records: List[Dict[str, Any]], config: Dict[str, Any]) -> int:
     headers = {"Content-Type": "application/json"}
     if config.get("api_key"):
         headers["anosys-apikey"] = config["api_key"]
-    return deliver(config["ingestion_url"], records, PendingQueue(PENDING_FILE), PAUSE_FILE, headers=headers)
+    return deliver(config["ingestion_url"], records, PendingQueue(PENDING_FILE), PAUSE_FILE, headers=headers,
+                   metadata_fields=METADATA_FIELDS)
 
 
 def read_stdin() -> Dict[str, Any]:

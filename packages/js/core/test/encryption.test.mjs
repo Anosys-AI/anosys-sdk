@@ -74,3 +74,15 @@ describe('encryptPayload', () => {
     assert.deepEqual([...getTargetColumns()], ['a', 'b']);
   });
 });
+
+describe('decrypt key forms (audit 3.1)', () => {
+  it('accepts deriveKeys, derive256BitKey and the passphrase', async () => {
+    const enc = await import('../src/encryption.js');
+    process.env.ANOSYS_ENCRYPTION_SALT = 'ws';
+    const value = enc.encrypt('hello', enc.deriveKeys('pass', 'ws'));
+    assert.equal(enc.decrypt(value, enc.deriveKeys('pass', 'ws')), 'hello');
+    assert.equal(enc.decrypt(value, enc.derive256BitKey('pass', 'ws')), 'hello');
+    assert.equal(enc.decrypt(value, 'pass'), 'hello');
+    delete process.env.ANOSYS_ENCRYPTION_SALT;
+  });
+});

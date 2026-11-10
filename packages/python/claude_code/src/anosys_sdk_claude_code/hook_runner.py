@@ -20,10 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from anosys_sdk_core.encryption import encrypt_payload
 from anosys_sdk_core.hook_cli import setup_hook_logging
-from anosys_sdk_core.privacy import FULL, OFF, effective_level, filter_fields
-from anosys_sdk_core.redaction import scrub_secrets
+from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record
 from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
 
 from anosys_sdk_claude_code.mapper import METADATA_FIELDS, UNHANDLED_COUNTS, transform_record
@@ -42,12 +40,6 @@ LOG_FILE = STATE_DIR / 'hook.log'
 # The hook log records ids, sizes and status codes only, never prompts or payloads.
 log = setup_hook_logging(LOG_FILE, 'anosys_claude_hook')
 
-# Content fields scrubbed for secrets before sending at `full`
-CONTENT_FIELDS = (
-    'user_prompt', 'assistant_text', 'last_prompt', 'tool_use_result', 'commands',
-    'written_paths', 'file_states', 'summary_content', 'task_description', 'cvs199',
-    'cvs4', 'cvs5', 'cvs24', 'cvs26',
-)
 
 
 @dataclass
@@ -177,14 +169,9 @@ def session_transcripts(primary: 'TranscriptInfo') -> List['TranscriptInfo']:
     return results
 
 
-def prepare_record(mapped: dict, level: str) -> dict:
-    """Apply the collection level, scrub secrets at `full`, then encrypt."""
-    record = filter_fields(mapped, level, METADATA_FIELDS)
-    if level == FULL:
-        for field in CONTENT_FIELDS:
-            if record.get(field) is not None:
-                record[field] = scrub_secrets(record[field])
-    return encrypt_payload(record)
+def prepare_record(mapped: Dict[str, Any], level: str) -> Dict[str, Any]:
+    """Level filter, secret scrubbing and encryption: the shared core step."""
+    return prepare_hook_record(mapped, level, METADATA_FIELDS)
 
 
 def send(records: List[dict]) -> int:
@@ -195,7 +182,8 @@ def send(records: List[dict]) -> int:
     headers = {"Content-Type": "application/json"}
     if API_KEY:
         headers["anosys-apikey"] = API_KEY
-    return deliver(INGESTION_URL, records, PendingQueue(PENDING_RECORDS_FILE), PAUSE_FILE, headers=headers)
+    return deliver(INGESTION_URL, records, PendingQueue(PENDING_RECORDS_FILE), PAUSE_FILE, headers=headers,
+                   metadata_fields=METADATA_FIELDS)
 
 
 async def main():

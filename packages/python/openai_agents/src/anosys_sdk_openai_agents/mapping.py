@@ -134,7 +134,7 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "otel_end_time": "span end time",
         "cvn2": "end time (numeric)",
         "otel_exception_message": "error message",
-        "cvs3": "user context",
+        "cvs5": "user context",
         "cvs60": "object type",
         "cvs61": "source",
         "otel_name": "span name",
@@ -156,7 +156,7 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "cvn2": _to_timestamp(data.get("ended_at")),
         "otel_exception_message": to_str_or_none(data.get("error")),
         
-        "cvs3": to_str_or_none(user_context),
+        "cvs5": to_str_or_none(user_context),
         "cvs60": to_str_or_none(data.get("object")),
         "cvs61": to_str_or_none(source),
     }

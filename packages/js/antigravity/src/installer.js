@@ -113,10 +113,10 @@ function removeHooksConfig(hooksPath) {
 }
 
 function updateEnvConfig(envPath, { apiKey = '', endpointUrl = DEFAULT_INGESTION_URL } = {}) {
-  const config = {
-    ANOSYS_HOOK_APIKEY: apiKey,
-    ANOSYS_HOOK_ENDPOINT_URL: endpointUrl,
-  };
+  // What is collected is set with `anosys-antigravity privacy`. A custom endpoint is
+  // honoured only in the global file (workspace files are limited to the key).
+  const config = { ANOSYS_HOOK_APIKEY: apiKey };
+  if (endpointUrl && endpointUrl !== DEFAULT_INGESTION_URL) config.ANOSYS_HOOK_ENDPOINT_URL = endpointUrl;
   writeJsonAtomic(envPath, config);
   try {
     fs.chmodSync(envPath, 0o600);

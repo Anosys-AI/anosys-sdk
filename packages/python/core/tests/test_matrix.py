@@ -117,3 +117,37 @@ def test_client_matrix(monkeypatch, tmp_path):
     monkeypatch.setattr(client_mod, "post_record", lambda url, rec, timeout=5: sent.append(rec))
     client_mod.AnosysClient(api_url="https://ingest.example").send({"llm_input": SECRET, "otel_name": "x", "n": 1})
     assert sent == [{"otel_name": "x", "n": 1, "cvs198": "metadata;app"}]
+
+
+@pytest.mark.parametrize("module_name", ["anosys_sdk_openai.instrumentor", "anosys_sdk_openai_agents.processor"])
+def test_unrelated_host_spans_are_not_exported(module_name, monkeypatch):
+    """Audit 2.5: HTTP / database spans on a shared provider stay out of AnoSys."""
+    mod = _module(module_name)
+    posted = []
+    monkeypatch.setattr(mod, "send_app_record", lambda url, rec: posted.append(rec))
+    monkeypatch.setattr(mod, "_log_api_url", "https://ingest.example")
+    monkeypatch.setattr(mod, "_capture_level", "full")
+    mod.AnosysHttpExporter().export(spans(scope="opentelemetry.instrumentation.fastapi", name="GET /users",
+                                          attrs={"http.method": "GET", "http.target": "/users?email=a@b.c"}))
+    assert posted == []
+
+
+def test_full_with_key_encrypts_every_content_column(monkeypatch):
+    """Audit 2.2: encryption covers everything outside the metadata allowlist, whatever its name."""
+    from anosys_sdk_core.capture import prepare_app_record
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_KEY", "pass")
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_SALT", "ws")
+    monkeypatch.delenv("ANOSYS_ENCRYPTED_COLUMNS", raising=False)
+    out = prepare_app_record({"otel_name": "chat", "gen_ai_request_model": "m", "cvs6": "args", "cvs11": "error text",
+                              "cvs105": "dynamic", "cvs5": '{"token": "t"}', "llm_invocation_parameters": "{}",
+                              "gen_ai_tool_definitions": "[]", "n": 3}, "full")
+    for col in ("cvs6", "cvs11", "cvs105", "cvs5", "llm_invocation_parameters", "gen_ai_tool_definitions"):
+        assert out[col].startswith(("enc2:", '"enc2:')), col
+    assert out["otel_name"] == "chat" and out["gen_ai_request_model"] == "m" and out["n"] == 3
+    assert out["cvs198"] == "full;app"
+
+
+def test_user_context_token_is_never_sent_at_metadata():
+    """Audit 2.4: cvs5 (session id + token) is content."""
+    from anosys_sdk_core.capture import finalize_app_record
+    assert "cvs5" not in finalize_app_record({"cvs5": '{"token": "t"}', "otel_name": "x"}, "metadata")

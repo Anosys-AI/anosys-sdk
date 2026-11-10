@@ -176,3 +176,20 @@ describe('reliability: time budget, unreachable ingestion, concurrent runs', () 
     assert.deepEqual(new PendingQueue(path.join(dir, 'q.jsonl')).load(), []);
   });
 });
+
+describe('queued records follow the current level', () => {
+  it('downgrades full records after consent is withdrawn (audit 2.8)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-downgrade-'));
+    for (const v of ['ANOSYS_DISABLE', 'ANOSYS_COLLECTION_LEVEL', 'REDACTION']) delete process.env[v];
+    process.env.ANOSYS_CONSENT_FILE = path.join(dir, 'consent.json');
+    const queue = new PendingQueue(path.join(dir, 'pending.jsonl'));
+    queue.save(PendingQueue.entriesFor([{ session_id: 's', user_prompt: 'secret', cvs198: 'full;2026-11-09' }]));
+    const bodies = [];
+    await deliver('u', [], queue, path.join(dir, 'pause.json'), {
+      post: async (url, body) => { bodies.push(...body); return { status: 200 }; },
+      metadataFields: new Set(['session_id', 'cvs198']),
+    });
+    assert.deepEqual(bodies, [{ session_id: 's', cvs198: 'metadata;none' }]);
+    delete process.env.ANOSYS_CONSENT_FILE;
+  });
+});

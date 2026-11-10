@@ -6,11 +6,15 @@ import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai';
 import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { extractSpanInfo } from './hooks.js';
-import { OFF, prepareAppRecord, resolveAppLevel, sendAppRecord, spanToJson } from 'anosys-sdk-core';
+import { acceptsSpan, currentAppLevel, OFF, prepareAppRecord, resolveAppLevel, sendAppRecord, spanToJson, userContextValue } from 'anosys-sdk-core';
+
+// Spans this exporter owns; everything else on a shared provider is left alone
+const OPENAI_SCOPES = ['@opentelemetry/instrumentation-openai', 'openinference.instrumentation.openai'];
+const OPENAI_SYSTEMS = ['openai'];
 
 let _logApiUrl = null; // set by setupTracing; null = nothing is sent
 let _tracingInitialized = false;
-let _captureLevel = 'full'; // set by AnosysOpenAILogger (see anosys-sdk-core capture.js)
+let _captureLevel = null; // set by AnosysOpenAILogger; until then the shared level applies (anosys-sdk-core capture.js)
 
 export class AnosysHttpExporter {
   /**
@@ -18,7 +22,7 @@ export class AnosysHttpExporter {
    * @param {object}   [opts] `getLevel` / `getUrl` override the module's level and endpoint
    *   (used by tests and by hosts that manage several exporters).
    */
-  constructor(getUserContext = null, { getLevel = () => _captureLevel, getUrl = () => _logApiUrl } = {}) {
+  constructor(getUserContext = null, { getLevel = () => _captureLevel ?? currentAppLevel().level, getUrl = () => _logApiUrl } = {}) {
     this._getUserContext = getUserContext ?? (() => null);
     this._getLevel = getLevel;
     this._getUrl = getUrl;
@@ -26,19 +30,15 @@ export class AnosysHttpExporter {
 
   async export(spans, resultCallback) {
     for (const span of spans) {
+      if (!acceptsSpan(span, OPENAI_SCOPES, OPENAI_SYSTEMS)) continue;
       try {
         const spanJson = spanToJson(span);
         const data = extractSpanInfo(spanJson);
 
         // Attach user context if available
         try {
-          const userCtx = await this._getUserContext();
-          if (userCtx) {
-            data.user_context = {
-              session_id: (typeof userCtx === 'object' ? (userCtx.session_id ?? 'unknown_session') : 'unknown_session'),
-              token:      (typeof userCtx === 'object' ? (userCtx.token ?? null) : null),
-            };
-          }
+          const value = userContextValue(await this._getUserContext());
+          if (value) data.cvs5 = value;
         } catch { /* user context errors must not block export */ }
 
         const spanSource = data.cvs200 ?? 'unknown_source';
@@ -52,11 +52,7 @@ export class AnosysHttpExporter {
         sendAppRecord(this._getUrl(), payloadToSend);
 
       } catch (e) {
-        if (e.response) {
-          log.error('HTTP export failed (%d): %s', e.response.status, e.message);
-        } else {
-          log.error('Export failed:', e.message);
-        }
+        log.error(`Export failed (${e?.name || 'Error'})`); // no span content in logs
       }
     }
     resultCallback?.({ code: 0 });

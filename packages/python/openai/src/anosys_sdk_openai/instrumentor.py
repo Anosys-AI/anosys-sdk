@@ -22,7 +22,7 @@ from traceai_openai import OpenAIInstrumentor
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
-from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
+from anosys_sdk_core.capture import accepts_span, current_app_level, prepare_app_record, resolve_app_level, user_context_value
 from anosys_sdk_core.privacy import METADATA, OFF
 from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_openai.hooks import extract_span_info
@@ -33,7 +33,11 @@ logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 _tracing_initialized = False
 _log_api_url = ""  # set by setup_tracing; empty = nothing is sent
-_capture_level = "full"  # set by AnosysOpenAILogger (see anosys_sdk_core.capture)
+
+# Spans this exporter owns; everything else on a shared provider is left alone
+OPENAI_SCOPES = ("traceai_openai", "openinference.instrumentation.openai", "opentelemetry.instrumentation.openai")
+OPENAI_SYSTEMS = ("openai",)
+_capture_level = None  # set by AnosysOpenAILogger; until then the shared level applies (anosys_sdk_core.capture)
 
 
 class AnosysHttpExporter(SpanExporter):
@@ -52,22 +56,17 @@ class AnosysHttpExporter(SpanExporter):
         global _log_api_url
 
         for span in spans:
+            if not accepts_span(span, OPENAI_SCOPES, OPENAI_SYSTEMS):
+                continue
             try:
                 span_json = json.loads(span.to_json(indent=2))
                 data = extract_span_info(span_json)
 
                 # Attach user context if available
                 try:
-                    user_context = self._get_user_context()
-                    if user_context:
-                        data["user_context"] = {
-                            "session_id": (user_context.get("session_id", "unknown_session")
-                                           if isinstance(user_context, dict)
-                                           else getattr(user_context, "session_id", "unknown_session")),
-                            "token": (user_context.get("token")
-                                      if isinstance(user_context, dict)
-                                      else getattr(user_context, "token", None)),
-                        }
+                    value = user_context_value(self._get_user_context())
+                    if value:
+                        data["cvs5"] = value
                 except Exception:
                     pass
 
@@ -76,7 +75,7 @@ class AnosysHttpExporter(SpanExporter):
                 logger.debug("Exporting span from: %s | Name: %s", span_source, span_name)
 
                 # Level filtering, cvs198 and encryption in one place
-                data = prepare_app_record(data, _capture_level)
+                data = prepare_app_record(data, _capture_level or current_app_level()[0])
                 if data is None:
                     continue
                 # size-limited, in the background: never blocks the instrumented call
@@ -146,7 +145,7 @@ def setup_tracing(
             logger.warning("Uninstrument warning: %s", e)
 
         instrument_kwargs = {"tracer_provider": trace_provider}
-        if _capture_level == METADATA:
+        if (_capture_level or current_app_level()[0]) == METADATA:
             # Defense in depth: ask the instrumentation not to record content either
             try:
                 from traceai_openai import TraceConfig

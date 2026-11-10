@@ -24,7 +24,7 @@ from opentelemetry.sdk.trace.export import (
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
-from anosys_sdk_core.capture import prepare_app_record, resolve_app_level
+from anosys_sdk_core.capture import current_app_level, prepare_app_record, resolve_app_level, user_context_value
 from anosys_sdk_core.privacy import FULL, OFF
 from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_anthropic.hooks import extract_span_info
@@ -37,7 +37,7 @@ _lock = threading.Lock()
 _tracing_initialized = False
 _log_api_url = ""  # set by setup_tracing; empty = nothing is sent
 _capture_content = True
-_capture_level = "full"  # set by AnosysAnthropicLogger (see anosys_sdk_core.capture)
+_capture_level = None  # set by AnosysAnthropicLogger; until then the shared level applies (anosys_sdk_core.capture)
 
 # Read by the Anthropic SDK when a client is constructed
 CONTENT_MODE_ENV = "ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE"
@@ -81,23 +81,16 @@ class AnosysHttpExporter(SpanExporter):
 
                 # Attach user context if available
                 try:
-                    user_context = self._get_user_context()
-                    if user_context:
-                        data["cvs5"] = json.dumps({
-                            "session_id": (user_context.get("session_id", "unknown_session")
-                                           if isinstance(user_context, dict)
-                                           else getattr(user_context, "session_id", "unknown_session")),
-                            "token": (user_context.get("token")
-                                      if isinstance(user_context, dict)
-                                      else getattr(user_context, "token", None)),
-                        })
+                    value = user_context_value(self._get_user_context())
+                    if value:
+                        data["cvs5"] = value
                 except Exception:
                     pass
 
                 logger.debug("Exporting span from: %s | Name: %s", data.get("cvs200"), data.get("otel_name"))
 
                 # Level filtering, cvs198 and encryption in one place
-                data = prepare_app_record(data, _capture_level)
+                data = prepare_app_record(data, _capture_level or current_app_level()[0])
                 if data is None:
                     continue
                 # size-limited, in the background: never blocks the instrumented call

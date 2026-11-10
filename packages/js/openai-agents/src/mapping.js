@@ -66,7 +66,7 @@ export function span2json(span) {
     otel_parent_span_id: 'parent span id', otel_start_time: 'span start time',
     cvn1: 'start time (numeric)', otel_end_time: 'span end time',
     cvn2: 'end time (numeric)', otel_exception_message: 'error message',
-    cvs3: 'user context', cvs60: 'object type', cvs61: 'source',
+    cvs5: 'user context', cvs60: 'object type', cvs61: 'source',
     otel_name: 'span name', otel_duration_ms: 'duration in ms',
   };
 
@@ -84,7 +84,7 @@ export function span2json(span) {
     cvn2:                     endTs,
     otel_duration_ms:         (startTs != null && endTs != null) ? endTs - startTs : null,
     otel_exception_message:   toStr(data.error),
-    cvs3:                     toStr(userCtx),
+    cvs5:                     toStr(userCtx),
     cvs60:                    toStr(data.object),
     cvs61:                    toStr(source),
   };

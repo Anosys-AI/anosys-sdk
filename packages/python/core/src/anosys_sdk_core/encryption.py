@@ -35,7 +35,7 @@ import json
 import logging
 import os
 import sys
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,8 @@ def encrypt(text: str, keys: Tuple[bytes, bytes]) -> str:
     """Encrypt text deterministically; returns ``enc2:`` + base64(nonce + ciphertext + tag)."""
     if not _HAS_CRYPTOGRAPHY:
         raise RuntimeError("The 'cryptography' library is required for encryption. Install with: pip install cryptography")
+    if not isinstance(keys, (tuple, list)) or len(keys) != 2:
+        raise TypeError("encrypt needs both keys: use derive_keys(passphrase, salt)")
     k_enc, k_nonce = keys
     data = text.encode("utf-8")
     nonce = hmac.new(k_nonce, data, hashlib.sha256).digest()[:12]
@@ -129,8 +131,23 @@ def encrypt(text: str, keys: Tuple[bytes, bytes]) -> str:
     return ANOSYS_ENCRYPTION_PREFIX + base64.b64encode(nonce + sealed).decode("ascii")
 
 
-def decrypt(value: str, keys: Tuple[bytes, bytes]) -> str:
-    """Decrypt an ``enc2:`` value (also accepts the JSON-string form ``"enc2:..."``)."""
+def _decryption_key(keys: Any) -> bytes:
+    """The AES key from ``derive_keys`` output, ``derive_256_bit_key`` output, or a passphrase."""
+    if isinstance(keys, (tuple, list)):
+        return keys[0]
+    if isinstance(keys, (bytes, bytearray)):
+        return bytes(keys)
+    if isinstance(keys, str):
+        return derive_keys(keys)[0]
+    raise TypeError("keys must be derive_keys(...), derive_256_bit_key(...) or the passphrase")
+
+
+def decrypt(value: str, keys: Any) -> str:
+    """
+    Decrypt an ``enc2:`` value (also accepts the JSON-string form ``"enc2:..."``).
+    ``keys`` may be ``derive_keys(passphrase, salt)``, ``derive_256_bit_key(passphrase, salt)``
+    or the passphrase itself (with the salt from ANOSYS_ENCRYPTION_SALT).
+    """
     if not _HAS_CRYPTOGRAPHY:
         raise RuntimeError("The 'cryptography' library is required for decryption. Install with: pip install cryptography")
     if value.startswith('"'):
@@ -138,7 +155,7 @@ def decrypt(value: str, keys: Tuple[bytes, bytes]) -> str:
     if value.startswith(ANOSYS_ENCRYPTION_PREFIX):
         value = value[len(ANOSYS_ENCRYPTION_PREFIX):]
     raw = base64.b64decode(value)
-    return AESGCM(keys[0]).decrypt(raw[:12], raw[12:], None).decode("utf-8")
+    return AESGCM(_decryption_key(keys)).decrypt(raw[:12], raw[12:], None).decode("utf-8")
 
 
 def get_encryption_key() -> Optional[str]:
@@ -149,16 +166,37 @@ def get_encryption_key() -> Optional[str]:
     return key.strip()
 
 
-def get_target_columns() -> Set[str]:
-    """
-    Columns to encrypt: ANOSYS_ENCRYPTED_COLUMNS (or the ANOSYS_ENCRYPTES_COLUMNS
-    alias) when set, otherwise DEFAULT_ENCRYPTED_COLUMNS.
-    """
+def explicit_target_columns() -> Optional[Set[str]]:
+    """ANOSYS_ENCRYPTED_COLUMNS (or the ANOSYS_ENCRYPTES_COLUMNS alias), when set."""
     raw = os.environ.get("ANOSYS_ENCRYPTED_COLUMNS") or os.environ.get("ANOSYS_ENCRYPTES_COLUMNS")
     if raw and raw.strip():
         cols = {col.strip() for col in raw.split(",") if col.strip()}
         if cols:
             return cols
+    return None
+
+
+def get_target_columns(data: Optional[Dict[str, Any]] = None, keep: Optional[Iterable[str]] = None) -> Set[str]:
+    """
+    Columns to encrypt.
+
+    - ANOSYS_ENCRYPTED_COLUMNS, when set, is used as given.
+    - With ``keep`` (the integration's metadata allowlist), every other column
+      holding text, a list or an object is encrypted: content is whatever is not
+      metadata, so a column cannot be missed because of its name or alias
+      (descriptive and cvs* names alike). Numbers and booleans stay readable.
+    - Otherwise DEFAULT_ENCRYPTED_COLUMNS.
+    """
+    explicit = explicit_target_columns()
+    if explicit is not None:
+        return explicit
+    if keep is not None and data is not None:
+        keep = keep if isinstance(keep, (set, frozenset)) else set(keep)
+        return {
+            k for k, v in data.items()
+            if v is not None and k not in keep and k != "cvs198"
+            and not isinstance(v, (bool, int, float))
+        }
     return set(DEFAULT_ENCRYPTED_COLUMNS)
 
 
@@ -182,15 +220,16 @@ def encrypt_value(column: str, value: Any, keys: Tuple[bytes, bytes]) -> Any:
     return json.dumps(sealed) if column in JSON_COLUMNS else sealed
 
 
-def encrypt_payload(data: Any) -> Any:
+def encrypt_payload(data: Any, keep: Optional[Iterable[str]] = None) -> Any:
     """
-    Encrypt the targeted columns of a payload dict (or list of dicts) when
+    Encrypt the content columns of a payload dict (or list of dicts) when
     ANOSYS_ENCRYPTION_KEY is set. Returns the payload unchanged otherwise.
+    ``keep`` is the integration's metadata allowlist (see get_target_columns).
     """
     if data is None:
         return None
     if isinstance(data, list):
-        return [encrypt_payload(item) for item in data]
+        return [encrypt_payload(item, keep) for item in data]
     if not isinstance(data, dict):
         return data
 
@@ -208,7 +247,7 @@ def encrypt_payload(data: Any) -> Any:
         except Exception as e:
             _warn(f"[ANOSYS] Warning: Failed to derive encryption key ({e}); encrypted columns are dropped.")
 
-    for col in get_target_columns():
+    for col in get_target_columns(data, keep):
         if col not in data or data[col] is None:
             continue
         if keys is None:

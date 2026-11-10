@@ -249,3 +249,21 @@ def filter_fields(record: Dict[str, Any], level: str, metadata_fields: Iterable[
     result.pop("consent", None)
     result[CONSENT_COLUMN] = consent_value(level)
     return result
+
+
+def prepare_hook_record(mapped: Dict[str, Any], level: str, metadata_fields: Iterable[str]) -> Dict[str, Any]:
+    """
+    The one preparation step every coding-agent hook uses, before sending:
+    keep what ``level`` allows, scrub credential-shaped strings in every
+    content field at ``full``, and encrypt every content field when a key is
+    set. Content = every field outside ``metadata_fields``, so no field is
+    missed because of its name or a cvs* alias.
+    """
+    from anosys_sdk_core.encryption import encrypt_payload
+    from anosys_sdk_core.redaction import scrub_secrets
+
+    keep = metadata_fields if isinstance(metadata_fields, (set, frozenset)) else set(metadata_fields)
+    record = filter_fields(mapped, level, keep)
+    if level == FULL:
+        record = {k: (v if k in keep else scrub_secrets(v)) for k, v in record.items()}
+    return encrypt_payload(record, keep)

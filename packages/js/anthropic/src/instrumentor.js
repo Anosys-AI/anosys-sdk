@@ -6,7 +6,7 @@ import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { spanToJson } from './genai.js';
 import { extractSpanInfo, isAnthropicSpan } from './hooks.js';
-import { FULL, OFF, prepareAppRecord, resolveAppLevel, scopeName, sendAppRecord } from 'anosys-sdk-core';
+import { currentAppLevel, FULL, OFF, prepareAppRecord, resolveAppLevel, scopeName, sendAppRecord, userContextValue } from 'anosys-sdk-core';
 
 // Read by the Anthropic SDK when a client is constructed
 export const CONTENT_MODE_ENV = 'ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE';
@@ -16,7 +16,7 @@ let _logApiUrlReady = Promise.resolve(null);
 let _tracingInitialized = false;
 let _provider = null;
 let _captureContent = true;
-let _captureLevel = 'full'; // set by AnosysAnthropicLogger (see anosys-sdk-core capture.js)
+let _captureLevel = null; // set by AnosysAnthropicLogger; until then the shared level applies (anosys-sdk-core capture.js)
 let _hub = null;
 
 
@@ -31,7 +31,7 @@ export class AnosysHttpExporter {
     getUserContext = null,
     acceptsSpan = isAnthropicSpan,
     extract = extractSpanInfo,
-    getLevel = () => _captureLevel,
+    getLevel = () => _captureLevel ?? currentAppLevel().level,
     getUrl = () => _logApiUrl,
   } = {}) {
     this._getUserContext = getUserContext ?? (() => null);
@@ -49,13 +49,8 @@ export class AnosysHttpExporter {
 
         // Attach user context if available
         try {
-          const userCtx = await this._getUserContext();
-          if (userCtx && typeof userCtx === 'object') {
-            data.cvs5 = JSON.stringify({
-              session_id: userCtx.session_id ?? 'unknown_session',
-              token: userCtx.token ?? null,
-            });
-          }
+          const value = userContextValue(await this._getUserContext());
+          if (value) data.cvs5 = value;
         } catch { /* user context errors must not block export */ }
 
         log.debug(
@@ -73,11 +68,7 @@ export class AnosysHttpExporter {
         // size-limited, in the background: never blocks the instrumented call
         sendAppRecord(this._getUrl(), payloadToSend);
       } catch (e) {
-        if (e.response) {
-          log.error('HTTP export failed (%d): %s', e.response.status, e.message);
-        } else {
-          log.error('Export failed:', e.message);
-        }
+        log.error(`Export failed (${e?.name || 'Error'})`); // no span content in logs
       }
     }
     resultCallback?.({ code: 0 });

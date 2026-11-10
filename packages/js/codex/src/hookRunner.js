@@ -5,8 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const {
-  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields,
-  isPaused, scrubSecrets,
+  FULL, OFF, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets,
 } = require('anosys-sdk-core');
 
 const { PREVIOUS_NOTIFY_FLAG, getCodexHome, getEnvPath } = require('./installer');
@@ -23,9 +22,6 @@ const LOG_FILE = path.join(STATE_DIR, 'anosys_hook.log');
 const writeLog = createHookLog(LOG_FILE);
 const log = (msg, level = 'INFO') => writeLog(level, msg);
 
-// Content fields scrubbed for secrets before sending at `full`
-const CONTENT_FIELDS = ['user_prompt', 'userPrompt', 'assistant_text', 'assistantText', 'cvs4', 'cvs5',
-  'commands', 'written_paths', 'cvs199'];
 
 function loadEnvFile() {
   const envPath = getEnvPath();
@@ -83,13 +79,8 @@ function headers() {
 
 /** Apply the collection level, scrub secrets at `full`, then encrypt. */
 function prepareRecord(mapped, level) {
-  const record = filterFields(mapped, level, METADATA_FIELDS);
-  if (level === FULL) {
-    for (const field of CONTENT_FIELDS) {
-      if (record[field] !== undefined && record[field] !== null) record[field] = scrubSecrets(record[field]);
-    }
-  }
-  return encryptPayload(record);
+  // Level filter, secret scrubbing and encryption: the shared core step
+  return prepareHookRecord(mapped, level, METADATA_FIELDS);
 }
 
 /** Deliver records (and queued retries) within the size limit. Resolves to the count accepted. */
@@ -98,7 +89,7 @@ async function send(records, options = {}) {
     log(`[DRY RUN] Would send ${records.length} record(s)`);
     return records.length;
   }
-  return deliver(INGESTION_URL, records, new PendingQueue(PENDING_FILE), PAUSE_FILE, { headers: headers(), ...options });
+  return deliver(INGESTION_URL, records, new PendingQueue(PENDING_FILE), PAUSE_FILE, { headers: headers(), metadataFields: METADATA_FIELDS, ...options });
 }
 
 function findRolloutFile(sessionId) {
@@ -380,7 +371,7 @@ function extractTurnFromRollout(rolloutPath, turnId, fallbackEvent = null) {
       }
     }
   } catch (err) {
-    log(`Failed to read rollout JSONL at ${rolloutPath}: ${err.message}`);
+    log(`Failed to read rollout JSONL (${err.code || err.name})`);
     return null;
   }
 

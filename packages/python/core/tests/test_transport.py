@@ -228,3 +228,31 @@ def test_corrupt_queue_is_ignored(tmp_path):
     path = tmp_path / "pending.jsonl"
     path.write_text("not json\n{\"also\": broken\n")
     assert PendingQueue(path).load() == []
+
+
+def test_queued_full_records_are_downgraded_after_withdrawal(tmp_path, monkeypatch):
+    """Audit 2.8: records queued at full must not be sent with content after `privacy metadata`."""
+    monkeypatch.setenv("ANOSYS_CONSENT_FILE", str(tmp_path / "consent.json"))    # no consent now
+    for var in ("ANOSYS_DISABLE", "ANOSYS_COLLECTION_LEVEL", "REDACTION"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.chdir(tmp_path)
+    queue = PendingQueue(tmp_path / "pending.jsonl")
+    queue.save(PendingQueue.entries_for([{"session_id": "s", "user_prompt": "secret", "cvs198": "full;2026-11-09"}]))
+    sent = []
+
+    def ok(url, json, headers, timeout):
+        sent.extend(json)
+        return Response(200)
+
+    deliver("u", [], queue, tmp_path / "pause.json", post=ok, metadata_fields={"session_id", "cvs198"})
+    assert sent == [{"session_id": "s", "cvs198": "metadata;none"}]
+
+
+def test_queue_is_dropped_when_collection_is_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANOSYS_DISABLE", "1")
+    queue = PendingQueue(tmp_path / "pending.jsonl")
+    queue.save(PendingQueue.entries_for([{"session_id": "s", "cvs198": "full;2026-11-09"}]))
+    sent = []
+    deliver("u", [], queue, tmp_path / "pause.json", post=lambda *a, **k: sent.append(1) or Response(200),
+            metadata_fields={"session_id"})
+    assert sent == [] and queue.load() == []

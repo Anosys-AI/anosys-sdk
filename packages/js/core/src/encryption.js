@@ -89,6 +89,7 @@ function derive256BitKey(passphrase, salt = null) {
 
 /** Encrypt text deterministically; returns `enc2:` + base64(nonce + ciphertext + tag). */
 function encrypt(text, keys) {
+  if (!keys || !keys.kEnc || !keys.kNonce) throw new TypeError('encrypt needs both keys: use deriveKeys(passphrase, salt)');
   const data = Buffer.from(text, 'utf8');
   const nonce = crypto.createHmac('sha256', keys.kNonce).update(data).digest().subarray(0, 12);
   const cipher = crypto.createCipheriv('aes-256-gcm', keys.kEnc, nonce);
@@ -97,6 +98,18 @@ function encrypt(text, keys) {
 }
 
 /** Decrypt an `enc2:` value (also accepts the JSON-string form `"enc2:..."`). Throws if tampered. */
+/** The AES key from deriveKeys(), derive256BitKey() or a passphrase. */
+function decryptionKey(keys) {
+  if (Buffer.isBuffer(keys)) return keys;
+  if (typeof keys === 'string') return deriveKeys(keys).kEnc;
+  if (keys && keys.kEnc) return keys.kEnc;
+  throw new TypeError('keys must be deriveKeys(...), derive256BitKey(...) or the passphrase');
+}
+
+/**
+ * Decrypt an `enc2:` value (also the JSON-string form). `keys` may be deriveKeys(passphrase, salt),
+ * derive256BitKey(passphrase, salt) or the passphrase itself (salt from ANOSYS_ENCRYPTION_SALT).
+ */
 function decrypt(value, keys) {
   let v = value;
   if (v.startsWith('"')) v = JSON.parse(v);
@@ -105,7 +118,7 @@ function decrypt(value, keys) {
   const nonce = raw.subarray(0, 12);
   const tag = raw.subarray(raw.length - 16);
   const body = raw.subarray(12, raw.length - 16);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', keys.kEnc, nonce);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', decryptionKey(keys), nonce);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(body), decipher.final()]).toString('utf8');
 }
@@ -118,11 +131,31 @@ function getEncryptionKey() {
 }
 
 /** Columns to encrypt: ANOSYS_ENCRYPTED_COLUMNS (or the typo alias) when set, else the defaults. */
-function getTargetColumns() {
+/** ANOSYS_ENCRYPTED_COLUMNS (or the ANOSYS_ENCRYPTES_COLUMNS alias), when set. */
+function explicitTargetColumns() {
   const raw = process.env.ANOSYS_ENCRYPTED_COLUMNS || process.env.ANOSYS_ENCRYPTES_COLUMNS;
   if (raw && raw.trim()) {
     const cols = raw.split(',').map(c => c.trim()).filter(Boolean);
     if (cols.length) return new Set(cols);
+  }
+  return null;
+}
+
+/**
+ * Columns to encrypt (same rules as Python get_target_columns):
+ * ANOSYS_ENCRYPTED_COLUMNS when set; with `keep` (the integration's metadata
+ * allowlist), every other column holding text, an array or an object; otherwise
+ * DEFAULT_ENCRYPTED_COLUMNS. Numbers and booleans stay readable.
+ */
+function getTargetColumns(data = null, keep = null) {
+  const explicit = explicitTargetColumns();
+  if (explicit) return explicit;
+  if (keep && data) {
+    const kept = keep instanceof Set ? keep : new Set(keep);
+    return new Set(Object.entries(data)
+      .filter(([k, v]) => v !== null && v !== undefined && !kept.has(k) && k !== 'cvs198'
+        && typeof v !== 'number' && typeof v !== 'boolean')
+      .map(([k]) => k));
   }
   return new Set(DEFAULT_ENCRYPTED_COLUMNS);
 }
@@ -145,9 +178,9 @@ function encryptValue(column, value, keys) {
  * ANOSYS_ENCRYPTION_KEY is set. Fails closed: a column that cannot be
  * encrypted is dropped rather than sent in plaintext.
  */
-function encryptPayload(data) {
+function encryptPayload(data, keep = null) {
   if (data === null || data === undefined) return data;
-  if (Array.isArray(data)) return data.map(encryptPayload);
+  if (Array.isArray(data)) return data.map((item) => encryptPayload(item, keep));
   if (typeof data !== 'object') return data;
 
   const passphrase = getEncryptionKey();
@@ -159,7 +192,7 @@ function encryptPayload(data) {
   } catch (e) {
     warn(`[ANOSYS] Warning: Failed to derive encryption key (${e.message}); encrypted columns are dropped.`);
   }
-  for (const col of getTargetColumns()) {
+  for (const col of getTargetColumns(data, keep)) {
     if (!(col in data) || data[col] === null || data[col] === undefined) continue;
     if (!keys) { data[col] = null; continue; }
     try {

@@ -36,6 +36,8 @@ from anosys_sdk_core.capture import (
     prepare_app_record,
     resolve_app_level,
     strip_content,
+    accepts_span,
+    user_context_value,
 )
 from anosys_sdk_core.privacy import (
     OFF,
@@ -47,6 +49,7 @@ from anosys_sdk_core.privacy import (
     consent_value,
     effective_level,
     filter_fields,
+    prepare_hook_record,
     read_consent,
     write_consent,
 )
@@ -112,11 +115,14 @@ __all__ = [
     "prepare_app_record",
     "resolve_app_level",
     "strip_content",
+    "user_context_value",
+    "accepts_span",
     "CONSENT_FIELD",
     "CONSENT_COLUMN",
     "consent_value",
     "effective_level",
     "filter_fields",
+    "prepare_hook_record",
     "read_consent",
     "write_consent",
     "scrub_secrets",

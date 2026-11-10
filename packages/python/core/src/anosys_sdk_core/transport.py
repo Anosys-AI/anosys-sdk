@@ -21,7 +21,7 @@ import os
 import stat
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -415,6 +415,7 @@ def deliver(
     timeout: float = 15,
     post: Optional[Callable[..., Any]] = None,
     budget: Optional[float] = None,
+    metadata_fields: Optional[Iterable[str]] = None,
 ) -> int:
     """
     Send queued retries plus ``records``; requeue only what is retryable.
@@ -424,6 +425,11 @@ def deliver(
     sent in time stays queued. Runs of several hooks at once are serialised on a
     lock file; a run that cannot get the lock sends only its new records and
     leaves the queue to the other run.
+
+    With ``metadata_fields`` (the hook's allowlist), queued records are brought
+    in line with the current level before they are sent: after a downgrade to
+    ``metadata`` the content of records queued at ``full`` is removed, and at
+    ``off`` the queue is emptied without sending.
 
     Returns the number of records accepted. Does nothing while paused.
     """
@@ -440,7 +446,7 @@ def deliver(
             if retry:
                 logger.warning("Queue busy (another hook run); %d record(s) not kept for retry", len(retry))
             return ok
-        return _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline)
+        return _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline, metadata_fields)
 
 
 def hook_time_budget() -> float:
@@ -493,8 +499,27 @@ class _QueueLock:
                 pass
 
 
-def _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline) -> int:
+def _apply_current_level(pending: List[Dict[str, Any]], metadata_fields: Iterable[str]) -> List[Dict[str, Any]]:
+    """Downgrade queued entries to the level in force now (consent can be withdrawn while they wait)."""
+    from anosys_sdk_core.privacy import FULL, METADATA, OFF, effective_level, filter_fields
+
+    level, _ = effective_level()
+    if level == OFF:
+        return []
+    if level == FULL:
+        return pending
+    keep = set(metadata_fields)
+    for entry in pending:
+        record = entry.get("record") or {}
+        if str(record.get("cvs198", "")).startswith(f"{FULL};"):
+            entry["record"] = filter_fields(record, METADATA, keep)
+    return pending
+
+
+def _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline, metadata_fields=None) -> int:
     pending = queue.load()
+    if metadata_fields is not None and pending:
+        pending = _apply_current_level(pending, metadata_fields)
     sent = 0
     still_pending: List[Dict[str, Any]] = []
     if pending:

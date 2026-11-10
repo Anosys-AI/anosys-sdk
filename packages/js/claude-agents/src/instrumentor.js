@@ -8,7 +8,7 @@ import {
   setupApi,
   log,
 } from 'anosys-sdk-anthropic';
-import { FULL, OFF, resolveAppLevel } from 'anosys-sdk-core';
+import { FULL, OFF, currentAppLevel, resolveAppLevel } from 'anosys-sdk-core';
 
 import { extractSpanInfo } from './hooks.js';
 import { CLAUDE_AGENTS_SCOPE } from './mapping.js';
@@ -16,7 +16,7 @@ import { AgentRunTracer } from './tracer.js';
 
 let _tracer = null;
 let _tracingInitialized = false;
-const _runSettings = { captureContent: true, emitLlmSpans: false, agentName: null, level: 'full' };
+const _runSettings = { captureContent: true, emitLlmSpans: false, agentName: null, level: null };
 
 export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext = null) {
   setLogApiUrl(apiUrl);
@@ -24,7 +24,7 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
     getUserContext,
     acceptsSpan: (name) => name === CLAUDE_AGENTS_SCOPE,
     extract: extractSpanInfo,
-    getLevel: () => _runSettings.level,
+    getLevel: () => _runSettings.level ?? currentAppLevel().level,
   });
   const provider = addSpanProcessor(createSpanProcessor(exporter, useBatchProcessor));
   _tracer = provider.getTracer(CLAUDE_AGENTS_SCOPE);

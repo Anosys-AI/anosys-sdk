@@ -212,3 +212,22 @@ module.exports = {
   consentValue,
   filterFields,
 };
+
+/**
+ * The one preparation step every coding-agent hook uses (Python prepare_hook_record):
+ * keep what `level` allows, scrub credential-shaped strings in every content field at
+ * `full`, and encrypt every content field when a key is set. Content = every field
+ * outside `metadataFields`, so no field is missed because of its name or a cvs* alias.
+ */
+function prepareHookRecord(mapped, level, metadataFields) {
+  const { encryptPayload } = require('./encryption.js');
+  const { scrubSecrets } = require('./redaction.js');
+  const keep = metadataFields instanceof Set ? metadataFields : new Set(metadataFields);
+  let record = filterFields(mapped, level, keep);
+  if (level === FULL) {
+    record = Object.fromEntries(Object.entries(record).map(([k, v]) => [k, keep.has(k) ? v : scrubSecrets(v)]));
+  }
+  return encryptPayload(record, keep);
+}
+
+module.exports.prepareHookRecord = prepareHookRecord;

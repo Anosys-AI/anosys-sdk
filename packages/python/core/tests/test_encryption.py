@@ -138,3 +138,13 @@ def test_fails_closed_without_cryptography(monkeypatch):
     out = encrypt_payload({"user_prompt": "plain secret", "session_id": "s1"})
     assert out["user_prompt"] is None
     assert out["session_id"] == "s1"
+
+
+def test_decrypt_accepts_every_key_form(monkeypatch):
+    """Audit 3.1: decrypt(x, derive_256_bit_key(k)) and decrypt(x, passphrase) work."""
+    from anosys_sdk_core.encryption import decrypt, derive_256_bit_key, derive_keys, encrypt
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_SALT", "ws")
+    value = encrypt("hello", derive_keys("pass", "ws"))
+    assert decrypt(value, derive_keys("pass", "ws")) == "hello"
+    assert decrypt(value, derive_256_bit_key("pass", "ws")) == "hello"
+    assert decrypt(value, "pass") == "hello"
