@@ -159,6 +159,13 @@ def effective_level(explicit: Optional[str] = None, cwd: Optional[str] = None) -
         else:
             level, source = METADATA, "default"
 
+    # ANOSYS_COLLECTION_LEVEL and REDACTION can lower collection even when consent is full
+    env_level = _normalize(os.environ.get("ANOSYS_COLLECTION_LEVEL"))
+    if env_level and _rank_lower(env_level, level):
+        level, source = env_level, "ANOSYS_COLLECTION_LEVEL"
+    elif os.environ.get("REDACTION", "").strip().lower() == "true" and _rank_lower(METADATA, level):
+        level, source = METADATA, "REDACTION"
+
     if level == FULL and consent.get("policy_version") != POLICY_VERSION:
         level, source = METADATA, source + " (no consent)"
 

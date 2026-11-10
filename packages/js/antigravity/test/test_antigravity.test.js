@@ -253,7 +253,8 @@ test('mapper.transformAntigravityTurn fallback CV mode when not CC pixel', (t) =
   assert.equal(payload.cvn25, 55);
   assert.equal(payload.cvn6, 5000);
   assert.equal(payload.cvn41, 1);
-  assert.equal(payload.cvb2, true);
+  assert.equal(payload.cvb1, true);
+  assert.equal(payload.cvb2, false);
   assert.equal(payload.cvs200, 'AntigravityHook');
   assert.ok(payload.cvs199);
   // Native tool/token columns not duplicated

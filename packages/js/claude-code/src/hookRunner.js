@@ -531,20 +531,6 @@ async function main(options = {}) {
     }
   }
 
-  // -- 4. Batch POST or Persist -----------------------------------------
-  // Always update state for sessions whose lines were scanned.
-  for (const [stateKeyUpd, updateData] of sessionUpdates) {
-    const existing = state[stateKeyUpd] || {};
-    Object.assign(existing, updateData);
-    state[stateKeyUpd] = existing;
-  }
-
-  if (!DRY_RUN) {
-    saveState(state);
-  } else {
-    log.info('[DRY RUN] Skipping state save — state file unchanged.');
-  }
-
   if (Object.keys(UNHANDLED_COUNTS).length) {
     log.info('Unrecognized record types (counted, not stored): %s', JSON.stringify(UNHANDLED_COUNTS));
   }
@@ -552,6 +538,18 @@ async function main(options = {}) {
   // Also flushes queued retries; failed records go to the bounded queue
   const sent = await send(allMappedPayloads, { cwd: stdinCwd, ...options });
   log.info('Session %s: %s record(s) mapped, %s accepted', currentSessionId, allMappedPayloads.length, sent);
+
+  // Only advance last_line watermark if delivery wasn't paused by an auth failure
+  if (!DRY_RUN && !isPaused(PAUSE_FILE)) {
+    for (const [stateKeyUpd, updateData] of sessionUpdates) {
+      const existing = state[stateKeyUpd] || {};
+      Object.assign(existing, updateData);
+      state[stateKeyUpd] = existing;
+    }
+    saveState(state);
+  } else if (DRY_RUN) {
+    log.info('[DRY RUN] Skipping state save — state file unchanged.');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

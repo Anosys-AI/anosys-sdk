@@ -342,7 +342,8 @@ def test_transform_antigravity_turn_fallback_cv(monkeypatch):
     assert payload["cvn25"] == 100
     assert payload["cvn6"] == 10000
     assert payload["cvn41"] == 1
-    assert payload["cvb2"] is True
+    assert payload["cvb1"] is True
+    assert payload["cvb2"] is False
     assert payload["cvs200"] == "AntigravityHook"
     assert "kubectl apply" in payload["cvs90"]
     assert "cvs199" in payload

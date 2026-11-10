@@ -22,6 +22,6 @@ export {
 export const ANTHROPIC_KEY_MAPPING = { ...CLAUDE_KEY_MAPPING };
 export const ANTHROPIC_STARTING_INDICES = { ...CLAUDE_STARTING_INDICES };
 
-export function reassign(data, keyToCvs = BASE_KEY_MAPPING, startingIndices = null, validTypes = null) {
-  return coreReassign(data, keyToCvs, startingIndices ?? DEFAULT_STARTING_INDICES, validTypes);
+export function reassign(data, keyToCvs = ANTHROPIC_KEY_MAPPING, startingIndices = null, validTypes = null) {
+  return coreReassign(data, keyToCvs, startingIndices ?? ANTHROPIC_STARTING_INDICES, validTypes);
 }

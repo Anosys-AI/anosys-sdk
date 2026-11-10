@@ -84,6 +84,9 @@ AGENTS_METADATA_COLUMNS = frozenset({
 class AnosysHttpExporter(SpanExporter):
     """Custom exporter to send spans to AnoSys API."""
     
+    def __init__(self, get_user_context: Optional[Callable] = None):
+        self._get_user_context = get_user_context or (lambda: None)
+
     def export(self, spans) -> SpanExportResult:
         """Export spans to AnoSys API."""
         global _log_api_url
@@ -102,6 +105,17 @@ class AnosysHttpExporter(SpanExporter):
                 cleaned_data = _drop_uncaptured(clean_nulls(data))
                 if _pii["enabled"]:
                     cleaned_data = _redact_content(cleaned_data)
+                try:
+                    user_ctx = self._get_user_context()
+                    if user_ctx:
+                        val = user_context_value(user_ctx)
+                        if val:
+                            cleaned_data["cvs5"] = val
+                            sid = user_ctx.get("session_id") if isinstance(user_ctx, dict) else getattr(user_ctx, "session_id", None)
+                            if sid and not cleaned_data.get("gen_ai_conversation_id"):
+                                cleaned_data["gen_ai_conversation_id"] = str(sid)
+                except Exception:
+                    pass
                 # Level filtering, cvs198 and encryption in one place
                 encrypted_data = prepare_app_record(cleaned_data, _capture_level or current_app_level()[0], AGENTS_METADATA_COLUMNS)
                 if encrypted_data is None:
@@ -144,7 +158,8 @@ def _trace_config(pii_redaction: bool = False, **hide) -> TraceConfig:
 def setup_tracing(
     api_url: str, 
     use_batch_processor: bool = False, 
-    config: Optional[TraceConfig] = None
+    config: Optional[TraceConfig] = None,
+    get_user_context: Optional[Callable] = None,
 ) -> None:
     """
     Initialize OpenTelemetry tracing for OpenAI Agents.
@@ -153,12 +168,13 @@ def setup_tracing(
         api_url: URL to post telemetry data
         use_batch_processor: If True, use BatchSpanProcessor
         config: Optional TraceConfig for capture settings
+        get_user_context: Optional user context function
     """
     global _log_api_url
     _log_api_url = api_url
     
     with _lock:
-        exporter = AnosysHttpExporter()
+        exporter = AnosysHttpExporter(get_user_context=get_user_context)
         if use_batch_processor:
             span_processor = BatchSpanProcessor(
                 exporter,
@@ -284,7 +300,12 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
                 pii_redaction=pii_redaction,
             )
             
-            setup_tracing(self.log_api_url, use_batch_processor=use_batch_processor, config=config)
+            setup_tracing(
+                self.log_api_url,
+                use_batch_processor=use_batch_processor,
+                config=config,
+                get_user_context=self.get_user_context,
+            )
             _tracing_initialized = True
         
     

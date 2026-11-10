@@ -158,14 +158,18 @@ def current_app_level(cwd: Optional[str] = None) -> Tuple[str, str]:
 
 
 def prepare_app_record(record: Dict[str, Any], level: str, extra_allowed: Iterable[str] = ()) -> Optional[Dict[str, Any]]:
-    """``finalize_app_record`` then encryption: the last step before posting an app record."""
+    """``finalize_app_record`` then secret scrubbing and encryption: the last step before posting an app record."""
     from anosys_sdk_core.encryption import encrypt_payload
+    from anosys_sdk_core.redaction import scrub_secrets
 
     result = finalize_app_record(record, level, extra_allowed)
     if result is None:
         return None
+    keep = APP_METADATA_STRING_COLUMNS | frozenset(extra_allowed)
+    if level == FULL:
+        result = {k: (v if k in keep else scrub_secrets(v)) for k, v in result.items()}
     # content = every column outside the metadata allowlist (descriptive, cvs*, dynamic)
-    return encrypt_payload(result, APP_METADATA_STRING_COLUMNS | frozenset(extra_allowed))
+    return encrypt_payload(result, keep)
 
 
 USER_CONTEXT_COLUMN = "cvs5"

@@ -264,8 +264,8 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null) {
     cvn6: durationMs,
     cvn7: costEst,
     cvn41: toolCalls.length,
-    cvb1: false,
-    cvb2: reasoningTokens > 0,
+    cvb1: reasoningTokens > 0,
+    cvb2: false,
     // Raw backup & hook identifiers
     cvs199: JSON.stringify(rawToSerialize),
     cvs200: 'CodexHook'

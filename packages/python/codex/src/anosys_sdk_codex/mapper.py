@@ -299,8 +299,8 @@ def transform_codex_turn(
             "cvn6": duration_ms,
             "cvn7": cost_est,
             "cvn41": len(tool_calls),
-            "cvb1": False,
-            "cvb2": reasoning_tokens > 0,
+            "cvb1": reasoning_tokens > 0,
+            "cvb2": False,
             # Raw backup & hook identifiers
             "cvs199": json.dumps(raw_to_serialize, default=str),
             "cvs200": "CodexHook",

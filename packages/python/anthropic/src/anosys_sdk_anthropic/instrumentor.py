@@ -98,9 +98,13 @@ class AnosysHttpExporter(SpanExporter):
 
                 # Attach user context if available
                 try:
-                    value = user_context_value(self._get_user_context())
+                    user_ctx = self._get_user_context()
+                    value = user_context_value(user_ctx)
                     if value:
                         data["cvs5"] = value
+                        sid = (user_ctx.get("session_id") if isinstance(user_ctx, dict) else getattr(user_ctx, "session_id", None))
+                        if sid and not data.get("gen_ai_conversation_id"):
+                            data["gen_ai_conversation_id"] = str(sid)
                 except Exception:
                     pass
 

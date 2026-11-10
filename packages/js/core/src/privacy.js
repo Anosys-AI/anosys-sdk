@@ -119,6 +119,15 @@ function effectiveLevel(explicit = null, cwd = null) {
       level = METADATA; source = 'default';
     }
   }
+
+  // ANOSYS_COLLECTION_LEVEL and REDACTION can lower collection even when consent is full
+  const envLevel = normalize(process.env.ANOSYS_COLLECTION_LEVEL);
+  if (envLevel && RANK[envLevel] < RANK[level]) {
+    level = envLevel; source = 'ANOSYS_COLLECTION_LEVEL';
+  } else if ((process.env.REDACTION || '').trim().toLowerCase() === 'true' && RANK[METADATA] < RANK[level]) {
+    level = METADATA; source = 'REDACTION';
+  }
+
   if (level === FULL && consent.policy_version !== POLICY_VERSION) {
     level = METADATA; source += ' (no consent)';
   }

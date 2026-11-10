@@ -65,8 +65,14 @@ export class AnosysHttpExporter {
         let cleaned = dropUncaptured(cleanNulls(data) ?? {});
         if (_piiRedaction) cleaned = redactContent(cleaned);
         try {
-          const value = userContextValue(await this._getUserContext());
-          if (value) cleaned.cvs5 = value;
+          const uctx = await this._getUserContext();
+          const value = userContextValue(uctx);
+          if (value) {
+            cleaned.cvs5 = value;
+            if (uctx && typeof uctx === 'object' && uctx.session_id && !cleaned.gen_ai_conversation_id) {
+              cleaned.gen_ai_conversation_id = String(uctx.session_id);
+            }
+          }
         } catch { /* user context errors must not block export */ }
 
         const spanSource = cleaned.from_source ?? 'unknown_source';

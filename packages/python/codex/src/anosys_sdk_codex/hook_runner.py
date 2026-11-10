@@ -579,11 +579,12 @@ def process_notification(raw_input: str) -> None:
     sent = send([record], cwd=turn_cwd)
     log.info("Turn %s (session %s) at '%s': %d record(s) accepted", turn_id, thread_id, level, sent)
 
-    # Mark the turn processed either way: retries live in the bounded queue
-    session_state.setdefault("processed_turns", []).append(turn_id)
-    session_state["processed_turns"] = session_state["processed_turns"][-500:]
-    session_state["last_seen"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    save_state(state)
+    # Mark the turn processed only if delivery was not paused by an authorization failure
+    if not is_paused(PAUSE_FILE):
+        session_state.setdefault("processed_turns", []).append(turn_id)
+        session_state["processed_turns"] = session_state["processed_turns"][-500:]
+        session_state["last_seen"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        save_state(state)
 
 
 if __name__ == "__main__":

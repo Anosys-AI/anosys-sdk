@@ -366,16 +366,19 @@ async def main():
                 'is_agent': transcript.is_agent
             }))
 
-    for skey, up in session_updates:
-        s = state.get(skey, {})
-        s.update(up)
-        state[skey] = s
-
-    if not DRY_RUN:
-        save_state(state)
     if UNHANDLED_COUNTS:
         log.info("Unrecognized record types (counted, not stored): %s", UNHANDLED_COUNTS)
 
     # Also flushes queued retries; failed records go to the bounded queue
     sent = send(all_mapped_payloads, cwd=stdin_cwd)
     log.info("Session %s: %d record(s) mapped, %d accepted", current_sid, len(all_mapped_payloads), sent)
+
+    # Only advance last_line watermark if delivery wasn't paused by an auth failure
+    if not DRY_RUN and not is_paused(PAUSE_FILE):
+        for skey, up in session_updates:
+            s = state.get(skey, {})
+            s.update(up)
+            state[skey] = s
+        save_state(state)
+    elif DRY_RUN:
+        log.info("[DRY RUN] Skipping state save — state file unchanged.")

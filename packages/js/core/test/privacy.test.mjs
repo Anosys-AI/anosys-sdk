@@ -35,6 +35,13 @@ describe('effectiveLevel', () => {
   it('applies the same precedence as Python', () => {
     writeConsent(FULL, 'test', POLICY_VERSION);
     process.env.ANOSYS_COLLECTION_LEVEL = 'metadata';
+    assert.deepEqual(effectiveLevel(null, dir), { level: METADATA, source: 'ANOSYS_COLLECTION_LEVEL' });
+    process.env.ANOSYS_COLLECTION_LEVEL = 'off';
+    assert.deepEqual(effectiveLevel(null, dir), { level: OFF, source: 'ANOSYS_COLLECTION_LEVEL' });
+    delete process.env.ANOSYS_COLLECTION_LEVEL;
+    process.env.REDACTION = 'true';
+    assert.deepEqual(effectiveLevel(null, dir), { level: METADATA, source: 'REDACTION' });
+    delete process.env.REDACTION;
     assert.deepEqual(effectiveLevel(null, dir), { level: FULL, source: 'consent' });
     assert.deepEqual(effectiveLevel('off', dir), { level: OFF, source: 'flag' });
     fs.writeFileSync(path.join(dir, '.anosys'), 'level=metadata\n');

@@ -51,8 +51,15 @@ def test_consent_file_is_private_and_readable(isolated):
 def test_precedence(monkeypatch, isolated):
     write_consent(FULL, method="test", accept_policy=POLICY_VERSION)
     monkeypatch.setenv("ANOSYS_COLLECTION_LEVEL", "metadata")
-    assert effective_level() == (FULL, "consent")             # consent beats env
-    assert effective_level("off") == (OFF, "flag")             # flag beats consent
+    assert effective_level() == (METADATA, "ANOSYS_COLLECTION_LEVEL")  # env lowers consent
+    monkeypatch.setenv("ANOSYS_COLLECTION_LEVEL", "off")
+    assert effective_level() == (OFF, "ANOSYS_COLLECTION_LEVEL")       # env off lowers consent
+    monkeypatch.delenv("ANOSYS_COLLECTION_LEVEL")
+    monkeypatch.setenv("REDACTION", "true")
+    assert effective_level() == (METADATA, "REDACTION")                # REDACTION=true lowers consent
+    monkeypatch.delenv("REDACTION")
+    assert effective_level() == (FULL, "consent")                      # consent without env
+    assert effective_level("off") == (OFF, "flag")                     # flag beats consent
     (isolated / ".anosys").write_text("level=metadata\n")
     assert effective_level() == (METADATA, ".anosys")          # project file lowers
     (isolated / ".anosys").write_text("level=full\n")

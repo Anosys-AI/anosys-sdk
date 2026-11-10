@@ -324,8 +324,8 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
     cvn28: turn.step_count || null,
     cvn39: toolDetails.tool_duration_ms,
     cvn41: toolDetails.tool_count,
-    cvb1: false,
-    cvb2: Boolean(turn.has_thinking),
+    cvb1: Boolean(turn.has_thinking),
+    cvb2: Boolean(errorObj),
     cvb3: typeof fullyIdle === 'boolean' ? fullyIdle : null,
     // Raw backup & hook identifiers
     cvs199: JSON.stringify(rawToSerialize),

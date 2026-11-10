@@ -238,3 +238,39 @@ def test_antigravity_error_serialization_and_tool_pairing():
         hook_metadata={"error": {"code": 500, "message": "boom"}},
     )
     assert json.loads(mapped["error_obj"]) == {"code": 500, "message": "boom"}
+
+
+def test_prepare_app_record_scrubs_secrets_at_full():
+    from anosys_sdk_core.capture import prepare_app_record
+    record = {
+        "otel_name": "chat",
+        "llm_input": "my secret key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz and Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMCda8Yhe3iZaWbvV5XKSTbuAn0M",
+        "gen_ai_request_model": "claude-sonnet-4-6",
+    }
+    prepared = prepare_app_record(record, "full")
+    assert "sk-ant-api03" not in prepared["llm_input"]
+    assert "[SECRET]" in prepared["llm_input"]
+    assert prepared["gen_ai_request_model"] == "claude-sonnet-4-6"
+
+
+def test_cvb_schema_alignment_has_thinking_in_cvb1(monkeypatch):
+    from anosys_sdk_codex.mapper import transform_codex_turn
+    monkeypatch.setenv("ANOSYS_CODEX_PIXEL", "false")
+    monkeypatch.setenv("ANOSYS_ANTIGRAVITY_PIXEL", "false")
+    codex_turn = {
+        "model": "o3",
+        "tokens": {"reasoning_output_tokens": 100},
+    }
+    codex_mapped = transform_codex_turn(codex_turn, session_id="s1", turn_id="t1")
+    assert codex_mapped["cvb1"] is True
+    assert codex_mapped["cvb2"] is False
+
+    ag_turn = {
+        "has_thinking": True,
+        "llm_steps": [],
+        "tool_steps": [],
+    }
+    ag_mapped = transform_antigravity_turn(ag_turn, session_id="s1", turn_id="t1", hook_metadata={})
+    assert ag_mapped["cvb1"] is True
+    assert ag_mapped["cvb2"] is False
+

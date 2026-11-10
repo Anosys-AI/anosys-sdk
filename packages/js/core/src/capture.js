@@ -87,12 +87,21 @@ function finalizeAppRecord(record, level, extraAllowed = []) {
   return result;
 }
 
-/** finalizeAppRecord then encryption: the last step before posting an app record. */
+/** finalizeAppRecord, secret scrubbing, then encryption: the last step before posting an app record. */
 function prepareAppRecord(record, level, extraAllowed = []) {
   const result = finalizeAppRecord(record, level, extraAllowed);
   if (result === null) return null;
+  const keep = new Set([...APP_METADATA_STRING_COLUMNS, ...extraAllowed]);
+  if (level === FULL) {
+    const { scrubSecrets } = require('./redaction.js');
+    for (const [k, v] of Object.entries(result)) {
+      if (!keep.has(k)) {
+        result[k] = scrubSecrets(v);
+      }
+    }
+  }
   // content = every column outside the metadata allowlist (descriptive, cvs*, dynamic)
-  return encryptPayload(result, new Set([...APP_METADATA_STRING_COLUMNS, ...extraAllowed]));
+  return encryptPayload(result, keep);
 }
 
 let cached = null;

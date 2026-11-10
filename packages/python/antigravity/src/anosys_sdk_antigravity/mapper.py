@@ -345,8 +345,8 @@ def transform_antigravity_turn(
             "cvn28": turn.get("step_count"),
             "cvn39": tool_details["tool_duration_ms"],
             "cvn41": tool_details["tool_count"],
-            "cvb1": False,
-            "cvb2": turn.get("has_thinking", False),
+            "cvb1": turn.get("has_thinking", False),
+            "cvb2": bool(error_obj),
             "cvb3": fully_idle if isinstance(fully_idle, bool) else None,
             # Raw backup & hook identifiers
             "cvs199": json.dumps(raw_to_serialize, default=str),

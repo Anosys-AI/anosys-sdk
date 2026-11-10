@@ -548,10 +548,12 @@ async function processNotification(rawInput, options = {}) {
   const sent = await send([record], { cwd: turnCwd, ...options });
   log(`Turn ${turnId} (session ${threadId}) at '${level}': ${sent} record(s) accepted`);
 
-  // Mark the turn processed either way: retries live in the bounded queue
-  state[threadId].processed_turns = [...state[threadId].processed_turns, turnId].slice(-500);
-  state[threadId].last_seen = new Date().toISOString();
-  saveState(state);
+  // Mark the turn processed only if delivery was not paused by an authorization failure
+  if (!isPaused(PAUSE_FILE)) {
+    state[threadId].processed_turns = [...state[threadId].processed_turns, turnId].slice(-500);
+    state[threadId].last_seen = new Date().toISOString();
+    saveState(state);
+  }
 }
 
 async function run(argv = process.argv.slice(2), options = {}) {

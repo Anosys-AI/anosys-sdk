@@ -140,7 +140,8 @@ def test_transform_codex_turn_fallback_cv(monkeypatch):
     assert mapped["cvn1"] == 1500
     assert mapped["cvn2"] == 300
     assert mapped["cvn4"] == 500
-    assert mapped["cvb2"] is True
+    assert mapped["cvb1"] is True
+    assert mapped["cvb2"] is False
     assert mapped["cvn41"] == 1
     assert "pytest" in mapped["cvs90"]
     assert "cvs199" in mapped

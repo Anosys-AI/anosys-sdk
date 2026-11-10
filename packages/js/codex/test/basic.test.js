@@ -150,7 +150,8 @@ test('transformCodexTurn fallback CV mode when not CC pixel', (t) => {
   assert.equal(mapped.cvn1, 1200);
   assert.equal(mapped.cvn2, 250);
   assert.equal(mapped.cvn4, 400);
-  assert.equal(mapped.cvb2, true);
+  assert.equal(mapped.cvb1, true);
+  assert.equal(mapped.cvb2, false);
   assert.equal(mapped.cvn41, 1);
   assert.ok(mapped.cvs90.includes('npm run build'));
   assert.ok(mapped.cvs199);

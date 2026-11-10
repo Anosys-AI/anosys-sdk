@@ -49,8 +49,14 @@ export class AnosysHttpExporter {
 
         // Attach user context if available
         try {
-          const value = userContextValue(await this._getUserContext());
-          if (value) data.cvs5 = value;
+          const userCtx = await this._getUserContext();
+          const value = userContextValue(userCtx);
+          if (value) {
+            data.cvs5 = value;
+            if (userCtx && typeof userCtx === 'object' && userCtx.session_id && !data.gen_ai_conversation_id) {
+              data.gen_ai_conversation_id = String(userCtx.session_id);
+            }
+          }
         } catch { /* user context errors must not block export */ }
 
         log.debug(
