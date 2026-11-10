@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from anosys_sdk_core.util.json import to_str_or_none
+from anosys_sdk_core.util.json import dig, set_nested, to_str_or_none
 from anosys_sdk_core.util.batching import assign, reassign
 from anosys_sdk_openai.mapping import OPENAI_KEY_MAPPING, OPENAI_STARTING_INDICES
 
@@ -57,53 +57,6 @@ def _to_timestamp(dt_str: Optional[str]) -> Optional[int]:
         return None
 
 
-def set_nested(obj: Dict, path: str, value: Any) -> None:
-    """Helper to set nested dictionary values from dotted paths."""
-    parts = path.split(".")
-    current = obj
-    
-    for i, part in enumerate(parts[:-1]):
-        try:
-            idx = int(part)
-            if not isinstance(current, list):
-                current_parent = current
-                current = []
-                if isinstance(current_parent, dict) and i > 0:
-                    current_parent[parts[i - 1]] = current
-            while len(current) <= idx:
-                current.append({})
-            current = current[idx]
-        except ValueError:
-            if part not in current or not isinstance(current[part], (dict, list)):
-                current[part] = {}
-            current = current[part]
-    
-    final_key = parts[-1]
-    try:
-        final_key = int(final_key)
-        if not isinstance(current, list):
-            current_parent = current
-            current = []
-            if isinstance(current_parent, dict):
-                current_parent[parts[-2]] = current
-        while len(current) <= final_key:
-            current.append(None)
-    except ValueError:
-        pass
-    
-    # Try to parse JSON strings
-    if isinstance(value, str) and value.strip().startswith(("{", "[")):
-        try:
-            value = json.loads(value)
-        except json.JSONDecodeError:
-            pass
-    
-    if isinstance(final_key, int):
-        current[final_key] = value
-    else:
-        current[final_key] = value
-
-
 def deserialize_attributes(obj: Dict) -> Dict:
     """Deserialize flattened attributes into nested structure."""
     flat_attrs = obj.get("attributes", {})
@@ -137,9 +90,9 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     assign(variables, 'custom_mapping', json.dumps(key_to_cvs, indent=4))
     assign(variables, 'otel_observed_timestamp', datetime.utcnow().isoformat() + "Z")
     assign(variables, 'name', to_str_or_none(span.get('name')))
-    assign(variables, 'trace_id', to_str_or_none(span.get('context', {}).get('trace_id')))
-    assign(variables, 'span_id', to_str_or_none(span.get('context', {}).get('span_id')))
-    assign(variables, 'trace_state', to_str_or_none(span.get('context', {}).get('trace_state')))
+    assign(variables, 'trace_id', to_str_or_none(dig(span, 'context', 'trace_id')))
+    assign(variables, 'span_id', to_str_or_none(dig(span, 'context', 'span_id')))
+    assign(variables, 'trace_state', to_str_or_none(dig(span, 'context', 'trace_state')))
     assign(variables, 'parent_id', to_str_or_none(span.get('parent_id')))
     assign(variables, 'start_time', to_str_or_none(span.get('start_time')))
     assign(variables, 'cvn1', _to_timestamp(span.get('start_time')))
@@ -177,7 +130,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         assign(variables, 'gen_ai.operation.name', operation)
     
     # Server address
-    resource_attrs = span.get('resource', {}).get('attributes', {})
+    resource_attrs = (dig(span, 'resource', 'attributes') or {})
     server_addr = (
         resource_attrs.get('server.address') or 
         attributes.get('server.address') or 
@@ -213,7 +166,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     if not model_name:
         model_name = request_attrs.get('model')
     if not model_name:
-        model_name = request_attrs.get('parameters', {}).get('model')
+        model_name = dig(request_attrs, 'parameters', 'model')
     
     if model_name:
         assign(variables, 'gen_ai.request.model', to_str_or_none(model_name))
@@ -291,7 +244,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
             # JSON mode check (invocation_params is None for non-LLM spans,
             # e.g. custom tool/agent spans emitted by user code)
             if isinstance(invocation_params, dict) and \
-                    invocation_params.get('response_format', {}).get('type') == 'json_object':
+                    dig(invocation_params, 'response_format', 'type') == 'json_object':
                 output_type = 'json'
             
             # Finish reasons
@@ -312,7 +265,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     if not finish_reasons:
         finish_reasons = gen_ai_resp.get('finish_reasons')
     if not output_type:
-        output_type = gen_ai.get('output', {}).get('type')
+        output_type = dig(gen_ai, 'output', 'type')
     
     # Response & Usage
     if response_model:
@@ -366,7 +319,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     
     # Fallback to gen_ai structure
     if not input_messages:
-        input_messages = gen_ai.get('input', {}).get('messages')
+        input_messages = dig(gen_ai, 'input', 'messages')
         if isinstance(input_messages, dict):
             input_messages = input_messages.get('messages')
             
@@ -384,7 +337,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     
     # Fallback to gen_ai structure
     if not output_messages:
-        output_messages = gen_ai.get('output', {}).get('messages')
+        output_messages = dig(gen_ai, 'output', 'messages')
         if isinstance(output_messages, dict):
             output_messages = output_messages.get('messages')
             
@@ -422,7 +375,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     # Fallback to general input value if system content is still missing
     # (Often used for instructions in agentic contexts)
     if not system_content:
-        input_val_attr = attributes.get('input', {}).get('value')
+        input_val_attr = dig(attributes, 'input', 'value')
         if input_val_attr and isinstance(input_val_attr, str):
             system_content = input_val_attr
     if system_content:
@@ -431,7 +384,7 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     # Tools
     tools = llm_attrs.get('tools')
     if not tools:
-        tools = gen_ai.get('tool', {}).get('definitions')
+        tools = dig(gen_ai, 'tool', 'definitions')
         
     if not tools and isinstance(invocation_params, dict):
         tools = invocation_params.get('tools')
@@ -442,9 +395,9 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     assign(variables, 'llm_tools', to_str_or_none(llm_attrs.get('tools')))
     assign(variables, 'llm_token_count', to_str_or_none(llm_attrs.get('token_count')))
     assign(variables, 'llm_output_messages', to_str_or_none(
-        llm_attrs.get('output_messages', {}).get('output_messages')))
+        llm_attrs.get('output_messages')))
     assign(variables, 'llm_input_messages', to_str_or_none(
-        llm_attrs.get('input_messages', {}).get('input_messages')))
+        llm_attrs.get('input_messages')))
     assign(variables, 'llm_model', to_str_or_none(model_name))
     assign(variables, 'llm_invocation_parameters', to_str_or_none(invocation_params))
     assign(variables, 'llm_system', to_str_or_none(llm_attrs.get('system')))
@@ -461,15 +414,15 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         input_parts.append(flattened_input)
         
     input_val = "\n\n".join(input_parts) if input_parts else (
-        attributes.get('input', {}).get('value') or 
-        attributes.get('raw', {}).get('input')
+        dig(attributes, 'input', 'value') or 
+        dig(attributes, 'raw', 'input')
     )
     
     # Prioritize flattened messages for llm_output
     output_val = (
         flatten_messages(output_messages) or 
         output_attr.get('value') or 
-        attributes.get('raw', {}).get('output')
+        dig(attributes, 'raw', 'output')
     )
     
     assign(variables, 'llm_input', to_str_or_none(input_val))
@@ -477,15 +430,15 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     
     # Kind information
     kind_val = (
-        gen_ai.get('span', {}).get('kind') or 
-        attributes.get('fi', {}).get('span', {}).get('kind') or 
-        attributes.get('span', {}).get('kind')
+        dig(gen_ai, 'span', 'kind') or 
+        dig(attributes, 'fi', 'span', 'kind') or 
+        dig(attributes, 'span', 'kind')
     )
     assign(variables, 'gen_ai.span.kind', to_str_or_none(kind_val))
     assign(variables, 'kind', to_str_or_none(kind_val))
     
     # Resource
-    assign(variables, 'otel_resource', json.dumps(span.get('resource', {}).get('attributes'), default=str))
+    assign(variables, 'otel_resource', json.dumps(dig(span, 'resource', 'attributes'), default=str))
     assign(variables, 'from_source', "openAI_Python_Telemetry")
     
     # Response ID

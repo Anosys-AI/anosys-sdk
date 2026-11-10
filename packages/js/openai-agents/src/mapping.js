@@ -9,6 +9,7 @@ import {
   OTEL_AI_VALID_TYPES,
   assign,
   reassign as coreReassign,
+  setNested,
   spanToJson,
 } from 'anosys-sdk-core';
 
@@ -144,20 +145,6 @@ export function span2json(span) {
 
 // ── OTel ReadableSpan extraction (mirrors Python extract_otel_span_info) ─────
 
-function setNested(obj, path, value) {
-  const parts = path.split('.');
-  let cur = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const p = parts[i];
-    if (!cur[p] || typeof cur[p] !== 'object') cur[p] = {};
-    cur = cur[p];
-  }
-  const last = parts[parts.length - 1];
-  if (typeof value === 'string' && (value.trim().startsWith('{') || value.trim().startsWith('['))) {
-    try { value = JSON.parse(value); } catch { /* keep as string */ }
-  }
-  cur[last] = value;
-}
 
 function deserializeAttributes(attrs) {
   const result = {};
@@ -232,6 +219,18 @@ export function extractOtelSpanInfo(span) {
 
   const userCtx = span.user_context ?? span.userContext;
   if (userCtx) assign(variables, 'user_context', userCtx);
+
+  // GenAI / LLM content and usage, as the Python extractor maps them
+  const input = attrs.input?.value ?? rawAttrs['gen_ai.prompt'] ?? attrs.llm?.input_messages;
+  const output = attrs.output?.value ?? rawAttrs['gen_ai.completion'] ?? attrs.llm?.output_messages;
+  if (input !== undefined) assign(variables, 'llm_input', toStr(input));
+  if (output !== undefined) assign(variables, 'llm_output', toStr(output));
+  if (attrs.llm?.token_count) assign(variables, 'llm_token_count', JSON.stringify(attrs.llm.token_count));
+  if (attrs.llm?.system !== undefined) assign(variables, 'llm_system', toStr(attrs.llm.system));
+  // Every other flat attribute with a known column (gen_ai.usage.*, gen_ai.response.*, gen_ai.agent.* ...)
+  for (const [key, value] of Object.entries(rawAttrs)) {
+    if (key in keyToCvs && !(key in variables)) assign(variables, key, value);
+  }
 
   assign(variables, 'from_source', 'openAI_Agents_Telemetry');
 

@@ -12,7 +12,7 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan
 
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
-from anosys_sdk_core.util.json import to_str_or_none, format_timestamp
+from anosys_sdk_core.util.json import format_timestamp, set_nested, to_str_or_none
 from anosys_sdk_core.util.batching import assign, reassign
 
 # Agents-specific key mapping
@@ -268,34 +268,6 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
     # print(json.dumps(result, indent=2))    
 
     return clean_dict(result)
-
-
-def set_nested(obj: Dict, path: str, value: Any) -> None:
-    """Set nested dictionary value from dotted path."""
-    parts = path.split(".")
-    current = obj
-    
-    for i, part in enumerate(parts[:-1]):
-        try:
-            idx = int(part)
-            if not isinstance(current, list):
-                current = []
-            while len(current) <= idx:
-                current.append({})
-            current = current[idx]
-        except ValueError:
-            if part not in current or not isinstance(current[part], (dict, list)):
-                current[part] = {}
-            current = current[part]
-    
-    final_key = parts[-1]
-    if isinstance(value, str) and value.strip().startswith(("{", "[")):
-        try:
-            value = json.loads(value)
-        except json.JSONDecodeError:
-            pass
-    
-    current[final_key] = value
 
 
 def deserialize_attributes(attributes: Dict) -> Dict:

@@ -100,5 +100,6 @@ const decorators = require('./decorators.js');
 exports.createDecorators = decorators.createDecorators;
 const spans = require('./spans.js');
 exports.spanToJson = spans.spanToJson;
+exports.setNested = spans.setNested;
 exports.hrTimeToIso = spans.hrTimeToIso;
 exports.scopeName = spans.scopeName;

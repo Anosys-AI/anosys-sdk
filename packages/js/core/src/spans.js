@@ -47,4 +47,32 @@ function scopeName(span) {
   return span.instrumentationScope?.name ?? span.instrumentationLibrary?.name ?? '';
 }
 
-module.exports = { spanToJson, hrTimeToIso, scopeName, SPAN_KINDS, STATUS_CODES };
+/**
+ * Set `value` at a dotted OpenTelemetry attribute path, building objects and arrays as
+ * needed (`llm.input_messages.0.message.role`: a numeric segment is an array index).
+ * JSON-looking strings are parsed. Same as Python util.json.set_nested.
+ */
+function setNested(obj, path, value) {
+  const parts = path.split('.');
+  let current = obj;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const isIndex = /^\d+$/.test(part);
+    if (Array.isArray(current) && !isIndex) return; // a name under an array: the path does not fit
+    const key = Array.isArray(current) ? Number(part) : part;
+    if (i === parts.length - 1) {
+      let v = value;
+      if (typeof v === 'string' && /^\s*[[{]/.test(v)) { try { v = JSON.parse(v); } catch { /* keep text */ } }
+      current[key] = v;
+      return;
+    }
+    const wantArray = /^\d+$/.test(parts[i + 1]);
+    const existing = current[key];
+    if (wantArray ? !Array.isArray(existing) : (!existing || typeof existing !== 'object' || Array.isArray(existing))) {
+      current[key] = wantArray ? [] : {};
+    }
+    current = current[key];
+  }
+}
+
+module.exports = { setNested, spanToJson, hrTimeToIso, scopeName, SPAN_KINDS, STATUS_CODES };

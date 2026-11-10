@@ -214,3 +214,22 @@ def test_openai_encryption_exports():
 
         key = derive_keys("openai-key")
         assert decrypt(encrypted["llm_input"], key) == "What is Python?"
+
+
+def test_indexed_attributes_and_null_response_format_do_not_break_extraction():
+    """Audit 4.3: indexed attributes (llm.input_messages.0.*) are kept; response_format null is fine."""
+    span = {
+        "name": "ChatCompletion", "context": {"trace_id": "0x1", "span_id": "0x2"},
+        "start_time": "2026-11-10T00:00:00Z", "end_time": "2026-11-10T00:00:01Z",
+        "attributes": {
+            "llm.input_messages.0.message.role": "user",
+            "llm.input_messages.0.message.content": "hello there",
+            "llm.output_messages.0.message.role": "assistant",
+            "llm.output_messages.0.message.content": "hi",
+            "llm.invocation_parameters": '{"model": "gpt-5", "response_format": null}',
+            "output.value": '{"object": "chat.completion", "choices": []}',
+        },
+    }
+    data = extract_span_info(span)
+    body = json.dumps(data)
+    assert "hello there" in body and "hi" in body

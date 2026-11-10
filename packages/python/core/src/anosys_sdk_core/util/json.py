@@ -105,3 +105,43 @@ def safe_serialize(obj: Any) -> Any:
         return str(obj)
     except Exception as e:
         return f"[Unserializable: {e}]"
+
+
+def set_nested(obj: Any, path: str, value: Any) -> None:
+    """
+    Set ``value`` at a dotted OpenTelemetry attribute path, building dicts and
+    lists as needed (``llm.input_messages.0.message.role``: a numeric segment
+    is a list index). JSON-looking string values are parsed. Shared by every
+    integration that turns flat span attributes into nested objects.
+    """
+    parts = path.split(".")
+    current = obj
+    for i, part in enumerate(parts):
+        last = i == len(parts) - 1
+        key: Any = int(part) if isinstance(current, list) and part.isdigit() else part
+        if isinstance(current, list):
+            if not isinstance(key, int):
+                return  # a name under a list: the path does not fit, skip it
+            while len(current) <= key:
+                current.append(None)
+        if last:
+            if isinstance(value, str) and value.strip().startswith(("{", "[")):
+                try:
+                    value = json.loads(value)
+                except ValueError:
+                    pass
+            current[key] = value
+            return
+        wanted = list if parts[i + 1].isdigit() else dict
+        if not isinstance(current[key] if isinstance(current, list) else current.get(key), wanted):
+            current[key] = wanted()
+        current = current[key]
+
+
+def dig(obj: Any, *keys: Any) -> Any:
+    """``obj[k1][k2]...`` for nested span attributes, or None when any step is missing or not a dict."""
+    for key in keys:
+        if not isinstance(obj, dict):
+            return None
+        obj = obj.get(key)
+    return obj

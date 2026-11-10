@@ -1,3 +1,4 @@
+import { setNested } from 'anosys-sdk-core';
 import { assign, reassign, OPENAI_KEY_MAPPING, OPENAI_STARTING_INDICES } from './mapping.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -7,27 +8,6 @@ function toTimestamp(dtStr) {
   try { return Math.floor(new Date(dtStr).getTime()); } catch { return null; }
 }
 
-function setNested(obj, path, value) {
-  const parts = path.split('.');
-  let current = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i];
-    const idx = parseInt(part, 10);
-    if (!isNaN(idx)) {
-      if (!Array.isArray(current)) current = [];
-      while (current.length <= idx) current.push({});
-      current = current[idx];
-    } else {
-      if (!current[part] || typeof current[part] !== 'object') current[part] = {};
-      current = current[part];
-    }
-  }
-  const finalKey = parts[parts.length - 1];
-  if (typeof value === 'string' && (value.trim().startsWith('{') || value.trim().startsWith('['))) {
-    try { value = JSON.parse(value); } catch { /* keep as string */ }
-  }
-  current[finalKey] = value;
-}
 
 function deserializeAttributes(attributes) {
   const result = {};
@@ -146,10 +126,13 @@ export function extractSpanInfo(span) {
     return msgs;
   }
 
-  const inputMsgs  = attrs.input?.value ?? flattenMessages(genAi.input?.messages) ?? llm.input_messages;
-  const outputMsgs = attrs.output?.value ?? flattenMessages(genAi.output?.messages) ?? llm.output_messages;
-  assign(variables, 'gen_ai.input.messages',      toStrOrNull(inputMsgs));
-  assign(variables, 'gen_ai.output.messages',     toStrOrNull(outputMsgs));
+  // gen_ai_*_messages are JSON columns: the message arrays as JSON; llm_input / llm_output: the text
+  const inputMessages  = genAi.input?.messages ?? llm.input_messages;
+  const outputMessages = genAi.output?.messages ?? llm.output_messages;
+  if (inputMessages)  assign(variables, 'gen_ai.input.messages',  JSON.stringify(inputMessages));
+  if (outputMessages) assign(variables, 'gen_ai.output.messages', JSON.stringify(outputMessages));
+  assign(variables, 'llm_input',  toStrOrNull(attrs.input?.value ?? flattenMessages(inputMessages)));
+  assign(variables, 'llm_output', toStrOrNull(attrs.output?.value ?? flattenMessages(outputMessages)));
   assign(variables, 'gen_ai.system_instructions', toStrOrNull(genAi.system_instructions ?? llm.system));
   assign(variables, 'gen_ai.tool.definitions',    toStrOrNull(genAi.tool?.definitions ?? llm.tools));
 
@@ -174,7 +157,11 @@ export function extractSpanInfo(span) {
   
   // Backwards compatibility for old names
   assign(variables, 'llm_model_name', toStrOrNull(req.model ?? llm.model_name));
-  assign(variables, 'llm_token_count', usage.total_tokens ?? tokenCount);
+  // llm_token_count is a JSON column
+  const tokenCounts = llm.token_count ?? (usage.total_tokens ?? tokenCount) ?? null;
+  if (tokenCounts !== null) {
+    assign(variables, 'llm_token_count', JSON.stringify(typeof tokenCounts === 'object' ? tokenCounts : { total: tokenCounts }));
+  }
 
   // Raw data capture - ALWAYS mandatory
   assign(variables, 'raw', JSON.stringify(span));
