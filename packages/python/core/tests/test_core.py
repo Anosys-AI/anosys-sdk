@@ -6,7 +6,6 @@ Covers:
 - decorators: setup_api, anosys_logger, anosys_raw_logger
 - models: BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES contracts
 - redaction: redact_string (email, phone, SSN, credit card, api_key)
-- redaction: redact_dict (sensitive keys, nested dicts, lists)
 """
 
 
@@ -19,7 +18,7 @@ from anosys_sdk_core.context import (
     set_user_context,
 )
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
-from anosys_sdk_core.redaction import REDACTED, redact_dict, redact_string
+from anosys_sdk_core.redaction import REDACTED, redact_string
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -163,56 +162,18 @@ def test_redact_string_selective_patterns():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# redaction — redact_dict
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_redact_dict_sensitive_keys():
-    data = {"username": "alice", "password": "secret123", "api_key": "sk-abc"}
-    result = redact_dict(data)
-    assert result["username"] == "alice"
-    assert result["password"] == REDACTED
-    assert result["api_key"] == REDACTED
 
 
-def test_redact_dict_nested():
-    data = {"auth": {"token": "bearer-xyz", "user": "alice"}}
-    result = redact_dict(data)
-    assert result["auth"]["token"] == REDACTED
-    assert result["auth"]["user"] == "alice"
 
 
-def test_redact_dict_list_values():
-    data = {
-        "users": [
-            {"name": "Alice", "token": "tok-1"},
-            {"name": "Bob", "token": "tok-2"},
-        ]
-    }
-    result = redact_dict(data)
-    for user in result["users"]:
-        assert user["token"] == REDACTED
-        assert user["name"] in ("Alice", "Bob")
 
 
-def test_redact_dict_string_with_patterns():
-    data = {"message": "Contact user@example.com for help"}
-    result = redact_dict(data)
-    assert "user@example.com" not in result["message"]
 
 
-def test_redact_dict_preserves_non_sensitive():
-    data = {"count": 42, "active": True, "name": "test"}
-    result = redact_dict(data)
-    assert result["count"] == 42
-    assert result["active"] is True
-    assert result["name"] == "test"
 
 
-def test_redact_dict_custom_sensitive_keys():
-    data = {"my_secret_field": "hidden", "public": "visible"}
-    result = redact_dict(data, sensitive_keys=["secret"])
-    assert result["my_secret_field"] == REDACTED
-    assert result["public"] == "visible"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

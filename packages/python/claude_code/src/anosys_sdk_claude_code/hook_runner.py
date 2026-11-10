@@ -71,7 +71,15 @@ def _load_agent_meta(meta_path: Path) -> dict:
 
 
 def find_all_transcripts() -> List[TranscriptInfo]:
-    projects_dir = Path.home() / '.claude' / 'projects'
+    """Every transcript on disk; used only to locate the current session's file."""
+    try:
+        return _scan_transcripts(Path.home() / '.claude' / 'projects')
+    except OSError as e:  # unreadable or vanished folder: no transcripts, never a crash
+        log.warning("Could not list Claude Code transcripts (%s)", type(e).__name__)
+        return []
+
+
+def _scan_transcripts(projects_dir: Path) -> List[TranscriptInfo]:
     if not projects_dir.exists():
         return []
 

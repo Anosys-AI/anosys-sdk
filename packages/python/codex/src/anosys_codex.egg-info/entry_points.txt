@@ -1,0 +1,2 @@
+[console_scripts]
+anosys-codex = anosys_sdk_codex.cli:main

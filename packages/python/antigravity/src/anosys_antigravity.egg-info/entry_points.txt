@@ -1,0 +1,2 @@
+[console_scripts]
+anosys-antigravity = anosys_sdk_antigravity.cli:main

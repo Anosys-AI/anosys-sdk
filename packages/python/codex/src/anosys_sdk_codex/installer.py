@@ -101,53 +101,6 @@ def _fallback_parse_toml(content: str) -> Dict[str, Any]:
     return res
 
 
-def _serialize_toml_value(val: Any) -> str:
-    if isinstance(val, bool):
-        return "true" if val else "false"
-    if isinstance(val, (int, float)):
-        return str(val)
-    if isinstance(val, str):
-        escaped = val.replace("\\", "\\\\").replace('"', '\"')
-        return f'"{escaped}"'
-    if isinstance(val, list):
-        items_str = ", ".join(_serialize_toml_value(x) for x in val)
-        return f"[{items_str}]"
-    if isinstance(val, dict):
-        items_str = ", ".join(f"{k} = {_serialize_toml_value(v)}" for k, v in val.items())
-        return f"{{ {items_str} }}"
-    return f'"{str(val)}"'
-
-
-def write_toml_atomic(path: Path, data: Dict[str, Any]) -> None:
-    """Safely write TOML data atomically."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines: List[str] = []
-
-    for k, v in data.items():
-        if not isinstance(v, dict):
-            lines.append(f"{k} = {_serialize_toml_value(v)}")
-
-    for k, v in data.items():
-        if isinstance(v, dict):
-            lines.append("")
-            lines.append(f"[{k}]")
-            for sub_k, sub_v in v.items():
-                lines.append(f"{sub_k} = {_serialize_toml_value(sub_v)}")
-
-    content = "\n".join(lines).strip() + "\n"
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix="config_", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(content)
-        shutil.move(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-
-
 def _is_ours(value: Any) -> bool:
     return any(marker in str(value) for marker in HOOK_MARKERS)
 

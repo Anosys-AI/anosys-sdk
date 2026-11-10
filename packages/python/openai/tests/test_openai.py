@@ -6,7 +6,6 @@ Covers:
 - hooks: deserialize_attributes (dotted path flattening)
 - hooks: extract_span_info with llm_invocation_parameters to avoid AttributeError
 - mapping: OPENAI_KEY_MAPPING and OPENAI_STARTING_INDICES contracts
-- streaming: StreamingAggregator accumulation
 """
 
 import json
@@ -17,7 +16,6 @@ from anosys_sdk_openai.hooks import (
     flatten_messages,
 )
 from anosys_sdk_openai.mapping import OPENAI_KEY_MAPPING, OPENAI_STARTING_INDICES
-from anosys_sdk_openai.streaming import StreamingAggregator
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -188,28 +186,12 @@ def test_key_mapping_covers_gen_ai_fields():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# StreamingAggregator
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_streaming_aggregator_starts_empty():
-    agg = StreamingAggregator()
-    assert agg.get_content() == ""
-    assert agg.get_chunks() == []
 
 
-def test_streaming_aggregator_accumulates_chunks():
-    agg = StreamingAggregator()
-    agg.add_chunk({"choices": [{"delta": {"content": "Hello"}, "finish_reason": None}]})
-    agg.add_chunk({"choices": [{"delta": {"content": " World"}, "finish_reason": None}]})
-    content = agg.get_content()
-    assert "Hello" in content or len(agg.get_chunks()) == 2  # flexible check
 
 
-def test_streaming_aggregator_handles_empty_delta():
-    agg = StreamingAggregator()
-    agg.add_chunk({"choices": [{"delta": {}, "finish_reason": None}]})
-    # Should not crash
-    assert isinstance(agg.get_content(), str)
 
 
 def test_openai_encryption_exports():

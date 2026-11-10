@@ -2,7 +2,7 @@
 Redaction utilities for AnoSys SDK.
 
 Provides utilities for redacting sensitive information before logging.
-This module is a placeholder for future PII redaction functionality.
+redact_string: PII patterns (OpenAI Agents pii_redaction); scrub_secrets: credentials (hooks).
 """
 
 import re
@@ -45,48 +45,6 @@ def redact_string(
     for pattern_name in patterns:
         if pattern_name in PATTERNS:
             result = PATTERNS[pattern_name].sub(replacement, result)
-    
-    return result
-
-
-def redact_dict(
-    data: Dict[str, Any],
-    sensitive_keys: Optional[List[str]] = None,
-    patterns: Optional[List[str]] = None,
-    replacement: str = REDACTED
-) -> Dict[str, Any]:
-    """
-    Redact sensitive data from a dictionary.
-    
-    Args:
-        data: Dictionary to redact
-        sensitive_keys: Keys to fully redact (e.g., ["password", "token"])
-        patterns: Pattern names to apply to string values
-        replacement: Replacement text
-        
-    Returns:
-        Dictionary with sensitive content redacted
-    """
-    if sensitive_keys is None:
-        sensitive_keys = ["password", "secret", "token", "api_key", "apikey"]
-    
-    result = {}
-    for key, value in data.items():
-        # Fully redact sensitive keys
-        if any(sk.lower() in key.lower() for sk in sensitive_keys):
-            result[key] = replacement
-        elif isinstance(value, str):
-            result[key] = redact_string(value, patterns, replacement)
-        elif isinstance(value, dict):
-            result[key] = redact_dict(value, sensitive_keys, patterns, replacement)
-        elif isinstance(value, list):
-            result[key] = [
-                redact_dict(v, sensitive_keys, patterns, replacement) 
-                if isinstance(v, dict) else v 
-                for v in value
-            ]
-        else:
-            result[key] = value
     
     return result
 

@@ -189,13 +189,6 @@ function filterFields(record, level, metadataFields) {
   return result;
 }
 
-/** Set cvs198 for a hook record (level from effectiveLevel when omitted). */
-function attachConsent(record, level = null) {
-  if (!level) level = effectiveLevel().level;
-  delete record.consent;
-  record[CONSENT_COLUMN] = consentValue(level);
-  return record;
-}
 
 module.exports = {
   RANK,
@@ -218,5 +211,4 @@ module.exports = {
   effectiveLevel,
   consentValue,
   filterFields,
-  attachConsent,
 };

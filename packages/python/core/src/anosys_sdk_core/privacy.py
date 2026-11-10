@@ -249,13 +249,3 @@ def filter_fields(record: Dict[str, Any], level: str, metadata_fields: Iterable[
     result.pop("consent", None)
     result[CONSENT_COLUMN] = consent_value(level)
     return result
-
-
-def attach_consent(record: Dict[str, Any], level: Optional[str] = None) -> Dict[str, Any]:
-    """Set cvs198 for a hook record (level from ``effective_level`` when omitted)."""
-    if level is None:
-        level, _ = effective_level()
-    record.pop("consent", None)
-    record[CONSENT_COLUMN] = consent_value(level)
-    return record
-

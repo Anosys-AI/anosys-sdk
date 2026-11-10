@@ -96,9 +96,17 @@ function _loadAgentMeta(metaPath) {
  * Return all transcripts (regular + subagent) across ~/.claude/projects/.
  * @returns {TranscriptInfo[]}
  */
+/** Every transcript on disk; used only to locate the current session's file. */
 function findAllTranscripts() {
-  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-  // const projectsDir = path.join(".", 'playground', 'logs_from_claude');
+  try {
+    return scanTranscripts(path.join(os.homedir(), '.claude', 'projects'));
+  } catch (e) { // unreadable or vanished folder: no transcripts, never a crash
+    log.warning('Could not list Claude Code transcripts (%s)', e.code || e.name);
+    return [];
+  }
+}
+
+function scanTranscripts(projectsDir) {
   if (!fs.existsSync(projectsDir)) return [];
 
   const results = [];
