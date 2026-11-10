@@ -127,8 +127,30 @@ export function extractSpanInfo(span) {
   }
 
   // gen_ai_*_messages are JSON columns: the message arrays as JSON; llm_input / llm_output: the text
-  const inputMessages  = genAi.input?.messages ?? llm.input_messages;
-  const outputMessages = genAi.output?.messages ?? llm.output_messages;
+  let inputMessages  = genAi.input?.messages ?? llm.input_messages;
+  let outputMessages = genAi.output?.messages ?? llm.output_messages;
+
+  // Fallback to span events if instrumentation recorded messages as events
+  if ((!inputMessages || !outputMessages) && Array.isArray(span.events)) {
+    const extractedInputs = [];
+    const extractedOutputs = [];
+    for (const ev of span.events) {
+      const name = ev.name || ev.attributes?.['event.name'];
+      const body = ev.body || ev.attributes || {};
+      const content = body.content || ev.attributes?.['gen_ai.prompt'] || ev.attributes?.['gen_ai.completion'];
+      if (name === 'gen_ai.system.message' || name === 'gen_ai.user.message') {
+        const role = name.includes('system') ? 'system' : 'user';
+        if (content) extractedInputs.push({ role, content });
+      } else if (name === 'gen_ai.assistant.message' || name === 'gen_ai.choice') {
+        const msg = body.message || {};
+        const outContent = msg.content || content;
+        if (outContent) extractedOutputs.push({ role: 'assistant', content: outContent });
+      }
+    }
+    if (!inputMessages && extractedInputs.length > 0) inputMessages = extractedInputs;
+    if (!outputMessages && extractedOutputs.length > 0) outputMessages = extractedOutputs;
+  }
+
   if (inputMessages)  assign(variables, 'gen_ai.input.messages',  JSON.stringify(inputMessages));
   if (outputMessages) assign(variables, 'gen_ai.output.messages', JSON.stringify(outputMessages));
   const toolInput = raw['gen_ai.tool.call.arguments'] ?? genAi.tool?.call?.arguments;

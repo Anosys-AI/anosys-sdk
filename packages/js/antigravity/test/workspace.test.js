@@ -65,3 +65,38 @@ test('a committed workspace file cannot raise the level or redirect data (audit 
   assert.equal(out.consent, null);
   assert.equal(out.proxy, null);
 });
+
+test('runs run() with a workspace setting a collection ceiling without throwing TypeError (N1 fix)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-ws-run-'));
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(path.join(workspace, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, '.agents', 'anosys-env.json'), JSON.stringify({
+    ANOSYS_COLLECTION_LEVEL: 'metadata',
+  }));
+
+  const hookRunnerPath = require.resolve('../src/hookRunner');
+  const inputPayload = JSON.stringify({
+    cwd: workspace,
+    workspacePaths: [workspace],
+  });
+
+  const env = { ...process.env, HOME: root };
+  delete env.ANOSYS_DISABLE;
+
+  const result = execFileSync(process.execPath, [hookRunnerPath, 'stop'], {
+    input: inputPayload,
+    env,
+    cwd: workspace,
+    encoding: 'utf8',
+  });
+
+  const parsed = JSON.parse(result.trim());
+  assert.deepEqual(parsed, {});
+
+  const logFile = path.join(root, '.gemini', 'antigravity', 'state', 'anosys_hook.log');
+  if (fs.existsSync(logFile)) {
+    const logContent = fs.readFileSync(logFile, 'utf8');
+    assert.ok(!logContent.includes('TypeError'), `Log contains TypeError: ${logContent}`);
+    assert.ok(!logContent.includes('error on stop'), `Log contains error on stop: ${logContent}`);
+  }
+});

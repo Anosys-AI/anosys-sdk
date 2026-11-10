@@ -26,6 +26,7 @@ exports.encryptPayload = encryption.encryptPayload;
 exports.OFF = privacy.OFF;
 exports.METADATA = privacy.METADATA;
 exports.FULL = privacy.FULL;
+exports.RANK = privacy.RANK;
 exports.LEVELS = privacy.LEVELS;
 exports.POLICY_VERSION = privacy.POLICY_VERSION;
 exports.POLICY_URL = privacy.POLICY_URL;

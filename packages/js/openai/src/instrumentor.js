@@ -106,7 +106,7 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
     provider.register();
   }
 
-  const instrumentation = new OpenAIInstrumentation({ enrichTokens: true });
+  const instrumentation = new OpenAIInstrumentation({ enrichTokens: true, captureMessageContent: true });
   instrumentation.setTracerProvider(provider);
   instrumentation.enable();
 

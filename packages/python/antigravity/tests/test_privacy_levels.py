@@ -101,8 +101,8 @@ def test_workspace_ceiling_cannot_elevate_off_to_metadata(tmp_path, monkeypatch)
     hr._workspace_ceiling = None
     hr.load_runtime_environment(cwd=ws)
 
-    level, source = hr.effective_level(cwd=str(ws))
+    level, _ = hr.effective_level(cwd=str(ws))
     assert level == OFF
     if hr._workspace_ceiling and hr._rank_lower(hr._workspace_ceiling, level):
-        level, source = hr._workspace_ceiling, "workspace ceiling"
+        level = hr._workspace_ceiling
     assert level == OFF
