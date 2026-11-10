@@ -81,6 +81,7 @@ test('transformCodexTurn matches AnoSys schema', () => {
   assert.equal(mapped.cvs200, 'CodexHook');
   assert.equal(mapped.sessionId, 'session-js');
   assert.equal(mapped.uuid, 'turn-js-1');
+  assert.equal(mapped.raw_uuid, 'turn-js-1');
   assert.equal(mapped.userPrompt, 'Run build');
   assert.equal(mapped.assistantText, 'Build successful.');
   assert.equal(mapped.model, 'gpt-4o');
@@ -93,6 +94,69 @@ test('transformCodexTurn matches AnoSys schema', () => {
   assert.equal(mapped.tool_count, 1);
   assert.ok(mapped.commands.includes('npm run build'));
   assert.ok(mapped.cvs199);
+  // In native CC schema mode, duplicate CV columns are not emitted
+  assert.equal(mapped.cvn41, undefined);
+  assert.equal(mapped.cvs90, undefined);
+  assert.equal(mapped.cvs13, undefined);
+});
+
+test('transformCodexTurn fallback CV mode when not CC pixel', (t) => {
+  const oldEnv = process.env.ANOSYS_CODEX_PIXEL;
+  process.env.ANOSYS_CODEX_PIXEL = 'false';
+  t.after(() => {
+    if (oldEnv === undefined) delete process.env.ANOSYS_CODEX_PIXEL;
+    else process.env.ANOSYS_CODEX_PIXEL = oldEnv;
+  });
+
+  const turn = {
+    turn_id: 'turn-js-1',
+    model: 'gpt-4o',
+    model_provider: 'openai',
+    cwd: '/project/app',
+    permission_mode: 'auto',
+    user_prompt: 'Run build',
+    assistant_output: 'Build successful.',
+    turn_start_ms: 1700000000000,
+    turn_end_ms: 1700000004000,
+    duration_ms: 4000,
+    tokens: {
+      input_tokens: 1200,
+      output_tokens: 250,
+      total_tokens: 1450,
+      cached_input_tokens: 400,
+      reasoning_output_tokens: 50
+    },
+    tool_calls: [
+      {
+        tool: 'shell',
+        args: JSON.stringify({ command: 'npm run build' }),
+        output: 'Done',
+        call_id: 'c_build',
+        start_ts: 1700000001000,
+        end_ts: 1700000002000
+      }
+    ]
+  };
+
+  const mapped = transformCodexTurn(turn, 'session-js', 'turn-js-1');
+
+  assert.equal(mapped.cvs200, 'CodexHook');
+  assert.equal(mapped.cvs1, 'session-js');
+  assert.equal(mapped.cvs13, 'turn-js-1');
+  assert.equal(mapped.cvs4, 'Run build');
+  assert.equal(mapped.cvs5, 'Build successful.');
+  assert.equal(mapped.cvs9, 'gpt-4o');
+  assert.equal(mapped.cvs2, 'app');
+  assert.equal(mapped.cvn1, 1200);
+  assert.equal(mapped.cvn2, 250);
+  assert.equal(mapped.cvn4, 400);
+  assert.equal(mapped.cvb2, true);
+  assert.equal(mapped.cvn41, 1);
+  assert.ok(mapped.cvs90.includes('npm run build'));
+  assert.ok(mapped.cvs199);
+  // In fallback CV mode, native tool/token columns are not duplicated
+  assert.equal(mapped.commands, undefined);
+  assert.equal(mapped.tool_count, undefined);
 });
 
 test('installer manages config.toml lifecycle idempotently and preserves existing sections', () => {

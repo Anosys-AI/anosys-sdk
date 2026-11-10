@@ -27,16 +27,22 @@ const TURN = {
 };
 // Same golden set as Python
 const METADATA_KEYS = [
-  'session_id', 'sessionId', 'uuid', 'eventId', 'event_id', 'event_type', 'event_source_name',
+  'session_id', 'sessionId', 'uuid', 'raw_uuid', 'eventId', 'event_id', 'event_type', 'event_source_name',
   'timestamp', 'user_timestamp', 'debug', 'model', 'primary_model', 'model_provider', 'cwd', 'project',
   'input_tokens', 'output_tokens', 'total_tokens', 'cache_read', 'cache_creation', 'reasoning_tokens',
   'cost_estimate', 'incremental_input', 'incremental_output', 'incremental_total', 'incremental_cost',
   'incremental_cache_read', 'incremental_cache_creation', 'tool_count', 'has_thinking',
-  'integration_version', 'os_user', 'cvs198',
-  'cvs1', 'cvs2', 'cvs9', 'cvs12', 'cvs19', 'cvs32', 'cvs33', 'cvn1', 'cvn2', 'cvn3', 'cvn4', 'cvn5', 'cvn7',
-  'cvs200',
+  'integration_version', 'os_user', 'cvs198', 'cvs200',
 ].sort();
-const CONTENT_KEYS = ['user_prompt', 'userPrompt', 'assistant_text', 'assistantText', 'cvs4', 'cvs5', 'commands', 'cvs199'];
+const CONTENT_KEYS = ['user_prompt', 'userPrompt', 'assistant_text', 'assistantText', 'commands', 'cvs199'];
+
+const CV_METADATA_KEYS = [
+  'cvb1', 'cvb2', 'cvn1', 'cvn2', 'cvn3', 'cvn4', 'cvn5', 'cvn7', 'cvn41',
+  'cvs1', 'cvs2', 'cvs9', 'cvs12', 'cvs13', 'cvs17', 'cvs19', 'cvs32', 'cvs33',
+  'cvs198', 'cvs200', 'debug', 'eventId', 'event_id', 'event_source_name', 'event_type',
+  'timestamp', 'user_timestamp', 'uuid',
+].sort();
+const CV_CONTENT_KEYS = ['cvs4', 'cvs5', 'cvs90', 'cvs199'];
 const mapped = () => transformCodexTurn(TURN, 's1', 't1');
 
 function reset() {
@@ -59,8 +65,24 @@ test('metadata is the default and sends no content (same keys as Python)', () =>
   const record = hookRunner.prepareRecord(mapped(), METADATA);
   assert.deepEqual(Object.keys(record).sort(), METADATA_KEYS);
   assert.equal(record.cvs198, 'metadata;none');
-  assert.equal(record.cvs198, 'metadata;none');
   for (const k of CONTENT_KEYS) assert.ok(!(k in record));
+});
+
+test('legacy cv layout when targeting generic pixel', (t) => {
+  const oldEnv = process.env.ANOSYS_CODEX_PIXEL;
+  process.env.ANOSYS_CODEX_PIXEL = 'false';
+  t.after(() => {
+    if (oldEnv === undefined) delete process.env.ANOSYS_CODEX_PIXEL;
+    else process.env.ANOSYS_CODEX_PIXEL = oldEnv;
+  });
+  reset();
+  const record = hookRunner.prepareRecord(mapped(), METADATA);
+  assert.deepEqual(Object.keys(record).sort(), CV_METADATA_KEYS);
+  assert.equal(record.cvs198, 'metadata;none');
+  for (const k of CV_CONTENT_KEYS) assert.ok(!(k in record));
+
+  const fullRecord = hookRunner.prepareRecord(mapped(), FULL);
+  for (const k of CV_CONTENT_KEYS) assert.ok(k in fullRecord);
 });
 
 test('off sends nothing; full keeps content and scrubs secrets', () => {

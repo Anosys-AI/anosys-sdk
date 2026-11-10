@@ -10,6 +10,19 @@ const { INTEGRATION_VERSION } = require('./constants');
 const OS_USER = process.env.USERNAME || process.env.USER || 'unknown';
 const { BASE_METADATA_FIELDS } = require('anosys-sdk-core');
 
+function isCcPixel() {
+  const pt = (process.env.ANOSYS_PIXEL_TYPE || '').trim().toLowerCase();
+  if (pt) return ['cc', 'claudecode', 'codex', 'antigravity'].includes(pt);
+  if ((process.env.ANOSYS_ANTIGRAVITY_PIXEL || '').trim().toLowerCase() === 'false') return false;
+  if ((process.env.ANOSYS_CODEX_PIXEL || '').trim().toLowerCase() === 'false') return false;
+  if ((process.env.ANOSYS_CLAUDE_PIXEL || '').trim().toLowerCase() === 'false') return false;
+  const url = (process.env.ANOSYS_HOOK_ENDPOINT_URL || '').toLowerCase();
+  if (['/g/', '/generic/', '/c/', '/custom/', '/t/', '/otel/'].some((s) => url.includes(s))) {
+    return false;
+  }
+  return true;
+}
+
 // Fields sent at the `metadata` level (same list as the Python hook). Content (prompts,
 // answers, commands, viewed/written paths, queries, subagent tasks, errors, the active
 // document and the raw turn in cvs199) is `full`-only.
@@ -173,11 +186,12 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
   const toolErrorsStr = toolDetails.tool_errors.length > 0 ? JSON.stringify(toolDetails.tool_errors) : null;
   const workspacePathsStr = workspacePaths.length > 0 ? JSON.stringify(workspacePaths) : null;
 
-  const payload = {
+  const payload = isCcPixel() ? {
     // Identity
     session_id: sessionId,
     sessionId: sessionId,
     uuid: turnId,
+    raw_uuid: turnId,
     event_id: turnId,
     eventId: turnId,
     event_type: 'antigravity_turn',
@@ -197,13 +211,12 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
     // Environment
     cwd: cwd || null,
     project: project,
-    // IDE Metadata
-    active_document: turn.active_document || null,
-    active_document_language: turn.active_document_language || null,
-    cursor_line: turn.cursor_line || null,
-    client_timestamp_iso: turn.client_timestamp_iso || null,
-    user_settings_change: turn.user_settings_change || null,
+    // Run / user context
+    user_type: String(turn.user_source || 'USER_EXPLICIT'),
+    hook_name: meta.hook_name || 'Stop',
+    stop_reason: terminationReason ? String(terminationReason) : null,
     termination_reason: terminationReason,
+    error_obj: errorObj,
     // Metrics
     duration_ms: durationMs,
     tool_count: toolDetails.tool_count,
@@ -215,16 +228,51 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
     searched_queries: queriesStr,
     subagents_spawned: subagentsStr,
     has_thinking: Boolean(turn.has_thinking),
+    integration_version: INTEGRATION_VERSION,
+    os_user: OS_USER,
+    // IDE Context (descriptive names)
+    active_document: turn.active_document || null,
+    active_document_language: turn.active_document_language || null,
+    cursor_line: turn.cursor_line || null,
+    client_timestamp_iso: turn.client_timestamp_iso || null,
+    user_settings_change: turn.user_settings_change || null,
     llm_step_count: (turn.llm_steps || []).length,
     fully_idle: fullyIdle,
     execution_num: executionNum,
-    error_obj: errorObj,
     transcript_path: transcriptPath,
     artifact_directory: artifactDir,
     workspace_paths: workspacePathsStr,
-    integration_version: INTEGRATION_VERSION,
-    os_user: OS_USER,
-    // CV Columns (CC Pixel)
+    // Non-native IDE fields mapped to dedicated CV columns (no native column in CC schema)
+    cvs70: turn.active_document || null,
+    cvs71: turn.active_document_language || null,
+    cvs72: turn.client_timestamp_iso || null,
+    cvs75: turn.user_settings_change || null,
+    cvs76: viewedPathsStr,
+    cvs77: queriesStr,
+    cvs78: subagentsStr,
+    cvs79: toolErrorsStr,
+    cvs88: transcriptPath,
+    cvs89: artifactDir,
+    cvs93: workspacePathsStr,
+    cvn8: typeof executionNum === 'number' ? executionNum : null,
+    cvn25: turn.cursor_line || null,
+    cvn26: (turn.llm_steps || []).length,
+    cvn27: turn.max_step_index || null,
+    cvn28: turn.step_count || null,
+    cvb3: typeof fullyIdle === 'boolean' ? fullyIdle : null,
+    // Raw backup & hook identifiers
+    cvs199: JSON.stringify(rawToSerialize),
+    cvs200: 'AntigravityHook',
+  } : {
+    // Fallback CV mode for generic/custom pixels without native tool/token columns
+    timestamp: startMs,
+    user_timestamp: startMs,
+    event_id: turnId,
+    eventId: turnId,
+    uuid: turnId,
+    event_type: 'antigravity_turn',
+    event_source_name: 'antigravity',
+    debug: false,
     cvs1: sessionId,
     cvs2: project,
     cvs4: userPrompt,
@@ -268,6 +316,7 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
     cvb1: false,
     cvb2: Boolean(turn.has_thinking),
     cvb3: typeof fullyIdle === 'boolean' ? fullyIdle : null,
+    // Raw backup & hook identifiers
     cvs199: JSON.stringify(rawToSerialize),
     cvs200: 'AntigravityHook',
   };
@@ -283,6 +332,7 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
 
 module.exports = {
   METADATA_FIELDS,
+  isCcPixel,
   extractToolDetails,
   transformAntigravityTurn,
 };

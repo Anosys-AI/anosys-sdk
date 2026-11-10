@@ -16,13 +16,31 @@ from anosys_sdk_core.privacy import BASE_METADATA_FIELDS
 INTEGRATION_VERSION = "0.2.0"
 OS_USER = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
 
+
+def is_cc_pixel() -> bool:
+    """Return True if targeting a pixel with native CC schema columns (Claude Code / Codex)."""
+    pt = os.environ.get("ANOSYS_PIXEL_TYPE", "").strip().lower()
+    if pt:
+        return pt in ("cc", "claudecode", "codex")
+    if os.environ.get("ANOSYS_CODEX_PIXEL", "").strip().lower() == "false":
+        return False
+    if os.environ.get("ANOSYS_CLAUDE_PIXEL", "").strip().lower() == "false":
+        return False
+    url = os.environ.get("ANOSYS_HOOK_ENDPOINT_URL", "").lower()
+    if any(seg in url for seg in ("/g/", "/generic/", "/c/", "/custom/", "/t/", "/otel/")):
+        return False
+    return True
+
+
 # Fields sent at the `metadata` level: the shared allowlist plus the Codex
-# CV columns that hold the same metadata. Everything else (prompts, answers,
+# fallback CV columns for generic pixels. Everything else (prompts, answers,
 # commands, written paths, the raw event log in cvs199) is `full`-only.
-METADATA_FIELDS = BASE_METADATA_FIELDS | {
-    "cvs1", "cvs2", "cvs9", "cvs12", "cvs19", "cvs32", "cvs33",
-    "cvn1", "cvn2", "cvn3", "cvn4", "cvn5", "cvn6", "cvn7",
+CV_METADATA_FIELDS = {
+    "cvs1", "cvs2", "cvs7", "cvs9", "cvs12", "cvs13", "cvs17", "cvs19", "cvs32", "cvs33",
+    "cvn1", "cvn2", "cvn3", "cvn4", "cvn5", "cvn6", "cvn7", "cvn41",
+    "cvb1", "cvb2",
 }
+METADATA_FIELDS = BASE_METADATA_FIELDS | CV_METADATA_FIELDS
 
 OPENAI_PRICING: Dict[str, Dict[str, float]] = {
     "gpt-4o": {
@@ -197,69 +215,95 @@ def transform_codex_turn(
     commands_str = json.dumps(commands) if commands else None
     written_paths_str = json.dumps(written_paths) if written_paths else None
 
-    payload: Dict[str, Any] = {
-        "session_id": session_id,
-        "sessionId": session_id,
-        "uuid": turn_id,
-        "eventId": turn_id,
-        "event_id": turn_id,
-        "event_type": "codex_turn",
-        "event_source_name": "codex",
-        "timestamp": start_ts,
-        "user_timestamp": start_ts,
-        "debug": False,
-        "user_prompt": user_prompt,
-        "userPrompt": user_prompt,
-        "assistant_text": assistant_text,
-        "assistantText": assistant_text,
-        "model": model,
-        "primary_model": model,
-        "model_provider": provider,
-        "cwd": cwd or None,
-        "project": project,
-        "permission_mode": perm_mode,
-        "permissionMode": perm_mode,
-        "sandbox_mode": sandbox_mode,
-        "duration_ms": duration_ms,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "total_tokens": total_tokens,
-        "cache_read": cached_tokens,
-        "cache_creation": cache_write_tokens,
-        "reasoning_tokens": reasoning_tokens,
-        "cost_estimate": cost_est,
-        "incremental_input": inc.get("input", input_tokens),
-        "incremental_output": inc.get("output", output_tokens),
-        "incremental_total": inc.get("total", total_tokens),
-        "incremental_cost": inc.get("cost", cost_est),
-        "incremental_cache_read": inc.get("cache_read", cached_tokens),
-        "incremental_cache_creation": inc.get("cache_creation", cache_write_tokens),
-        "tool_count": len(tool_calls),
-        "tool_duration_ms": tool_duration_ms,
-        "commands": commands_str,
-        "written_paths": written_paths_str,
-        "has_thinking": reasoning_tokens > 0,
-        "integration_version": INTEGRATION_VERSION,
-        "os_user": OS_USER,
-        "cvs1": session_id,
-        "cvs2": project,
-        "cvs4": user_prompt,
-        "cvs5": assistant_text,
-        "cvs9": model,
-        "cvs12": cwd,
-        "cvs19": "anosys-codex run",
-        "cvs32": INTEGRATION_VERSION,
-        "cvs33": OS_USER,
-        "cvn1": input_tokens,
-        "cvn2": output_tokens,
-        "cvn3": total_tokens,
-        "cvn4": cached_tokens,
-        "cvn5": cache_write_tokens,
-        "cvn6": duration_ms,
-        "cvn7": cost_est,
-        "cvs199": json.dumps(raw_to_serialize, default=str),
-        "cvs200": "CodexHook",
-    }
+    if is_cc_pixel():
+        payload: Dict[str, Any] = {
+            "session_id": session_id,
+            "sessionId": session_id,
+            "uuid": turn_id,
+            "raw_uuid": turn_id,
+            "eventId": turn_id,
+            "event_id": turn_id,
+            "event_type": "codex_turn",
+            "event_source_name": "codex",
+            "timestamp": start_ts,
+            "user_timestamp": start_ts,
+            "debug": False,
+            "user_prompt": user_prompt,
+            "userPrompt": user_prompt,
+            "assistant_text": assistant_text,
+            "assistantText": assistant_text,
+            "model": model,
+            "primary_model": model,
+            "model_provider": provider,
+            "cwd": cwd or None,
+            "project": project,
+            "permission_mode": perm_mode,
+            "permissionMode": perm_mode,
+            "sandbox_mode": sandbox_mode,
+            "duration_ms": duration_ms,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+            "cache_read": cached_tokens,
+            "cache_creation": cache_write_tokens,
+            "reasoning_tokens": reasoning_tokens,
+            "cost_estimate": cost_est,
+            "incremental_input": inc.get("input", input_tokens),
+            "incremental_output": inc.get("output", output_tokens),
+            "incremental_total": inc.get("total", total_tokens),
+            "incremental_cost": inc.get("cost", cost_est),
+            "incremental_cache_read": inc.get("cache_read", cached_tokens),
+            "incremental_cache_creation": inc.get("cache_creation", cache_write_tokens),
+            "tool_count": len(tool_calls),
+            "tool_duration_ms": tool_duration_ms,
+            "commands": commands_str,
+            "written_paths": written_paths_str,
+            "has_thinking": reasoning_tokens > 0,
+            "integration_version": INTEGRATION_VERSION,
+            "os_user": OS_USER,
+            # Raw backup & hook identifiers
+            "cvs199": json.dumps(raw_to_serialize, default=str),
+            "cvs200": "CodexHook",
+        }
+    else:
+        # Fallback CV mode for generic/custom pixels without native tool/token columns
+        payload = {
+            "timestamp": start_ts,
+            "user_timestamp": start_ts,
+            "event_id": turn_id,
+            "eventId": turn_id,
+            "uuid": turn_id,
+            "event_type": "codex_turn",
+            "event_source_name": "codex",
+            "debug": False,
+            "cvs1": session_id,
+            "cvs2": project,
+            "cvs4": user_prompt,
+            "cvs5": assistant_text,
+            "cvs7": perm_mode,
+            "cvs9": model,
+            "cvs12": cwd,
+            "cvs13": turn_id,
+            "cvs17": provider,
+            "cvs19": "anosys-codex run",
+            "cvs32": INTEGRATION_VERSION,
+            "cvs33": OS_USER,
+            "cvs90": commands_str,
+            "cvs91": written_paths_str,
+            "cvn1": input_tokens,
+            "cvn2": output_tokens,
+            "cvn3": total_tokens,
+            "cvn4": cached_tokens,
+            "cvn5": cache_write_tokens,
+            "cvn6": duration_ms,
+            "cvn7": cost_est,
+            "cvn41": len(tool_calls),
+            "cvb1": False,
+            "cvb2": reasoning_tokens > 0,
+            # Raw backup & hook identifiers
+            "cvs199": json.dumps(raw_to_serialize, default=str),
+            "cvs200": "CodexHook",
+        }
 
     # Collection level, secret scrubbing and encryption are applied by the hook runner
     return {k: v for k, v in payload.items() if v is not None}

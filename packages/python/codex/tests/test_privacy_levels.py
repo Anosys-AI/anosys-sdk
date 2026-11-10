@@ -29,16 +29,23 @@ TURN = {
 }
 
 METADATA_KEYS = {
-    "session_id", "sessionId", "uuid", "eventId", "event_id", "event_type", "event_source_name",
+    "session_id", "sessionId", "uuid", "raw_uuid", "eventId", "event_id", "event_type", "event_source_name",
     "timestamp", "user_timestamp", "debug", "model", "primary_model", "model_provider", "cwd", "project",
     "input_tokens", "output_tokens", "total_tokens", "cache_read", "cache_creation", "reasoning_tokens",
     "cost_estimate", "incremental_input", "incremental_output", "incremental_total", "incremental_cost",
     "incremental_cache_read", "incremental_cache_creation", "tool_count", "has_thinking",
-    "integration_version", "os_user", "cvs198",
-    "cvs1", "cvs2", "cvs9", "cvs12", "cvs19", "cvs32", "cvs33", "cvn1", "cvn2", "cvn3", "cvn4", "cvn5", "cvn7",
-    "cvs200",
+    "integration_version", "os_user", "cvs198", "cvs200",
 }
-CONTENT_KEYS = {"user_prompt", "userPrompt", "assistant_text", "assistantText", "cvs4", "cvs5", "commands", "cvs199"}
+CONTENT_KEYS = {"user_prompt", "userPrompt", "assistant_text", "assistantText", "commands", "cvs199"}
+
+CV_METADATA_KEYS = {
+    "event_id", "eventId", "uuid", "event_type", "event_source_name",
+    "timestamp", "user_timestamp", "debug",
+    "cvs1", "cvs2", "cvs9", "cvs12", "cvs13", "cvs17", "cvs19", "cvs32", "cvs33",
+    "cvn1", "cvn2", "cvn3", "cvn4", "cvn5", "cvn7", "cvn41", "cvb1", "cvb2",
+    "cvs198", "cvs200",
+}
+CV_CONTENT_KEYS = {"cvs4", "cvs5", "cvs90", "cvs199"}
 
 
 @pytest.fixture(autouse=True)
@@ -50,6 +57,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(hook_runner, "PENDING_FILE", tmp_path / "pending_records.jsonl")
     monkeypatch.setattr(hook_runner, "PAUSE_FILE", tmp_path / "paused.json")
     monkeypatch.setattr(hook_runner, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(hook_runner, "LOG_FILE", tmp_path / "anosys_hook.log")
     monkeypatch.setattr(hook_runner, "DRY_RUN", False)
     return tmp_path
 
@@ -62,8 +70,18 @@ def test_metadata_is_the_default_and_sends_no_content():
     record = hook_runner.prepare_record(mapped(), METADATA)
     assert set(record) == METADATA_KEYS
     assert record["cvs198"] == "metadata;none"
-    assert record["cvs198"] == "metadata;none"
     assert not CONTENT_KEYS & set(record)
+
+
+def test_legacy_cv_layout_metadata(monkeypatch):
+    monkeypatch.setenv("ANOSYS_CODEX_PIXEL", "false")
+    record = hook_runner.prepare_record(mapped(), METADATA)
+    assert set(record) == CV_METADATA_KEYS
+    assert record["cvs198"] == "metadata;none"
+    assert not CV_CONTENT_KEYS & set(record)
+
+    full_record = hook_runner.prepare_record(mapped(), FULL)
+    assert CV_CONTENT_KEYS <= set(full_record)
 
 
 def test_off_sends_nothing():

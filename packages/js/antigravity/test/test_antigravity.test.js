@@ -183,7 +183,63 @@ test('mapper.transformAntigravityTurn matches AnoSys schema', () => {
   assert.equal(payload.tool_count, 1);
   assert.equal(payload.integration_version, INTEGRATION_VERSION);
 
-  // CV columns
+  // Non-native IDE fields mapped to dedicated CV columns
+  assert.equal(payload.cvs70, '/test/suite.js');
+  assert.equal(payload.cvs71, 'LANGUAGE_JAVASCRIPT');
+  assert.equal(payload.cvn25, 55);
+  assert.equal(payload.cvs200, 'AntigravityHook');
+  assert.ok(payload.cvs199);
+
+  // In native CC schema mode, duplicate CV columns are not emitted
+  assert.equal(payload.cvs1, undefined);
+  assert.equal(payload.cvs2, undefined);
+  assert.equal(payload.cvs4, undefined);
+  assert.equal(payload.cvs5, undefined);
+  assert.equal(payload.cvs6, undefined);
+  assert.equal(payload.cvs9, undefined);
+  assert.equal(payload.cvs12, undefined);
+  assert.equal(payload.cvs17, undefined);
+  assert.equal(payload.cvn6, undefined);
+  assert.equal(payload.cvn41, undefined);
+  assert.equal(payload.cvb2, undefined);
+});
+
+test('mapper.transformAntigravityTurn fallback CV mode when not CC pixel', (t) => {
+  const oldEnv = process.env.ANOSYS_ANTIGRAVITY_PIXEL;
+  process.env.ANOSYS_ANTIGRAVITY_PIXEL = 'false';
+  t.after(() => {
+    if (oldEnv === undefined) delete process.env.ANOSYS_ANTIGRAVITY_PIXEL;
+    else process.env.ANOSYS_ANTIGRAVITY_PIXEL = oldEnv;
+  });
+
+  const turn = {
+    user_input: 'Write a unit test',
+    final_response: 'Unit test written and passed.',
+    model_name: 'gemini-2.5-pro',
+    start_ms: 1700000000000,
+    end_ms: 1700000005000,
+    active_document: '/test/suite.js',
+    active_document_language: 'LANGUAGE_JAVASCRIPT',
+    cursor_line: 55,
+    client_timestamp_iso: '2026-09-21T19:57:09+03:00',
+    has_thinking: true,
+    step_count: 5,
+    max_step_index: 4,
+    llm_steps: [{ content: 'Writing test...', start_ms: 1700000000000, end_ms: 1700000002000 }],
+    tool_steps: [
+      { name: 'write_to_file', args: { TargetFile: '/test/suite.js' }, duration_ms: 150 }
+    ],
+  };
+
+  const payload = transformAntigravityTurn(
+    turn,
+    'conv-js-123',
+    'conv-js-123_0',
+    { workspacePaths: ['/workspace/my-app'], terminationReason: 'model_stop' },
+    false
+  );
+
+  // Fallback CV columns
   assert.equal(payload.cvs1, 'conv-js-123');
   assert.equal(payload.cvs2, 'my-app');
   assert.equal(payload.cvs4, 'Write a unit test');
@@ -199,6 +255,10 @@ test('mapper.transformAntigravityTurn matches AnoSys schema', () => {
   assert.equal(payload.cvn41, 1);
   assert.equal(payload.cvb2, true);
   assert.equal(payload.cvs200, 'AntigravityHook');
+  assert.ok(payload.cvs199);
+  // Native tool/token columns not duplicated
+  assert.equal(payload.commands, undefined);
+  assert.equal(payload.tool_count, undefined);
 });
 
 test('installer manages hooks.json lifecycle idempotently and preserves existing hooks', () => {

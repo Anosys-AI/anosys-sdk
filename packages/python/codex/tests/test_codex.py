@@ -78,6 +78,7 @@ def test_transform_codex_turn():
     assert mapped["cvs200"] == "CodexHook"
     assert mapped["sessionId"] == "session-abc"
     assert mapped["uuid"] == "turn-123"
+    assert mapped["raw_uuid"] == "turn-123"
     assert mapped["userPrompt"] == "Refactor auth logic"
     assert mapped["assistantText"] == "Refactoring complete."
     assert mapped["model"] == "gpt-4o"
@@ -90,6 +91,62 @@ def test_transform_codex_turn():
     assert mapped["tool_count"] == 1
     assert "pytest" in mapped["commands"]
     assert "cvs199" in mapped
+    # In native CC schema mode, duplicate CV columns are not emitted
+    assert "cvn41" not in mapped
+    assert "cvs90" not in mapped
+    assert "cvs13" not in mapped
+
+
+def test_transform_codex_turn_fallback_cv(monkeypatch):
+    monkeypatch.setenv("ANOSYS_CODEX_PIXEL", "false")
+    turn = {
+        "turn_id": "turn-123",
+        "model": "gpt-4o",
+        "model_provider": "openai",
+        "cwd": "/workspace/project",
+        "permission_mode": "auto",
+        "user_prompt": "Refactor auth logic",
+        "assistant_output": "Refactoring complete.",
+        "turn_start_ms": 1700000000000,
+        "turn_end_ms": 1700000005000,
+        "duration_ms": 5000,
+        "tokens": {
+            "input_tokens": 1500,
+            "output_tokens": 300,
+            "total_tokens": 1800,
+            "cached_input_tokens": 500,
+            "cache_write_input_tokens": 0,
+            "reasoning_output_tokens": 100,
+        },
+        "tool_calls": [
+            {
+                "tool": "shell",
+                "args": json.dumps({"command": "pytest"}),
+                "output": "1 passed",
+                "call_id": "call_1",
+                "start_ts": 1700000001000,
+                "end_ts": 1700000002000,
+            }
+        ],
+    }
+    mapped = transform_codex_turn(turn, session_id="session-abc", turn_id="turn-123")
+    assert mapped["cvs200"] == "CodexHook"
+    assert mapped["cvs1"] == "session-abc"
+    assert mapped["cvs13"] == "turn-123"
+    assert mapped["cvs4"] == "Refactor auth logic"
+    assert mapped["cvs5"] == "Refactoring complete."
+    assert mapped["cvs9"] == "gpt-4o"
+    assert mapped["cvs2"] == "project"
+    assert mapped["cvn1"] == 1500
+    assert mapped["cvn2"] == 300
+    assert mapped["cvn4"] == 500
+    assert mapped["cvb2"] is True
+    assert mapped["cvn41"] == 1
+    assert "pytest" in mapped["cvs90"]
+    assert "cvs199" in mapped
+    # In fallback CV mode, native tool/token columns are not duplicated
+    assert "commands" not in mapped
+    assert "tool_count" not in mapped
 
 
 def test_installer_config_lifecycle():

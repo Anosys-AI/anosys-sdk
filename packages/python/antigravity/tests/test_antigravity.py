@@ -261,8 +261,74 @@ def test_transform_antigravity_turn():
     assert payload["fully_idle"] is True
     assert payload["execution_num"] == 1
     assert payload["integration_version"] == INTEGRATION_VERSION
+    assert payload["commands"] is not None and "kubectl apply" in payload["commands"]
 
-    # CV columns (CC pixel)
+    # Non-native IDE fields mapped to dedicated CV columns
+    assert payload["cvs70"] == "/src/deploy.py"
+    assert payload["cvs71"] == "LANGUAGE_PYTHON"
+    assert payload["cvn25"] == 100
+    assert payload["cvs200"] == "AntigravityHook"
+    assert "cvs199" in payload
+
+    # In native CC schema mode, duplicate CV columns are not emitted
+    assert "cvs1" not in payload
+    assert "cvs2" not in payload
+    assert "cvs4" not in payload
+    assert "cvs5" not in payload
+    assert "cvs6" not in payload
+    assert "cvs9" not in payload
+    assert "cvs12" not in payload
+    assert "cvs17" not in payload
+    assert "cvs90" not in payload
+    assert "cvn6" not in payload
+    assert "cvn41" not in payload
+    assert "cvb2" not in payload
+
+
+def test_transform_antigravity_turn_fallback_cv(monkeypatch):
+    monkeypatch.setenv("ANOSYS_ANTIGRAVITY_PIXEL", "false")
+    turn = {
+        "user_input": "Deploy the application",
+        "final_response": "Deployed to production.",
+        "model_name": "gemini-2.5-pro",
+        "start_ms": 1700000000000,
+        "end_ms": 1700000010000,
+        "active_document": "/src/deploy.py",
+        "active_document_language": "LANGUAGE_PYTHON",
+        "cursor_line": 100,
+        "client_timestamp_iso": "2026-09-21T19:57:09+03:00",
+        "user_settings_change": "Changed model",
+        "user_source": "USER_EXPLICIT",
+        "has_thinking": True,
+        "max_step_index": 15,
+        "step_count": 8,
+        "llm_steps": [{"content": "Deploying...", "thinking": "plan", "start_ms": 1700000000000, "end_ms": 1700000002000}],
+        "tool_steps": [
+            {
+                "name": "run_command",
+                "args": {"CommandLine": "kubectl apply -f k8s/"},
+                "output": "deployment created",
+                "duration_ms": 3500,
+            }
+        ],
+    }
+    hook_meta = {
+        "workspacePaths": ["/Users/dev/my-project"],
+        "transcriptPath": "/Users/dev/my-project/.gemini/antigravity/transcript.jsonl",
+        "artifactDirectoryPath": "/Users/dev/my-project/.gemini/antigravity/artifacts",
+        "terminationReason": "model_stop",
+        "fullyIdle": True,
+        "executionNum": 1,
+    }
+
+    payload = transform_antigravity_turn(
+        turn=turn,
+        session_id="conv-12345",
+        turn_id="conv-12345_0",
+        hook_metadata=hook_meta,
+    )
+
+    # Fallback CV columns
     assert payload["cvs1"] == "conv-12345"
     assert payload["cvs2"] == "my-project"
     assert payload["cvs4"] == "Deploy the application"
@@ -279,6 +345,10 @@ def test_transform_antigravity_turn():
     assert payload["cvb2"] is True
     assert payload["cvs200"] == "AntigravityHook"
     assert "kubectl apply" in payload["cvs90"]
+    assert "cvs199" in payload
+    # In fallback CV mode, native tool/token columns are not duplicated
+    assert "commands" not in payload
+    assert "tool_count" not in payload
 
 
 def test_installer_hooks_config_lifecycle(tmp_path: Path):

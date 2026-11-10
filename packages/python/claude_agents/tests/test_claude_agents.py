@@ -62,6 +62,7 @@ def _run(exporter, messages, **kwargs):
 
 
 def test_message_type_reads_wire_and_dataclasses():
+    pytest.importorskip("claude_agent_sdk")
     from claude_agent_sdk.types import AssistantMessage, ResultMessage, SystemMessage
     assert message_type({"type": "result"}) == "result"
     assert message_type(AssistantMessage(content=[], model="m")) == "assistant"

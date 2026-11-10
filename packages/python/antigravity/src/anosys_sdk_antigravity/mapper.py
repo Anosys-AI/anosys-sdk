@@ -16,6 +16,25 @@ from anosys_sdk_core.privacy import BASE_METADATA_FIELDS
 from anosys_sdk_antigravity.constants import INTEGRATION_VERSION
 
 OS_USER = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
+
+
+def is_cc_pixel() -> bool:
+    """Return True if targeting a pixel with native CC schema columns (Claude Code / Codex / Antigravity)."""
+    pt = os.environ.get("ANOSYS_PIXEL_TYPE", "").strip().lower()
+    if pt:
+        return pt in ("cc", "claudecode", "codex", "antigravity")
+    if os.environ.get("ANOSYS_ANTIGRAVITY_PIXEL", "").strip().lower() == "false":
+        return False
+    if os.environ.get("ANOSYS_CODEX_PIXEL", "").strip().lower() == "false":
+        return False
+    if os.environ.get("ANOSYS_CLAUDE_PIXEL", "").strip().lower() == "false":
+        return False
+    url = os.environ.get("ANOSYS_HOOK_ENDPOINT_URL", "").lower()
+    if any(seg in url for seg in ("/g/", "/generic/", "/c/", "/custom/", "/t/", "/otel/")):
+        return False
+    return True
+
+
 # Fields sent at the `metadata` level: the shared allowlist plus Antigravity's
 # own metadata and the CV columns that hold it. Content (prompts, answers,
 # commands, viewed/written paths, queries, subagent tasks, errors, the active
@@ -187,103 +206,142 @@ def transform_antigravity_turn(
     tool_errors_str = json.dumps(tool_details["tool_errors"]) if tool_details["tool_errors"] else None
     workspace_paths_str = json.dumps(workspace_paths) if workspace_paths else None
 
-    payload: Dict[str, Any] = {
-        # Identity
-        "session_id": session_id,
-        "sessionId": session_id,
-        "uuid": turn_id,
-        "event_id": turn_id,
-        "eventId": turn_id,
-        "event_type": "antigravity_turn",
-        "event_source_name": "antigravity",
-        "timestamp": start_ms,
-        "user_timestamp": start_ms,
-        "debug": False,
-        # Content
-        "user_prompt": user_prompt,
-        "userPrompt": user_prompt,
-        "assistant_text": assistant_text,
-        "assistantText": assistant_text,
-        # Model
-        "model": model,
-        "primary_model": model,
-        "model_provider": "google",
-        # Environment
-        "cwd": cwd or None,
-        "project": project,
-        # IDE Metadata
-        "active_document": turn.get("active_document"),
-        "active_document_language": turn.get("active_document_language"),
-        "cursor_line": turn.get("cursor_line"),
-        "client_timestamp_iso": turn.get("client_timestamp_iso"),
-        "user_settings_change": turn.get("user_settings_change"),
-        "termination_reason": termination_reason,
-        # Metrics
-        "duration_ms": duration_ms,
-        "tool_count": tool_details["tool_count"],
-        "tool_duration_ms": tool_details["tool_duration_ms"],
-        "tools_used": tool_details["tools_used"],
-        "commands": commands_str,
-        "written_paths": written_paths_str,
-        "viewed_paths": viewed_paths_str,
-        "searched_queries": queries_str,
-        "subagents_spawned": subagents_str,
-        "has_thinking": turn.get("has_thinking", False),
-        "llm_step_count": len(turn.get("llm_steps") or []),
-        "fully_idle": fully_idle,
-        "execution_num": execution_num,
-        "error_obj": error_obj,
-        "transcript_path": transcript_path,
-        "artifact_directory": artifact_dir,
-        "workspace_paths": workspace_paths_str,
-        "integration_version": INTEGRATION_VERSION,
-        "os_user": OS_USER,
-        # CV Columns (CC Pixel)
-        "cvs1": session_id,
-        "cvs2": project,
-        "cvs4": user_prompt,
-        "cvs5": assistant_text,
-        "cvs6": str(termination_reason) if termination_reason else None,
-        "cvs9": model,
-        "cvs12": cwd or None,
-        "cvs13": turn_id,
-        "cvs16": str(turn.get("user_source") or "USER_EXPLICIT"),
-        "cvs17": "google",
-        "cvs18": meta.get("hook_name") or "Stop",
-        "cvs19": "anosys-antigravity run",
-        "cvs25": str(error_obj) if error_obj else None,
-        "cvs32": INTEGRATION_VERSION,
-        "cvs33": OS_USER,
-        "cvs70": turn.get("active_document"),
-        "cvs71": turn.get("active_document_language"),
-        "cvs72": turn.get("client_timestamp_iso"),
-        "cvs75": turn.get("user_settings_change"),
-        "cvs76": viewed_paths_str,
-        "cvs77": queries_str,
-        "cvs78": subagents_str,
-        "cvs79": tool_errors_str,
-        "cvs88": transcript_path,
-        "cvs89": artifact_dir,
-        "cvs90": commands_str,
-        "cvs91": written_paths_str,
-        "cvs93": workspace_paths_str,
-        "cvn1": 0,
-        "cvn2": 0,
-        "cvn3": 0,
-        "cvn6": duration_ms,
-        "cvn7": 0.0,
-        "cvn8": execution_num if isinstance(execution_num, (int, float)) else None,
-        "cvn25": turn.get("cursor_line"),
-        "cvn26": len(turn.get("llm_steps") or []),
-        "cvn27": turn.get("max_step_index"),
-        "cvn28": turn.get("step_count"),
-        "cvn39": tool_details["tool_duration_ms"],
-        "cvn41": tool_details["tool_count"],
-        "cvb1": False,
-        "cvb2": turn.get("has_thinking", False),
-        "cvb3": fully_idle if isinstance(fully_idle, bool) else None,
-        "cvs199": json.dumps(raw_to_serialize, default=str),
-        "cvs200": "AntigravityHook",
-    }
+    if is_cc_pixel():
+        payload: Dict[str, Any] = {
+            # Identity
+            "session_id": session_id,
+            "sessionId": session_id,
+            "uuid": turn_id,
+            "raw_uuid": turn_id,
+            "event_id": turn_id,
+            "eventId": turn_id,
+            "event_type": "antigravity_turn",
+            "event_source_name": "antigravity",
+            "timestamp": start_ms,
+            "user_timestamp": start_ms,
+            "debug": False,
+            # Content
+            "user_prompt": user_prompt,
+            "userPrompt": user_prompt,
+            "assistant_text": assistant_text,
+            "assistantText": assistant_text,
+            # Model
+            "model": model,
+            "primary_model": model,
+            "model_provider": "google",
+            # Environment
+            "cwd": cwd or None,
+            "project": project,
+            # Run / user context
+            "user_type": str(turn.get("user_source") or "USER_EXPLICIT"),
+            "hook_name": meta.get("hook_name") or "Stop",
+            "stop_reason": str(termination_reason) if termination_reason else None,
+            "termination_reason": termination_reason,
+            "error_obj": error_obj,
+            # Metrics
+            "duration_ms": duration_ms,
+            "tool_count": tool_details["tool_count"],
+            "tool_duration_ms": tool_details["tool_duration_ms"],
+            "tools_used": tool_details["tools_used"],
+            "commands": commands_str,
+            "written_paths": written_paths_str,
+            "viewed_paths": viewed_paths_str,
+            "searched_queries": queries_str,
+            "subagents_spawned": subagents_str,
+            "has_thinking": turn.get("has_thinking", False),
+            "integration_version": INTEGRATION_VERSION,
+            "os_user": OS_USER,
+            # IDE Context (descriptive names)
+            "active_document": turn.get("active_document"),
+            "active_document_language": turn.get("active_document_language"),
+            "cursor_line": turn.get("cursor_line"),
+            "client_timestamp_iso": turn.get("client_timestamp_iso"),
+            "user_settings_change": turn.get("user_settings_change"),
+            "llm_step_count": len(turn.get("llm_steps") or []),
+            "fully_idle": fully_idle,
+            "execution_num": execution_num,
+            "transcript_path": transcript_path,
+            "artifact_directory": artifact_dir,
+            "workspace_paths": workspace_paths_str,
+            # Non-native IDE fields mapped to dedicated CV columns (no native column in CC schema)
+            "cvs70": turn.get("active_document"),
+            "cvs71": turn.get("active_document_language"),
+            "cvs72": turn.get("client_timestamp_iso"),
+            "cvs75": turn.get("user_settings_change"),
+            "cvs76": viewed_paths_str,
+            "cvs77": queries_str,
+            "cvs78": subagents_str,
+            "cvs79": tool_errors_str,
+            "cvs88": transcript_path,
+            "cvs89": artifact_dir,
+            "cvs93": workspace_paths_str,
+            "cvn8": execution_num if isinstance(execution_num, (int, float)) else None,
+            "cvn25": turn.get("cursor_line"),
+            "cvn26": len(turn.get("llm_steps") or []),
+            "cvn27": turn.get("max_step_index"),
+            "cvn28": turn.get("step_count"),
+            "cvb3": fully_idle if isinstance(fully_idle, bool) else None,
+            # Raw backup & hook identifiers
+            "cvs199": json.dumps(raw_to_serialize, default=str),
+            "cvs200": "AntigravityHook",
+        }
+    else:
+        # Fallback CV mode for generic/custom pixels without native tool/token columns
+        payload = {
+            "timestamp": start_ms,
+            "user_timestamp": start_ms,
+            "event_id": turn_id,
+            "eventId": turn_id,
+            "uuid": turn_id,
+            "event_type": "antigravity_turn",
+            "event_source_name": "antigravity",
+            "debug": False,
+            "cvs1": session_id,
+            "cvs2": project,
+            "cvs4": user_prompt,
+            "cvs5": assistant_text,
+            "cvs6": str(termination_reason) if termination_reason else None,
+            "cvs9": model,
+            "cvs12": cwd or None,
+            "cvs13": turn_id,
+            "cvs16": str(turn.get("user_source") or "USER_EXPLICIT"),
+            "cvs17": "google",
+            "cvs18": meta.get("hook_name") or "Stop",
+            "cvs19": "anosys-antigravity run",
+            "cvs25": str(error_obj) if error_obj else None,
+            "cvs32": INTEGRATION_VERSION,
+            "cvs33": OS_USER,
+            "cvs70": turn.get("active_document"),
+            "cvs71": turn.get("active_document_language"),
+            "cvs72": turn.get("client_timestamp_iso"),
+            "cvs75": turn.get("user_settings_change"),
+            "cvs76": viewed_paths_str,
+            "cvs77": queries_str,
+            "cvs78": subagents_str,
+            "cvs79": tool_errors_str,
+            "cvs88": transcript_path,
+            "cvs89": artifact_dir,
+            "cvs90": commands_str,
+            "cvs91": written_paths_str,
+            "cvs93": workspace_paths_str,
+            "cvn1": 0,
+            "cvn2": 0,
+            "cvn3": 0,
+            "cvn6": duration_ms,
+            "cvn7": 0.0,
+            "cvn8": execution_num if isinstance(execution_num, (int, float)) else None,
+            "cvn25": turn.get("cursor_line"),
+            "cvn26": len(turn.get("llm_steps") or []),
+            "cvn27": turn.get("max_step_index"),
+            "cvn28": turn.get("step_count"),
+            "cvn39": tool_details["tool_duration_ms"],
+            "cvn41": tool_details["tool_count"],
+            "cvb1": False,
+            "cvb2": turn.get("has_thinking", False),
+            "cvb3": fully_idle if isinstance(fully_idle, bool) else None,
+            # Raw backup & hook identifiers
+            "cvs199": json.dumps(raw_to_serialize, default=str),
+            "cvs200": "AntigravityHook",
+        }
 
     return {k: v for k, v in payload.items() if v is not None}
