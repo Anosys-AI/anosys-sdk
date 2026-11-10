@@ -152,7 +152,16 @@ export function extractSpanInfo(span) {
   if (modelConfig) assign(variables, 'llm_invocation_parameters', modelConfig);
 
   // Streaming
-  const isStreaming = !!(raw['llm.is_streaming'] ?? raw['gen_ai.is_streaming'] ?? req.parameters?.stream);
+  let parsedConfig = modelConfig;
+  if (typeof parsedConfig === 'string') {
+    try { parsedConfig = JSON.parse(parsedConfig); } catch { /* ignore */ }
+  }
+  const isStreaming = !!(
+    raw['llm.is_streaming'] ??
+    raw['gen_ai.is_streaming'] ??
+    req.parameters?.stream ??
+    (typeof parsedConfig === 'object' && parsedConfig?.stream)
+  );
   assign(variables, 'is_streaming', isStreaming);
 
   // Source tag

@@ -133,12 +133,14 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     resource_attrs = (dig(span, 'resource', 'attributes') or {})
     server_addr = (
         resource_attrs.get('server.address') or 
+        dig(attributes, 'server', 'address') or
         attributes.get('server.address') or 
         attributes.get('net.peer.name') or 
         'api.openai.com'
     )
     server_port = (
         resource_attrs.get('server.port') or 
+        dig(attributes, 'server', 'port') or
         attributes.get('server.port') or 
         attributes.get('net.peer.port') or 
         443
