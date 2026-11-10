@@ -145,3 +145,15 @@ test('install keeps another notify and uninstall restores it, also when ours is 
   removeCodexConfig(cfg);
   assert.equal(loadToml(cfg).notify, undefined);
 });
+
+test('a multi-line notify array is replaced, not duplicated (audit 4.4)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-notify-'));
+  const file = path.join(dir, 'config.toml');
+  fs.writeFileSync(file, 'model = "o3"\nnotify = [\n  "python3",\n  "/x/notify.py",\n  "--arg=[1]",\n]\n\n[tui]\nnotify = true\n');
+  updateCodexConfig(null, file);
+  const content = fs.readFileSync(file, 'utf8');
+  assert.equal((content.match(/^notify =/gm) || []).length, 2); // ours (top level) + [tui].notify
+  assert.ok(content.indexOf('notify = [') < content.indexOf('[tui]'));
+  assert.ok(content.includes('/x/notify.py'));
+  assert.ok(!content.includes('"python3",\n'));
+});

@@ -227,3 +227,17 @@ def test_validate_api_key_cc_pixel():
         assert validate_api_key("t-key", "cc") is False
 
 
+
+
+def test_multiline_notify_is_replaced_not_duplicated(tmp_path):
+    """Audit 4.4: a notify array written over several lines is found and chained, the TOML stays valid."""
+    config = tmp_path / "config.toml"
+    config.write_text('model = "o3"\nnotify = [\n  "python3",\n  "/x/notify.py",\n  "--arg=[1]",\n]\n\n[tui]\nnotify = true\n')
+    update_codex_config(path=config)
+    data = load_toml(config)
+    assert has_anosys_hook(data)
+    assert data["tui"]["notify"] is True
+    top = config.read_text().split("[tui]")[0]
+    assert top.count("notify =") == 1
+    assert '"python3",\n' not in config.read_text()
+    assert "/x/notify.py" in str(data["notify"])   # the previous notifier is chained

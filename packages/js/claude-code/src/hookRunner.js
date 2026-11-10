@@ -176,7 +176,7 @@ function getStdinContext() {
   try {
     // Check if stdin has data (non-TTY = piped input)
     if (process.stdin.isTTY) return null;
-    const data = fs.readFileSync('/dev/stdin', 'utf8');
+    const data = fs.readFileSync(0, 'utf8'); // fd 0 works on every platform (/dev/stdin does not exist on Windows)
     if (!data || !data.trim()) return null;
     return JSON.parse(data);
   } catch (_) {

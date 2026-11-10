@@ -38,6 +38,7 @@ Components:
   antigravity       packages/python/antigravity       (anosys-antigravity)
   anthropic-py      packages/python/anthropic         (anosys-sdk-anthropic)
   claude-agents-py  packages/python/claude_agents     (anosys-sdk-claude-agents)
+  core-js           packages/js/core                  (anosys-sdk-core)
   openai-js         packages/js/openai                (anosys-sdk-openai)
   openai-agents-js  packages/js/openai-agents         (anosys-sdk-openai-agents)
   claude-code-js    packages/js/claude-code           (anosys-sdk-claude-code)
@@ -78,6 +79,7 @@ case "$component" in
   antigravity)       dir="packages/python/antigravity";   lang="python" ;;
   anthropic-py)      dir="packages/python/anthropic";     lang="python" ;;
   claude-agents-py)  dir="packages/python/claude_agents"; lang="python" ;;
+  core-js)           dir="packages/js/core";              lang="node"   ;;
   openai-js)         dir="packages/js/openai";            lang="node"   ;;
   openai-agents-js)  dir="packages/js/openai-agents";     lang="node"   ;;
   claude-code-js)    dir="packages/js/claude-code";       lang="node"   ;;

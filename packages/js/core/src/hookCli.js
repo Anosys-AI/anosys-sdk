@@ -167,7 +167,49 @@ async function runHookSafely(fn, writeLog = null) {
   }
 }
 
+// ── hook command ──────────────────────────────────────────────────────────────
+
+function _inNpxCache(file) {
+  return file.split(path.sep).includes('_npx');
+}
+
+function _onPath(binName) {
+  const exts = process.platform === 'win32' ? ['.cmd', '.exe', ''] : [''];
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = path.join(dir, binName + ext);
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        if (!_inNpxCache(fs.realpathSync(candidate))) return candidate;
+      } catch { /* not here */ }
+    }
+  }
+  return null;
+}
+
+/**
+ * The argv a coding tool runs for the hook: this Node and the CLI by absolute
+ * path. When the installer itself runs from the npx cache (`npx <pkg> install`),
+ * that path is temporary, so use the installed bin on PATH, or else `npx -y <pkg>`.
+ */
+function hookCliCommand({ cliPath, binName, packageName }) {
+  if (!_inNpxCache(cliPath)) return [process.execPath, cliPath, 'run'];
+  const bin = _onPath(binName);
+  if (bin) return [bin, 'run'];
+  process.stderr.write(`AnoSys: ${packageName} is not installed globally; the hook will run it with npx `
+    + `(install it with \`npm i -g ${packageName}\` for faster hooks).\n`);
+  return ['npx', '-y', packageName, 'run'];
+}
+
+/** The same command as one shell string, each part quoted. */
+function hookCliCommandString(opts) {
+  return hookCliCommand(opts).map((part) => (/[\s"]/.test(part) || path.isAbsolute(part) ? `"${part}"` : part)).join(' ');
+}
+
 module.exports = {
+  hookCliCommand,
+  hookCliCommandString,
   runHookSafely,
   POLICY_SUMMARY,
   createHookLog,

@@ -4,12 +4,13 @@
 
 const path = require('path');
 const os = require('os');
+const { hookCliCommandString } = require('anosys-sdk-core');
 
 const INTEGRATION_VERSION = '0.2.0';
 const HARNESS_NAME = 'antigravity';
 const HOOK_NAME = 'anosys-tracing';
-// The hook command: this Node and this CLI by absolute path, never a PATH lookup
-const HOOK_COMMAND = `"${process.execPath}" "${path.join(__dirname, 'cli.js')}" run`;
+// The hook command: this Node and this CLI by absolute path (installed bin when run through npx)
+const HOOK_COMMAND = hookCliCommandString({ cliPath: path.join(__dirname, 'cli.js'), binName: 'anosys-antigravity', packageName: 'anosys-sdk-antigravity' });
 
 const GLOBAL_CONFIG_DIR = path.join(os.homedir(), '.gemini', 'config');
 const GLOBAL_HOOKS_FILE = path.join(GLOBAL_CONFIG_DIR, 'hooks.json');

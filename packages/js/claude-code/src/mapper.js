@@ -1188,8 +1188,9 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
       cvs87: originStr,
       cvs88: imagePasteIdsStr,
       cvs89: fileAttachmentsStr,
-      cvs90: writtenPathsStr,
-      cvs91: commandsStr,
+      // same columns as Codex and Antigravity (one CC table): cvs90 = commands, cvs91 = written paths
+      cvs90: commandsStr,
+      cvs91: writtenPathsStr,
       cvs92: worktreeOriginalCwd,
       cvs93: worktreePath,
       cvs94: worktreeName,

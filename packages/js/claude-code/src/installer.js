@@ -9,6 +9,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { hookCliCommandString } = require('anosys-sdk-core');
 
 const ANOSYS_ENV_KEYS = new Set([
   'ANOSYS_HOOK_ENDPOINT_URL',
@@ -32,9 +33,9 @@ const ANOSYS_ENV_KEYS = new Set([
 // Markers of every Stop-hook form this package has ever written
 const HOOK_MARKERS = ['anosys-sdk-claude-code', 'anosys_sdk_claude_code'];
 
-/** The Stop-hook command: this Node and this CLI by absolute path, never npx or a PATH lookup. */
+/** The Stop-hook command: this Node and this CLI by absolute path (installed bin when run through npx). */
 function hookCommand() {
-  return `"${process.execPath}" "${path.join(__dirname, 'cli.js')}" run`;
+  return hookCliCommandString({ cliPath: path.join(__dirname, 'cli.js'), binName: 'anosys-sdk-claude-code', packageName: 'anosys-sdk-claude-code' });
 }
 
 const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');

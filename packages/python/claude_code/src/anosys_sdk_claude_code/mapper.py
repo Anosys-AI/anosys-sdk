@@ -746,8 +746,9 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
             'cvs87': originStr or U,
             'cvs88': imagePasteIdsStr or U,
             'cvs89': fileAttachmentsStr or U,
-            'cvs90': writtenPathsStr or U,
-            'cvs91': commandsStr or U,
+            # same columns as Codex and Antigravity (one CC table): cvs90 = commands, cvs91 = written paths
+            'cvs90': commandsStr or U,
+            'cvs91': writtenPathsStr or U,
             'cvs92': (record.get('worktreeSession', {}).get('originalCwd') if isinstance(record.get('worktreeSession'), dict) else U),
             'cvs93': (record.get('worktreeSession', {}).get('worktreePath') if isinstance(record.get('worktreeSession'), dict) else U),
             'cvs94': (record.get('worktreeSession', {}).get('worktreeName') if isinstance(record.get('worktreeSession'), dict) else U),

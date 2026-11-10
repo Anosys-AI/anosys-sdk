@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const https = require('https');
+const { hookCliCommand } = require('anosys-sdk-core');
 
 const HOOK_COMMAND = 'anosys-codex run'; // legacy form, still recognized on uninstall
 const INGESTION_URL = 'https://api.anosys.ai/ingestion';
@@ -13,9 +14,9 @@ const HOOK_MARKERS = ['anosys-codex', 'anosys_sdk_codex', 'anosys-sdk-codex'];
 // and called after ours (the convention the Codex Computer Use wrapper uses).
 const PREVIOUS_NOTIFY_FLAG = '--previous-notify';
 
-/** The notify command: this Node binary and our CLI by absolute path, never a bare PATH lookup. */
+/** The notify command: this Node binary and our CLI by absolute path (installed bin when run through npx). */
 function hookCommand() {
-  return [process.execPath, path.join(__dirname, 'cli.js'), 'run'];
+  return hookCliCommand({ cliPath: path.join(__dirname, 'cli.js'), binName: 'anosys-codex', packageName: 'anosys-sdk-codex' });
 }
 
 function getCodexHome() {
@@ -138,7 +139,34 @@ function notifyWithoutOurs(notify) {
 }
 
 // One top-level `notify = [...]` line (its strings may themselves contain brackets)
-const NOTIFY_LINE = /^[ \t]*notify[ \t]*=[^\n]*(?:\n|$)/m;
+/**
+ * Start and end of the top-level `notify = ...` entry, including a value spanning several
+ * lines and brackets inside strings (same as Python _notify_span). Entries inside a
+ * [table] are not the top-level key and are ignored.
+ */
+function notifySpan(content) {
+  const header = /^[ \t]*\[/m.exec(content);
+  const limit = header ? header.index : content.length;
+  const re = /^[ \t]*notify[ \t]*=[ \t]*/gm;
+  const m = re.exec(content);
+  if (!m || m.index >= limit) return null;
+  let i = m.index + m[0].length;
+  if (content[i] === '[') {
+    let depth = 0;
+    let quote = null;
+    for (; i < content.length; i++) {
+      const ch = content[i];
+      if (quote) {
+        if (ch === '\\' && quote === '"') i++;
+        else if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === '[') depth++;
+      else if (ch === ']' && --depth === 0) break;
+    }
+  }
+  const end = content.indexOf('\n', i);
+  return [m.index, end === -1 ? content.length : end + 1];
+}
 
 function writeAtomic(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -151,7 +179,8 @@ function setNotify(filePath, notify) {
   const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
   const line = notify ? `notify = [${notify.map(v => JSON.stringify(v)).join(', ')}]\n` : '';
   let next;
-  if (NOTIFY_LINE.test(content)) next = content.replace(NOTIFY_LINE, line);
+  const span = notifySpan(content);
+  if (span) next = content.slice(0, span[0]) + line + content.slice(span[1]);
   else next = line ? (content ? `${line}\n${content}` : line) : content;
   writeAtomic(filePath, next);
 }

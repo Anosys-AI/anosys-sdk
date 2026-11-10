@@ -15,7 +15,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import tomllib  # Python 3.11+
@@ -157,7 +157,42 @@ def _toml_array(values: List[str]) -> str:
 
 
 # One top-level `notify = [...]` line (its strings may themselves contain brackets)
-_NOTIFY_LINE = re.compile(r'^[ \t]*notify[ \t]*=[^\n]*(?:\n|$)', re.MULTILINE)
+_NOTIFY_START = re.compile(r'^[ \t]*notify[ \t]*=[ \t]*', re.MULTILINE)
+_TABLE_HEADER = re.compile(r'^[ \t]*\[', re.MULTILINE)
+
+
+def _notify_span(content: str) -> Optional[Tuple[int, int]]:
+    """
+    Start and end of the top-level ``notify = ...`` entry, including a value that
+    spans several lines (``notify = [\n  "a",\n  "b",\n]``) and brackets inside
+    strings. Entries inside a [table] are not the top-level key and are ignored.
+    """
+    header = _TABLE_HEADER.search(content)
+    limit = header.start() if header else len(content)
+    m = _NOTIFY_START.search(content, 0, limit)
+    if not m:
+        return None
+    i = m.end()
+    if i < len(content) and content[i] == "[":
+        depth, quote = 0, None
+        while i < len(content):
+            ch = content[i]
+            if quote:
+                if ch == "\\" and quote == '"':
+                    i += 1
+                elif ch == quote:
+                    quote = None
+            elif ch in ('"', "'"):
+                quote = ch
+            elif ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+    end = content.find("\n", i)
+    return m.start(), (len(content) if end == -1 else end + 1)
 
 
 def _write_atomic(path: Path, content: str) -> None:
@@ -178,8 +213,9 @@ def _write_atomic(path: Path, content: str) -> None:
 def _set_notify(path: Path, notify: Optional[List[str]]) -> None:
     content = path.read_text(encoding="utf-8") if path.is_file() else ""
     line = f"notify = {_toml_array(notify)}\n" if notify else ""
-    if _NOTIFY_LINE.search(content):
-        new_content = _NOTIFY_LINE.sub(line, content, count=1)
+    span = _notify_span(content)
+    if span:
+        new_content = content[:span[0]] + line + content[span[1]:]
     else:
         new_content = (f"{line}\n{content}" if content else line) if line else content
     _write_atomic(path, new_content)
