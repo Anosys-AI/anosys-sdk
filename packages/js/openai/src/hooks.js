@@ -119,7 +119,8 @@ export function extractSpanInfo(span) {
       return messages.map(m => {
         const content = m.message?.content || m.content;
         if (content) return content;
-        if (m.message?.tool_calls) return JSON.stringify(m.message.tool_calls);
+        const toolCalls = m.tool_calls || m.message?.tool_calls;
+        if (toolCalls) return typeof toolCalls === 'string' ? toolCalls : JSON.stringify(toolCalls);
         return JSON.stringify(m);
       }).filter(Boolean).join('\n---\n');
     }
@@ -168,8 +169,8 @@ export function extractSpanInfo(span) {
   if (outputMessages) assign(variables, 'gen_ai.output.messages', JSON.stringify(outputMessages));
   const toolInput = raw['gen_ai.tool.call.arguments'] ?? genAi.tool?.call?.arguments;
   const toolOutput = raw['gen_ai.tool.call.result'] ?? genAi.tool?.call?.result;
-  const rawLlmInput = raw['llm_input'] ?? attrs['llm_input'];
-  const rawLlmOutput = raw['llm_output'] ?? attrs['llm_output'];
+  const rawLlmInput = (raw['llm_input'] ?? attrs['llm_input']) || null;
+  const rawLlmOutput = (raw['llm_output'] ?? attrs['llm_output']) || null;
   assign(variables, 'llm_input',  toStrOrNull(rawLlmInput ?? attrs.input?.value ?? flattenMessages(inputMessages) ?? toolInput));
   assign(variables, 'llm_output', toStrOrNull(rawLlmOutput ?? attrs.output?.value ?? flattenMessages(outputMessages) ?? toolOutput));
   assign(variables, 'gen_ai.system_instructions', toStrOrNull(genAi.system_instructions ?? llm.system));

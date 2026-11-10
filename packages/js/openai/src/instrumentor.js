@@ -20,6 +20,7 @@ let _tracingInitialized = false;
 let _captureLevel = null; // set by AnosysOpenAILogger; until then the shared level applies (anosys-sdk-core capture.js)
 let _instrumentation = null;
 let _bridgeInstalled = false;
+let _activeExporter = null;
 
 // ── Bridge Logger: connects @opentelemetry/instrumentation-openai logs to spans ──
 
@@ -73,7 +74,12 @@ class BridgeLogger {
             }
             existing.push(item);
             span.setAttribute('gen_ai.output.messages', JSON.stringify(existing));
-            span.setAttribute('llm_output', existing.map((m) => m.content).filter(Boolean).join('\n---\n'));
+            const outText = existing.map((m) => {
+              if (m.content) return m.content;
+              if (m.tool_calls) return typeof m.tool_calls === 'string' ? m.tool_calls : JSON.stringify(m.tool_calls);
+              return '';
+            }).filter(Boolean).join('\n---\n');
+            if (outText) span.setAttribute('llm_output', outText);
           }
         }
       }
@@ -238,7 +244,12 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
 
   installBridgeLogger();
 
-  const exporter = new AnosysHttpExporter(getUserContext);
+  if (_activeExporter) {
+    if (getUserContext) _activeExporter._getUserContext = getUserContext;
+  }
+  const exporter = _activeExporter ?? new AnosysHttpExporter(getUserContext);
+  _activeExporter = exporter;
+
   let provider;
   const active = trace.getTracerProvider();
   const delegate = active && typeof active.getDelegate === 'function' ? active.getDelegate() : active;
@@ -251,7 +262,9 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
 
   if (hasMultiProcessor) {
     provider = delegate;
-    delegate._activeSpanProcessor._spanProcessors.push(mainProcessor);
+    if (!delegate._activeSpanProcessor._spanProcessors.some((p) => p._spanExporter === exporter || p.spanExporter === exporter)) {
+      delegate._activeSpanProcessor._spanProcessors.push(mainProcessor);
+    }
     for (const esp of extraSpanProcessors) {
       delegate._activeSpanProcessor._spanProcessors.push(esp);
     }
