@@ -53,7 +53,7 @@ test-js:
 	npm test --workspaces --prefix packages/js
 
 build-js:
-	npm run build --workspaces --prefix packages/js
+	npm run build --workspaces --if-present --prefix packages/js
 
 # ── Combined shortcuts ────────────────────────────────────────────────────────
 

@@ -6,6 +6,7 @@ Provides functions to transform data into the CVS format expected by the AnoSys 
 
 import json
 import logging
+import math
 from typing import Any, Dict, Optional, Union
 
 from anosys_sdk_core.models import (
@@ -35,7 +36,7 @@ def _get_type_key(value: Any) -> str:
     elif isinstance(value, int) and not isinstance(value, bool):
         return "int"
     elif isinstance(value, float):
-        return "float"
+        return "float" if math.isfinite(value) else "string"
     elif isinstance(value, str):
         return "string"
     else:
@@ -168,7 +169,7 @@ def reassign(
     # Detect source and use appropriate valid types if not provided
     if valid_types is None:
         source = data.get("from_source") or data.get("source") or data.get("cvs200")
-        if source == "ClaudeCodeHook":
+        if source in ("ClaudeCodeHook", "CodexHook", "AntigravityHook"):
             valid_types = CLAUDE_VALID_TYPES
         else:
             valid_types = OTEL_AI_VALID_TYPES
@@ -207,7 +208,8 @@ def reassign(
                 if value is None or (isinstance(value, str) and value.strip() == ""):
                     cvs_vars[cvs_var] = 0.0
                 else:
-                    cvs_vars[cvs_var] = float(value)
+                    f_val = float(value)
+                    cvs_vars[cvs_var] = f_val if math.isfinite(f_val) else 0.0
             except (ValueError, TypeError):
                 cvs_vars[cvs_var] = 0.0
         elif expected_type == "boolean":
@@ -235,8 +237,11 @@ def reassign(
                     cvs_vars[cvs_var] = 0
                 else:
                     f_val = float(str(value))
-                    cvs_vars[cvs_var] = int(f_val) if f_val == int(f_val) else f_val
-            except (ValueError, TypeError):
+                    if not math.isfinite(f_val):
+                        cvs_vars[cvs_var] = 0
+                    else:
+                        cvs_vars[cvs_var] = int(f_val) if f_val == int(f_val) else f_val
+            except (ValueError, TypeError, OverflowError):
                 cvs_vars[cvs_var] = 0
         elif cvs_var.startswith("cvb"):
             # Fallback for CVB prefix (Boolean)
@@ -250,5 +255,8 @@ def reassign(
                 cvs_vars[cvs_var] = json.dumps(value)
             else:
                 cvs_vars[cvs_var] = str(value)
-    
+
+    if "custom_mapping" in data and "otel_schema_url" in cvs_vars:
+        cvs_vars["otel_schema_url"] = json.dumps(key_to_cvs)
+
     return cvs_vars

@@ -65,7 +65,7 @@ function coerce(value, column, expectedType) {
   const asNumber = (fallback) => {
     if (typeof value === 'string' && value.trim() === '') return fallback;
     const n = Number(value);
-    return Number.isNaN(n) ? fallback : n;
+    return Number.isFinite(n) ? n : fallback;
   };
   if (expectedType === 'double') return asNumber(0.0);
   if (expectedType === 'boolean') return asBool();
@@ -86,7 +86,7 @@ function reassign(data, keyToCvs = BASE_KEY_MAPPING, startingIndices = null, val
   const source = typeof data === 'string' ? (() => { try { return JSON.parse(data); } catch { return {}; } })() : (data || {});
   if (!validTypes) {
     const from = source.from_source || source.source || source.cvs200;
-    validTypes = from === 'ClaudeCodeHook' ? CLAUDE_VALID_TYPES : OTEL_AI_VALID_TYPES;
+    validTypes = ['ClaudeCodeHook', 'CodexHook', 'AntigravityHook'].includes(from) ? CLAUDE_VALID_TYPES : OTEL_AI_VALID_TYPES;
   }
   const indices = { ...DEFAULT_STARTING_INDICES, ...(startingIndices || {}) };
   const used = new Set(Object.values(keyToCvs));
@@ -101,9 +101,13 @@ function reassign(data, keyToCvs = BASE_KEY_MAPPING, startingIndices = null, val
       column = allocateSlot(prefix, indices[indexKey], used);
       if (!column) { warnDropped(key, prefix); continue; }
       assigned[key] = column;
+      if (Object.isExtensible(keyToCvs)) keyToCvs[key] = column;
       indices[indexKey] = Number(column.slice(3)) + 1;
     }
     result[column] = coerce(value, column, validTypes[column] || validTypes[key]);
+  }
+  if ('custom_mapping' in source && 'otel_schema_url' in result) {
+    result.otel_schema_url = JSON.stringify({ ...keyToCvs, ...assigned });
   }
   return result;
 }

@@ -174,7 +174,7 @@ def prepare_record(mapped: Dict[str, Any], level: str) -> Dict[str, Any]:
     return prepare_hook_record(mapped, level, METADATA_FIELDS)
 
 
-def send(records: List[dict]) -> int:
+def send(records: List[dict], cwd: Any = None) -> int:
     """Deliver records (and queued retries) within the size limit. Returns the number accepted."""
     if DRY_RUN:
         log.info("[DRY RUN] Would send %d record(s)", len(records))
@@ -183,22 +183,23 @@ def send(records: List[dict]) -> int:
     if API_KEY:
         headers["anosys-apikey"] = API_KEY
     return deliver(INGESTION_URL, records, PendingQueue(PENDING_RECORDS_FILE), PAUSE_FILE, headers=headers,
-                   metadata_fields=METADATA_FIELDS)
+                   metadata_fields=METADATA_FIELDS, cwd=cwd)
 
 
 async def main():
     import asyncio
     await asyncio.sleep(0.5)
 
-    level, source = effective_level()
+    stdin_ctx = get_stdin_context()
+    stdin_cwd = (stdin_ctx or {}).get('cwd')
+
+    level, source = effective_level(cwd=stdin_cwd)
     if level == OFF:
         log.info("Collection is off (%s); nothing sent", source)
         return
     if is_paused(PAUSE_FILE):
         log.info("Collection paused after an authorization error; nothing sent")
         return
-
-    stdin_ctx = get_stdin_context()
 
     provided_path = EXPLICIT_TRANSCRIPT
     if not provided_path and stdin_ctx:
@@ -288,14 +289,14 @@ async def main():
         max_tokens_by_id: Dict[str, Dict[str, float]] = {}
         file_mtime = transcript.path.stat().st_mtime * 1000
         current_context: Dict[str, Any] = {
-            'sessionId': sid, 'cwd': None, 'gitBranch': None, 'version': None, 'slug': None,
+            'sessionId': sid, 'cwd': stdin_cwd, 'gitBranch': None, 'version': None, 'slug': None,
             'permissionMode': None, 'userType': None, 'is_agent': transcript.is_agent,
             'agent_id': transcript.agent_id, 'agent_type': transcript.agent_type,
             'agent_description': transcript.agent_description, 'file_mtime': file_mtime,
             'last_timestamp': None
         }
 
-        for i in range(last_line, total_lines):
+        for i in range(0, total_lines):
             item = parsed[i]
             if not item:
                 continue
@@ -339,6 +340,9 @@ async def main():
                         'total': delta_in + delta_out + delta_read + delta_create
                     }
 
+            if i < last_line:
+                continue
+
             try:
                 current_context['log_index'] = i
                 mapped = transform_record(msg, incremental, current_context)
@@ -347,7 +351,12 @@ async def main():
                 log.error("Failed to map record in %s at %d: %s", sid, i, type(e).__name__)
 
         if session_mapped:
-            all_mapped_payloads.extend(r for r in (prepare_record(m, level) for m in session_mapped) if r)
+            session_cwd = current_context.get('cwd') or stdin_cwd
+            if session_cwd and not stdin_cwd:
+                stdin_cwd = session_cwd
+            sess_level, _ = effective_level(cwd=session_cwd)
+            if sess_level != OFF:
+                all_mapped_payloads.extend(r for r in (prepare_record(m, sess_level) for m in session_mapped) if r)
             f_uuid = parsed[total_lines-1][1] if parsed[total_lines-1] else None
             session_updates.append((state_key, {
                 'last_line': total_lines,
@@ -368,5 +377,5 @@ async def main():
         log.info("Unrecognized record types (counted, not stored): %s", UNHANDLED_COUNTS)
 
     # Also flushes queued retries; failed records go to the bounded queue
-    sent = send(all_mapped_payloads)
+    sent = send(all_mapped_payloads, cwd=stdin_cwd)
     log.info("Session %s: %d record(s) mapped, %d accepted", current_sid, len(all_mapped_payloads), sent)

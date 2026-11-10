@@ -113,7 +113,18 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
     usage = message.get('usage', {}) if isinstance(message, dict) else {}
     data = record.get('data', {}) if isinstance(record.get('data'), dict) else {}
     current_ms = int(time.time() * 1000)
-    user_ts = to_unix_ms(record.get('timestamp') or "")
+    ts_iso = record.get('timestamp')
+    if not ts_iso and msg_type == 'file-history-snapshot':
+        snap = record.get('snapshot')
+        ts_iso = snap.get('timestamp') if isinstance(snap, dict) else None
+    if ts_iso:
+        user_ts = to_unix_ms(ts_iso)
+    elif context_overrides.get('last_timestamp'):
+        user_ts = to_unix_ms(context_overrides['last_timestamp'])
+    elif context_overrides.get('file_mtime'):
+        user_ts = int(context_overrides['file_mtime'])
+    else:
+        user_ts = current_ms
 
     sessionId = record.get('sessionId') or context_overrides.get('sessionId') or U
     rawUuid = record.get('uuid', U)
@@ -387,6 +398,25 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
     else: cc = usage.get('cache_creation_input_tokens', 0)
     totalTokens = it + ot + cr + cc
     costEstimate = calculate_cost(pModel, usage) if pModel is not U else None
+
+    if isinstance(incremental_tokens, dict) and not incremental_tokens.get('cost') and pModel and pModel is not U:
+        rates = PRICING_CONFIG.get(pModel, PRICING_CONFIG['claude-3-5-sonnet-20241022'])
+        in_r, out_r, w_r, r_r = rates['in'], rates['out'], rates['cacheWrite'], rates['cacheRead']
+        if (it + cr + cc) > 200000 and ('sonnet' in pModel or 'opus' in pModel):
+            in_r *= 2
+            out_r *= 1.5
+            w_r *= 2
+            r_r *= 2
+        inc_in = incremental_tokens.get('input') or 0
+        inc_out = incremental_tokens.get('output') or 0
+        inc_read = incremental_tokens.get('cache_read') or 0
+        inc_create = incremental_tokens.get('cache_creation') or 0
+        incremental_tokens['cost'] = (
+            (inc_in / 1000000 * in_r)
+            + (inc_out / 1000000 * out_r)
+            + (inc_create / 1000000 * w_r)
+            + (inc_read / 1000000 * r_r)
+        )
 
     stu_vals = usage.get('server_tool_use', {}) if isinstance(usage.get('server_tool_use'), dict) else {}
     itrs = json.dumps(usage.get('iterations'), separators=(',', ':')) if 'iterations' in usage else None

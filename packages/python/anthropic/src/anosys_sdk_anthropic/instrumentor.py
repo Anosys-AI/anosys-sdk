@@ -43,18 +43,35 @@ _capture_level = None  # set by AnosysAnthropicLogger; until then the shared lev
 CONTENT_MODE_ENV = "ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE"
 
 
+_NON_ANTHROPIC_SCOPE_PREFIXES = (
+    "traceai_",
+    "openinference.instrumentation.",
+    "opentelemetry.instrumentation.openai",
+    "@opentelemetry/instrumentation-openai",
+    "openai",
+)
+
+
 def _is_anthropic_span(span) -> bool:
     """Spans this exporter sends: the Anthropic SDK's own spans, plus GenAI
     spans the application creates around them (agent loops, tool calls), which
     carry ``gen_ai.operation.name``. Other spans on a shared provider are skipped."""
-    scope = getattr(span, "instrumentation_scope", None)
-    scope_name = (scope.name or "") if scope else ""
+    scope = getattr(span, "instrumentation_scope", None) or getattr(span, "instrumentation_info", None)
+    scope_name = str(getattr(scope, "name", "") or "") if scope else ""
     if scope_name.startswith(ANTHROPIC_SCOPE_PREFIX):
         return True
-    if scope_name == CLAUDE_AGENTS_SCOPE:
+    if scope_name == CLAUDE_AGENTS_SCOPE or scope_name.startswith(_NON_ANTHROPIC_SCOPE_PREFIXES):
         return False
     attributes = getattr(span, "attributes", None) or {}
-    return "gen_ai.operation.name" in attributes
+    if "gen_ai.operation.name" not in attributes:
+        return False
+    system = str(
+        attributes.get("gen_ai.provider.name")
+        or attributes.get("gen_ai.system")
+        or attributes.get("llm.system")
+        or ""
+    ).lower()
+    return not system or system == "anthropic"
 
 
 class AnosysHttpExporter(SpanExporter):

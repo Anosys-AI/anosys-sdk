@@ -61,7 +61,7 @@ def load_env_file(path: Path | None = None) -> None:
 load_env_file()
 
 INGESTION_URL = os.environ.get("ANOSYS_HOOK_ENDPOINT_URL", "https://api.anosys.ai/ingestion")
-API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "")
+API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "") or os.environ.get("ANOSYS_HOOK_API_KEY", "")
 DRY_RUN = os.environ.get("ANOSYS_HOOK_DRY_RUN", "false").lower() == "true"
 
 
@@ -95,13 +95,13 @@ def prepare_record(mapped: Dict[str, Any], level: str) -> Dict[str, Any]:
     return prepare_hook_record(mapped, level, METADATA_FIELDS)
 
 
-def send(records: List[Dict[str, Any]]) -> int:
+def send(records: List[Dict[str, Any]], cwd: Any = None) -> int:
     """Deliver records (and queued retries) within the size limit. Returns the number accepted."""
     if DRY_RUN:
         log.info("[DRY RUN] Would send %d record(s)", len(records))
         return len(records)
     queue = PendingQueue(PENDING_FILE)
-    return deliver(INGESTION_URL, records, queue, PAUSE_FILE, headers=_headers(), metadata_fields=METADATA_FIELDS)
+    return deliver(INGESTION_URL, records, queue, PAUSE_FILE, headers=_headers(), metadata_fields=METADATA_FIELDS, cwd=cwd)
 
 
 def find_rollout_file(session_id: str) -> Optional[Path]:
@@ -199,8 +199,10 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str, fallback_event: 
                     continue
 
                 if outer == "turn_context":
-                    if payload.get("turn_id") == turn_id:
-                        raw_events.append(obj)
+                    tid = payload.get("turn_id")
+                    if tid == turn_id or tid is None:
+                        if tid == turn_id or in_turn:
+                            raw_events.append(obj)
                         model = payload.get("model") or model
                         cwd = payload.get("cwd") or cwd
                         permission_mode = payload.get("approval_policy") or permission_mode
@@ -514,7 +516,13 @@ def run(argv: Optional[List[str]] = None) -> None:
 
 
 def process_notification(raw_input: str) -> None:
-    level, source = effective_level()
+    try:
+        event = json.loads(raw_input)
+    except Exception:
+        event = None
+
+    initial_cwd = (event.get("cwd") if isinstance(event, dict) else None) or None
+    level, source = effective_level(cwd=initial_cwd)
     if level == OFF:
         log.info("Collection is off (%s); nothing sent", source)
         return
@@ -522,9 +530,7 @@ def process_notification(raw_input: str) -> None:
         log.info("Collection paused after an authorization error; nothing sent")
         return
 
-    try:
-        event = json.loads(raw_input)
-    except Exception:
+    if not isinstance(event, dict):
         log.error("Notification is not valid JSON (%d bytes)", len(raw_input))
         return
 
@@ -561,9 +567,16 @@ def process_notification(raw_input: str) -> None:
         log.warning("Could not extract turn %s from the rollout file; using the notification", turn_id)
         turn_data = _extract_turn_fallback(event, thread_id, turn_id)
 
+    turn_cwd = turn_data.get("cwd") or initial_cwd
+    if turn_cwd and turn_cwd != initial_cwd:
+        level, source = effective_level(cwd=turn_cwd)
+        if level == OFF:
+            log.info("Collection is off (%s); nothing sent", source)
+            return
+
     mapped = transform_codex_turn(turn_data, session_id=thread_id, turn_id=turn_id)
     record = prepare_record(mapped, level)
-    sent = send([record])
+    sent = send([record], cwd=turn_cwd)
     log.info("Turn %s (session %s) at '%s': %d record(s) accepted", turn_id, thread_id, level, sent)
 
     # Mark the turn processed either way: retries live in the bounded queue

@@ -18,7 +18,7 @@ import os
 import sys
 
 from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
-from anosys_sdk_core.privacy import effective_level
+from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
 
 from anosys_sdk_antigravity.constants import (
     DEFAULT_INGESTION_URL,
@@ -84,6 +84,9 @@ def cmd_install(args: argparse.Namespace) -> None:
         else:
             choice = _prompt(f"Update {hooks_path}? (Y/n): ", "y").lower()
             auto_update = choice != "n"
+
+    if getattr(args, "redaction", False):
+        write_consent(METADATA, method="install --redaction")
 
     if auto_update:
         print(f"\nUpdating {hooks_path} ...")

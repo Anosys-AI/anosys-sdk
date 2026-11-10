@@ -57,7 +57,7 @@ APP_METADATA_STRING_COLUMNS = frozenset({
     "gen_ai_request_model", "gen_ai_response_model", "gen_ai_response_id",
     "gen_ai_response_finish_reasons", "gen_ai_output_type",
     "gen_ai_agent_id", "gen_ai_agent_name", "gen_ai_conversation_id",
-    "gen_ai_data_source_id", "llm_model",
+    "gen_ai_data_source_id", "llm_model", "llm_token_count",
     "cvs10",   # error.type / error_type (a class name, not the message)
     "cvs14",   # server.address
     "cvs16",   # llm_model_name
@@ -148,11 +148,12 @@ def finalize_app_record(record: Dict[str, Any], level: str, extra_allowed: Itera
 _LEVEL_CACHE: Dict[Tuple[str, str, str], Tuple[str, str]] = {}
 
 
-def current_app_level() -> Tuple[str, str]:
+def current_app_level(cwd: Optional[str] = None) -> Tuple[str, str]:
     """``resolve_app_level()`` for code without an explicit setting, cached per environment and folder."""
-    key = (os.environ.get("ANOSYS_DISABLE", ""), os.environ.get("ANOSYS_COLLECTION_LEVEL", ""), os.getcwd())
+    folder = cwd or os.getcwd()
+    key = (os.environ.get("ANOSYS_DISABLE", ""), os.environ.get("ANOSYS_COLLECTION_LEVEL", ""), folder)
     if key not in _LEVEL_CACHE:
-        _LEVEL_CACHE[key] = resolve_app_level()
+        _LEVEL_CACHE[key] = resolve_app_level(cwd=folder)
     return _LEVEL_CACHE[key]
 
 

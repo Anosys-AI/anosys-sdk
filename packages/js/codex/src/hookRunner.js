@@ -48,7 +48,7 @@ function loadEnvFile() {
 loadEnvFile();
 
 const INGESTION_URL = process.env.ANOSYS_HOOK_ENDPOINT_URL || 'https://api.anosys.ai/ingestion';
-const API_KEY = process.env.ANOSYS_HOOK_APIKEY || '';
+const API_KEY = process.env.ANOSYS_HOOK_APIKEY || process.env.ANOSYS_HOOK_API_KEY || '';
 const DRY_RUN = (process.env.ANOSYS_HOOK_DRY_RUN || 'false').toLowerCase() === 'true';
 
 function loadState() {
@@ -192,8 +192,9 @@ function extractTurnFromRollout(rolloutPath, turnId, fallbackEvent = null) {
       }
 
       if (outer === 'turn_context') {
-        if (payload.turn_id === turnId) {
-          rawEvents.push(obj);
+        const tid = payload.turn_id;
+        if (tid === turnId || tid === undefined || tid === null) {
+          if (tid === turnId || inTurn) rawEvents.push(obj);
           model = payload.model || model;
           cwd = payload.cwd || cwd;
           permissionMode = payload.approval_policy || permissionMode;
@@ -466,8 +467,15 @@ function parseArgv(argv) {
     try { previous = JSON.parse(args[i + 1]); } catch { previous = null; }
     args.splice(i, 2);
   }
-  const raw = args.find(a => /^\s*[[{]/.test(a)) || args[0] || '{}';
-  return { previous, raw: raw.trim() };
+  let raw = args.find(a => /^\s*[[{]/.test(a)) || args[0] || '';
+  if (!raw && !process.stdin.isTTY) {
+    try {
+      raw = fs.readFileSync(0, 'utf8').trim();
+    } catch {
+      raw = '';
+    }
+  }
+  return { previous, raw: (raw || '{}').trim() };
 }
 
 /** Run the notify command that was configured before AnoSys, unchanged. */
@@ -481,7 +489,15 @@ function callPreviousNotify(previous, raw) {
 }
 
 async function processNotification(rawInput, options = {}) {
-  const { level, source } = effectiveLevel();
+  let event = null;
+  try {
+    event = JSON.parse(rawInput);
+  } catch {
+    event = null;
+  }
+
+  const initialCwd = (event && typeof event === 'object' && event.cwd) ? event.cwd : null;
+  let { level, source } = effectiveLevel({ cwd: initialCwd });
   if (level === OFF) {
     log(`Collection is off (${source}); nothing sent`);
     return;
@@ -491,10 +507,7 @@ async function processNotification(rawInput, options = {}) {
     return;
   }
 
-  let event = {};
-  try {
-    event = JSON.parse(rawInput);
-  } catch {
+  if (!event || typeof event !== 'object') {
     log(`Notification is not valid JSON (${rawInput.length} bytes)`, 'ERROR');
     return;
   }
@@ -522,8 +535,17 @@ async function processNotification(rawInput, options = {}) {
     turnData = extractTurnFallback(event, threadId, turnId);
   }
 
+  const turnCwd = turnData.cwd || initialCwd;
+  if (turnCwd && turnCwd !== initialCwd) {
+    ({ level, source } = effectiveLevel({ cwd: turnCwd }));
+    if (level === OFF) {
+      log(`Collection is off (${source}); nothing sent`);
+      return;
+    }
+  }
+
   const record = prepareRecord(transformCodexTurn(turnData, threadId, turnId), level);
-  const sent = await send([record], options);
+  const sent = await send([record], { cwd: turnCwd, ...options });
   log(`Turn ${turnId} (session ${threadId}) at '${level}': ${sent} record(s) accepted`);
 
   // Mark the turn processed either way: retries live in the bounded queue

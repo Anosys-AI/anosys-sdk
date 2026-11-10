@@ -42,20 +42,21 @@ const METADATA_FIELDS = new Set([
 ]);
 
 const OPENAI_PRICING = {
-  'gpt-4o': { input: 2.50 / 1e6, output: 10.00 / 1e6, cached: 1.25 / 1e6 },
   'gpt-4o-mini': { input: 0.15 / 1e6, output: 0.60 / 1e6, cached: 0.075 / 1e6 },
-  'o1': { input: 15.00 / 1e6, output: 60.00 / 1e6, cached: 7.50 / 1e6 },
+  'gpt-4o': { input: 2.50 / 1e6, output: 10.00 / 1e6, cached: 1.25 / 1e6 },
   'o1-mini': { input: 1.10 / 1e6, output: 4.40 / 1e6, cached: 0.55 / 1e6 },
-  'o3': { input: 15.00 / 1e6, output: 60.00 / 1e6, cached: 7.50 / 1e6 },
+  'o1': { input: 15.00 / 1e6, output: 60.00 / 1e6, cached: 7.50 / 1e6 },
   'o3-mini': { input: 1.10 / 1e6, output: 4.40 / 1e6, cached: 0.55 / 1e6 },
+  'o3': { input: 15.00 / 1e6, output: 60.00 / 1e6, cached: 7.50 / 1e6 },
   'default': { input: 2.50 / 1e6, output: 10.00 / 1e6, cached: 1.25 / 1e6 }
 };
 
 function calculateCost(model, inputTokens, outputTokens, cachedTokens = 0) {
   const m = (model || '').toLowerCase();
   let rates = OPENAI_PRICING.default;
-  for (const [k, r] of Object.entries(OPENAI_PRICING)) {
-    if (m.includes(k)) {
+  const sortedEntries = Object.entries(OPENAI_PRICING).sort((a, b) => b[0].length - a[0].length);
+  for (const [k, r] of sortedEntries) {
+    if (k !== 'default' && m.includes(k)) {
       rates = r;
       break;
     }

@@ -15,7 +15,7 @@
 'use strict';
 
 const readline = require('readline');
-const { cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, runHookSafely } = require('anosys-sdk-core');
+const { METADATA, cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, runHookSafely, writeConsent } = require('anosys-sdk-core');
 const {
   SETTINGS_PATH,
   loadSettings,
@@ -101,6 +101,10 @@ async function cmdInstall(args) {
     newEnv.OTEL_EXPORTER_OTLP_ENDPOINT = INGESTION_URL;
     newEnv.OTEL_EXPORTER_OTLP_HEADERS = `anosys-apikey=${otelApiKey}`;
     newEnv.OTEL_METRICS_INCLUDE_ACCOUNT_UUID = 'false';
+  }
+
+  if (args.redaction) {
+    writeConsent(METADATA, 'install --redaction');
   }
 
   if (autoUpdate) {

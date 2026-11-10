@@ -316,6 +316,8 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     input_msg_attr = llm_attrs.get('input_messages', {})
     if isinstance(input_msg_attr, dict):
         input_messages = input_msg_attr.get('input_messages')
+    elif isinstance(input_msg_attr, list):
+        input_messages = input_msg_attr
     
     # Fallback to gen_ai structure
     if not input_messages:
@@ -334,6 +336,8 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
     output_msg_attr = llm_attrs.get('output_messages', {})
     if isinstance(output_msg_attr, dict):
         output_messages = output_msg_attr.get('output_messages')
+    elif isinstance(output_msg_attr, list):
+        output_messages = output_msg_attr
     
     # Fallback to gen_ai structure
     if not output_messages:
@@ -352,32 +356,29 @@ def extract_span_info(span: Dict) -> Dict[str, Any]:
         assign(variables, 'gen_ai.output.messages', to_str_or_none(output_messages))
     
     # System instructions
-    system_content = llm_attrs.get('system')
+    system_content = gen_ai.get('system_instructions') or llm_attrs.get('system')
     
     # Try to find system role in input messages
     if not system_content and input_messages:
         if isinstance(input_messages, list):
             for msg in input_messages:
-                if isinstance(msg, dict) and msg.get('role') == 'system':
-                    system_content = msg.get('content')
-                    break
+                if isinstance(msg, dict):
+                    inner = msg.get('message') if isinstance(msg.get('message'), dict) else msg
+                    if inner.get('role') == 'system':
+                        system_content = inner.get('content')
+                        break
         elif isinstance(input_messages, str):
             try:
                 parsed_messages = json.loads(input_messages)
                 if isinstance(parsed_messages, list):
                     for msg in parsed_messages:
-                        if isinstance(msg, dict) and msg.get('role') == 'system':
-                            system_content = msg.get('content')
-                            break
+                        if isinstance(msg, dict):
+                            inner = msg.get('message') if isinstance(msg.get('message'), dict) else msg
+                            if inner.get('role') == 'system':
+                                system_content = inner.get('content')
+                                break
             except json.JSONDecodeError:
                 pass
-    
-    # Fallback to general input value if system content is still missing
-    # (Often used for instructions in agentic contexts)
-    if not system_content:
-        input_val_attr = dig(attributes, 'input', 'value')
-        if input_val_attr and isinstance(input_val_attr, str):
-            system_content = input_val_attr
     if system_content:
         assign(variables, 'gen_ai.system_instructions', to_str_or_none(system_content))
     

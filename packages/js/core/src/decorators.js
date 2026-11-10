@@ -67,11 +67,52 @@ function createDecorators({ keyToCvs = BASE_KEY_MAPPING, startingIndices = DEFAU
    * changes or delays the result.
    */
   function anosysLogger(source = null) {
+    if (typeof source === 'function') {
+      return anosysLogger(null)(source);
+    }
     return function decorator(fn) {
       const name = source ?? fn.name ?? 'anonymous';
+      const errorInfo = (e) => ({ type: e?.constructor?.name ?? 'Error', message: e?.message, stack: e?.stack ?? '' });
+      if (fn.constructor?.name === 'AsyncGeneratorFunction') {
+        return async function* wrappedAsyncGen(...args) {
+          const callerInfo = getCallerInfo();
+          const items = [];
+          let err = null;
+          try {
+            for await (const item of fn.apply(this, args)) {
+              items.push(item);
+              yield item;
+            }
+          } catch (e) {
+            err = errorInfo(e);
+            throw e;
+          } finally {
+            const out = items.every(x => typeof x === 'string') ? items.join('') : items;
+            logPayload(name, args, out, err, callerInfo);
+          }
+        };
+      }
+      if (fn.constructor?.name === 'GeneratorFunction') {
+        return function* wrappedGen(...args) {
+          const callerInfo = getCallerInfo();
+          const items = [];
+          let err = null;
+          try {
+            for (const item of fn.apply(this, args)) {
+              items.push(item);
+              yield item;
+            }
+          } catch (e) {
+            err = errorInfo(e);
+            throw e;
+          } finally {
+            const out = items.every(x => typeof x === 'string') ? items.join('') : items;
+            logPayload(name, args, out, err, callerInfo);
+          }
+        };
+      }
       return function wrapped(...args) {
         const callerInfo = getCallerInfo();
-        const errorInfo = (e) => ({ type: e?.constructor?.name ?? 'Error', message: e?.message, stack: e?.stack ?? '' });
         let result;
         try {
           result = fn.apply(this, args);

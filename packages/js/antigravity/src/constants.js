@@ -6,7 +6,7 @@ const path = require('path');
 const os = require('os');
 const { hookCliCommandString } = require('anosys-sdk-core');
 
-const INTEGRATION_VERSION = '0.2.0';
+const INTEGRATION_VERSION = require('../package.json').version || '0.2.0';
 const HARNESS_NAME = 'antigravity';
 const HOOK_NAME = 'anosys-tracing';
 // The hook command: this Node and this CLI by absolute path (installed bin when run through npx)

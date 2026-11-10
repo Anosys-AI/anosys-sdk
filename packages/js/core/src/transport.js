@@ -272,7 +272,7 @@ async function acquireQueueLock(queuePath, waitMs = 2000) {
  */
 async function deliver(url, records, queue, pauseMarker, options = {}) {
   if (isPaused(pauseMarker)) return 0;
-  const { budget = hookTimeBudget(), metadataFields = null, ...rest } = options;
+  const { budget = hookTimeBudget(), metadataFields = null, cwd = null, ...rest } = options;
   const opts = { ...rest, deadline: Date.now() + budget * 1000 };
   const release = await acquireQueueLock(queue.path);
   if (!release) {
@@ -282,16 +282,16 @@ async function deliver(url, records, queue, pauseMarker, options = {}) {
     return res.sent;
   }
   try {
-    return await deliverLocked(url, records, queue, pauseMarker, opts, metadataFields);
+    return await deliverLocked(url, records, queue, pauseMarker, opts, metadataFields, cwd);
   } finally {
     release();
   }
 }
 
 /** Downgrade queued entries to the level in force now (consent can be withdrawn while they wait). */
-function applyCurrentLevel(pending, metadataFields) {
+function applyCurrentLevel(pending, metadataFields, cwd = null) {
   const { FULL, METADATA, OFF, effectiveLevel, filterFields } = require('./privacy.js');
-  const { level } = effectiveLevel();
+  const { level } = effectiveLevel(null, cwd);
   if (level === OFF) return [];
   if (level === FULL) return pending;
   const keep = metadataFields instanceof Set ? metadataFields : new Set(metadataFields);
@@ -302,9 +302,9 @@ function applyCurrentLevel(pending, metadataFields) {
   return pending;
 }
 
-async function deliverLocked(url, records, queue, pauseMarker, options, metadataFields = null) {
+async function deliverLocked(url, records, queue, pauseMarker, options, metadataFields = null, cwd = null) {
   let pending = queue.load();
-  if (metadataFields && pending.length) pending = applyCurrentLevel(pending, metadataFields);
+  if (metadataFields && pending.length) pending = applyCurrentLevel(pending, metadataFields, cwd);
   let sent = 0;
   const stillPending = [];
   if (pending.length) {

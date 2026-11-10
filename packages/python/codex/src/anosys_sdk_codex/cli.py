@@ -19,7 +19,7 @@ import os
 import sys
 
 from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
-from anosys_sdk_core.privacy import effective_level
+from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
 
 from anosys_sdk_codex.installer import (
     INGESTION_URL,
@@ -73,6 +73,9 @@ def cmd_install(args: argparse.Namespace) -> None:
 
     config_path = get_config_path()
     env_path = get_env_path()
+
+    if getattr(args, "redaction", False):
+        write_consent(METADATA, method="install --redaction")
 
     if auto_update:
         print(f"\nUpdating {config_path} ...")

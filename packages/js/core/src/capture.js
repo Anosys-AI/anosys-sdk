@@ -30,7 +30,7 @@ const APP_METADATA_STRING_COLUMNS = new Set([
   'gen_ai_request_model', 'gen_ai_response_model', 'gen_ai_response_id',
   'gen_ai_response_finish_reasons', 'gen_ai_output_type',
   'gen_ai_agent_id', 'gen_ai_agent_name', 'gen_ai_conversation_id',
-  'gen_ai_data_source_id', 'llm_model',
+  'gen_ai_data_source_id', 'llm_model', 'llm_token_count',
   'cvs10', 'cvs14', 'cvs16', 'cvs17', 'cvs19',
   CONSENT_COLUMN, 'cvs200',
 ]);
@@ -97,9 +97,10 @@ function prepareAppRecord(record, level, extraAllowed = []) {
 
 let cached = null;
 /** resolveAppLevel() for code without an explicit setting, cached per environment and folder. */
-function currentAppLevel() {
-  const key = `${process.env.ANOSYS_DISABLE || ''}|${process.env.ANOSYS_COLLECTION_LEVEL || ''}|${process.cwd()}`;
-  if (!cached || cached.key !== key) cached = { key, value: resolveAppLevel() };
+function currentAppLevel(cwd = null) {
+  const folder = cwd || process.cwd();
+  const key = `${process.env.ANOSYS_DISABLE || ''}|${process.env.ANOSYS_COLLECTION_LEVEL || ''}|${folder}`;
+  if (!cached || cached.key !== key) cached = { key, value: resolveAppLevel(null, folder) };
   return cached.value;
 }
 

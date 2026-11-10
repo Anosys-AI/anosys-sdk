@@ -16,7 +16,7 @@ import asyncio
 import sys
 
 from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
-from anosys_sdk_core.privacy import effective_level
+from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
 
 from anosys_sdk_claude_code.installer import (
     SETTINGS_PATH,
@@ -92,6 +92,9 @@ def cmd_install(args: argparse.Namespace) -> None:
         new_env["OTEL_METRICS_INCLUDE_ACCOUNT_UUID"] = "false"
         # Prompts and tool details stay out of Claude Code's telemetry: we never set
         # OTEL_LOG_USER_PROMPTS or OTEL_LOG_TOOL_DETAILS.
+
+    if getattr(args, "redaction", False):
+        write_consent(METADATA, method="install --redaction")
 
     if auto_update:
         print(f"\nUpdating {SETTINGS_PATH} ...")

@@ -252,7 +252,10 @@ async function main(options = {}) {
   // Add a small delay to ensure Claude Code has finished flushing logs to disk.
   await new Promise(r => setTimeout(r, options.delayMs ?? 500));
 
-  const { level, source } = effectiveLevel();
+  const stdinCtx = options.stdinCtx !== undefined ? options.stdinCtx : getStdinContext();
+  let stdinCwd = (stdinCtx && stdinCtx.cwd) || null;
+
+  const { level, source } = effectiveLevel({ cwd: stdinCwd });
   if (level === OFF) {
     log.info('Collection is off (%s); nothing sent', source);
     return;
@@ -261,8 +264,6 @@ async function main(options = {}) {
     log.info('Collection paused after an authorization error; nothing sent');
     return;
   }
-
-  const stdinCtx = options.stdinCtx !== undefined ? options.stdinCtx : getStdinContext();
 
   // Priority: 1. Explicit Env Var, 2. stdin transcriptPath/sessionId, 3. Automatic detection
   let providedPath = EXPLICIT_TRANSCRIPT;
@@ -403,7 +404,7 @@ async function main(options = {}) {
     // Context tracking for records missing session metadata
     const currentContext = {
       sessionId: sessionId,
-      cwd: null,
+      cwd: stdinCwd,
       gitBranch: null,
       version: null,
       slug: null,
@@ -419,7 +420,7 @@ async function main(options = {}) {
       last_timestamp: null,
     };
 
-    for (let i = lastLine; i < totalLines; i++) {
+    for (let i = 0; i < totalLines; i++) {
       const item = parsedItems[i];
       if (!item) continue;
 
@@ -490,6 +491,8 @@ async function main(options = {}) {
         }
       }
 
+      if (i < lastLine) continue;
+
       try {
         currentContext.log_index = i;
         const mapped = transformRecord(msg, incremental, currentContext);
@@ -500,9 +503,14 @@ async function main(options = {}) {
     }
 
     if (sessionMapped.length) {
-      for (const m of sessionMapped) {
-        const record = prepareRecord(m, level);
-        if (Object.keys(record).length) allMappedPayloads.push(record);
+      const sessionCwd = currentContext.cwd || stdinCwd;
+      if (sessionCwd && !stdinCwd) stdinCwd = sessionCwd;
+      const { level: sessLevel } = effectiveLevel({ cwd: sessionCwd });
+      if (sessLevel !== OFF) {
+        for (const m of sessionMapped) {
+          const record = prepareRecord(m, sessLevel);
+          if (Object.keys(record).length) allMappedPayloads.push(record);
+        }
       }
 
       let finalUuid = null;
@@ -542,7 +550,7 @@ async function main(options = {}) {
   }
 
   // Also flushes queued retries; failed records go to the bounded queue
-  const sent = await send(allMappedPayloads, options);
+  const sent = await send(allMappedPayloads, { cwd: stdinCwd, ...options });
   log.info('Session %s: %s record(s) mapped, %s accepted', currentSessionId, allMappedPayloads.length, sent);
 }
 

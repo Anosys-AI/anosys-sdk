@@ -46,8 +46,8 @@ _capture_level = None  # set by AnosysOpenAIAgentsLogger; until then the shared 
 # so they go whenever any direction is switched off.
 _capture_flags = {"inputs": True, "outputs": True, "parameters": True}
 _pii = {"enabled": False}  # pii_redaction, applied on both the OTel and the processor path
-INPUT_COLUMNS = ("llm_input", "gen_ai_input_messages", "gen_ai_system_instructions", "llm_system", "cvs65")
-OUTPUT_COLUMNS = ("llm_output", "gen_ai_output_messages", "cvs66", "cvs72", "cvs76")
+INPUT_COLUMNS = ("llm_input", "gen_ai_input_messages", "gen_ai_system_instructions", "llm_system", "cvs65", "cvs71")
+OUTPUT_COLUMNS = ("llm_output", "gen_ai_output_messages", "cvs66", "cvs67", "cvs72", "cvs76")
 PARAMETER_COLUMNS = ("llm_invocation_parameters", "cvs70")
 RAW_COLUMNS = ("cvs199", "cvs18", "otel_events")
 
@@ -222,7 +222,8 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
         capture_outputs: Optional[bool] = None,
         capture_parameters: Optional[bool] = None,
         pii_redaction: bool = False,
-        use_batch_processor: bool = False
+        use_batch_processor: bool = False,
+        capture_content: Optional[Any] = None,
     ):
         """
         Initialize the AnoSys OpenAI Agents Logger.
@@ -238,6 +239,7 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
             pii_redaction: If True, the instrumentation redacts PII (emails, phone
                 numbers ...) from captured values (default: False)
             use_batch_processor: If True, use BatchSpanProcessor
+            capture_content: Optional unified level override (True/False or "full"/"metadata"/"off")
         """
         global _tracing_initialized, _capture_level
 
@@ -246,8 +248,11 @@ class AnosysOpenAIAgentsLogger(TracingProcessor):
         # control the Agents SDK's own debug logging, not traces, so they are not used.)
         # Any flag True asks for content; all three False asks for metadata; a
         # single False only switches off its own direction (the rest follows the level).
-        given = [f for f in (capture_inputs, capture_outputs, capture_parameters) if f is not None]
-        explicit = True if any(given) else (False if len(given) == 3 else None)
+        if capture_content is not None:
+            explicit = capture_content
+        else:
+            given = [f for f in (capture_inputs, capture_outputs, capture_parameters) if f is not None]
+            explicit = True if any(given) else (False if len(given) == 3 else None)
         _capture_level, source = resolve_app_level(explicit)
         is_full = _capture_level == FULL
         self.capture_inputs = is_full if capture_inputs is None else (capture_inputs and is_full)

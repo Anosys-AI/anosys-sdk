@@ -80,7 +80,10 @@ def extract_tool_details(tool_steps: List[Dict[str, Any]]) -> Dict[str, Any]:
         if dur > 0:
             durations.append(dur)
 
-        if status.upper() in ("ERROR", "FAILED") or "error" in output.lower()[:200]:
+        output_head = output.lstrip().lower()[:200]
+        if status.upper() in ("ERROR", "FAILED") or output_head.startswith(
+            ("error:", "exception:", "traceback", "encountered error")
+        ):
             tool_errors.append(f"{name}: {output[:300]}")
 
         # Commands (run_command, terminal, bash)
@@ -192,7 +195,13 @@ def transform_antigravity_turn(
 
     # Hook metadata fields
     termination_reason = meta.get("terminationReason")
-    error_obj = meta.get("error")
+    raw_error = meta.get("error")
+    if isinstance(raw_error, (dict, list)):
+        error_obj = json.dumps(raw_error, separators=(",", ":"))
+    elif raw_error is not None:
+        error_obj = str(raw_error)
+    else:
+        error_obj = None
     fully_idle = meta.get("fullyIdle", True)
     execution_num = meta.get("executionNum")
     transcript_path = meta.get("transcriptPath")

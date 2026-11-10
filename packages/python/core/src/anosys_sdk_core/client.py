@@ -10,8 +10,10 @@ from typing import Any, Dict, Optional
 import requests
 
 from anosys_sdk_core.config import resolve_api_key
-from anosys_sdk_core.capture import current_app_level, prepare_app_record
+from anosys_sdk_core.capture import APP_METADATA_STRING_COLUMNS, current_app_level, prepare_app_record
+from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
 from anosys_sdk_core.transport import post_record
+from anosys_sdk_core.util.batching import reassign
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,16 @@ class AnosysClient:
             Response object on success, None on failure
         """
         try:
-            payload = prepare_app_record(data, current_app_level()[0])
+            record = dict(data)
+            # If caller passed unmapped logical keys (e.g. "name", "trace_id", "input", "source"),
+            # map them to CVS/OTel columns first so metadata allowlisting works as expected.
+            already_mapped = any(
+                k in APP_METADATA_STRING_COLUMNS or k.startswith(("cvs", "cvn", "cvb", "otel_", "gen_ai_", "llm_"))
+                for k in record
+            )
+            if not already_mapped:
+                record = reassign(record, BASE_KEY_MAPPING.copy(), DEFAULT_STARTING_INDICES.copy())
+            payload = prepare_app_record(record, current_app_level()[0])
             if payload is None:
                 return None  # collection is off
             response = post_record(self.api_url, payload, timeout=self.timeout)

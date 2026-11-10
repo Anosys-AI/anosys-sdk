@@ -7,7 +7,7 @@ import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { span2json, extractOtelSpanInfo } from './mapping.js';
 import { safeSerialize, cleanNulls } from './utils.js';
-import { acceptsSpan, APP_METADATA_STRING_COLUMNS, currentAppLevel, OFF, prepareAppRecord, redactPii, resolveAppLevel, sendAppRecord, userContextValue } from 'anosys-sdk-core';
+import { acceptsSpan, APP_METADATA_STRING_COLUMNS, currentAppLevel, FULL, OFF, prepareAppRecord, redactPii, resolveAppLevel, sendAppRecord, userContextValue } from 'anosys-sdk-core';
 
 // Spans this exporter owns; everything else on a shared provider is left alone
 const AGENTS_SCOPES = ['@opentelemetry/instrumentation-openai', 'openai-agents', '@openai/agents'];
@@ -15,6 +15,21 @@ const AGENTS_SYSTEMS = ['openai'];
 
 // Agents-specific descriptive columns kept at `metadata` (agent hierarchy, handoffs, model, ids)
 export const AGENTS_METADATA_COLUMNS = ['cvs62', 'cvs64', 'cvs68', 'cvs69', 'cvs77', 'cvs78', 'cvs79', 'llm_token_count'];
+
+const _captureFlags = { inputs: true, outputs: true, parameters: true };
+const INPUT_COLUMNS = ['llm_input', 'gen_ai_input_messages', 'gen_ai_system_instructions', 'llm_system', 'cvs65', 'cvs71'];
+const OUTPUT_COLUMNS = ['llm_output', 'gen_ai_output_messages', 'cvs66', 'cvs67', 'cvs72', 'cvs76'];
+const PARAMETER_COLUMNS = ['llm_invocation_parameters', 'cvs70'];
+const RAW_COLUMNS = ['cvs199', 'cvs18', 'otel_events'];
+
+function dropUncaptured(record) {
+  if (_captureFlags.inputs && _captureFlags.outputs && _captureFlags.parameters) return record;
+  const drop = new Set(RAW_COLUMNS);
+  if (!_captureFlags.inputs) for (const c of INPUT_COLUMNS) drop.add(c);
+  if (!_captureFlags.outputs) for (const c of OUTPUT_COLUMNS) drop.add(c);
+  if (!_captureFlags.parameters) for (const c of PARAMETER_COLUMNS) drop.add(c);
+  return Object.fromEntries(Object.entries(record).filter(([k]) => !drop.has(k)));
+}
 
 /** pii_redaction: redact PII patterns in content columns, never in ids or metadata. */
 function redactContent(record) {
@@ -47,7 +62,7 @@ export class AnosysHttpExporter {
       if (!acceptsSpan(span, AGENTS_SCOPES, AGENTS_SYSTEMS)) continue;
       try {
         const data = extractOtelSpanInfo(span);
-        let cleaned = cleanNulls(data) ?? {};
+        let cleaned = dropUncaptured(cleanNulls(data) ?? {});
         if (_piiRedaction) cleaned = redactContent(cleaned);
         try {
           const value = userContextValue(await this._getUserContext());
@@ -145,12 +160,32 @@ export class AnosysOpenAIAgentsLogger {
    * @param {boolean}  [options.captureContent] - true: send inputs and outputs; false: metadata
    *   only. Omitted: follow ANOSYS_COLLECTION_LEVEL and a project `.anosys` file; full otherwise.
    */
-  constructor({ getUserContext = null, captureContent = null, piiRedaction = false } = {}) {
+  constructor({
+    getUserContext = null,
+    captureContent = null,
+    captureInputs = null,
+    captureOutputs = null,
+    captureParameters = null,
+    piiRedaction = false,
+  } = {}) {
     this.getUserContext = getUserContext ?? (() => null);
     _piiRedaction = Boolean(piiRedaction);
-    const { level, source } = resolveAppLevel(captureContent);
+    this.piiRedaction = _piiRedaction;
+    let explicit = captureContent;
+    if (explicit === null || explicit === undefined) {
+      const given = [captureInputs, captureOutputs, captureParameters].filter((f) => f !== null && f !== undefined);
+      explicit = given.some(Boolean) ? true : (given.length === 3 ? false : null);
+    }
+    const { level, source } = resolveAppLevel(explicit);
     _captureLevel = level;
     this.captureLevel = level;
+    const isFull = level === FULL;
+    this.captureInputs = captureInputs === null ? isFull : Boolean(captureInputs && isFull);
+    this.captureOutputs = captureOutputs === null ? isFull : Boolean(captureOutputs && isFull);
+    this.captureParameters = captureParameters === null ? isFull : Boolean(captureParameters && isFull);
+    _captureFlags.inputs = this.captureInputs;
+    _captureFlags.outputs = this.captureOutputs;
+    _captureFlags.parameters = this.captureParameters;
     log.info('AnoSys OpenAI Agents collection level: %s (%s)', level, source);
     this._logApiUrl = null;
     this._ready = Promise.resolve();
@@ -190,7 +225,7 @@ export class AnosysOpenAIAgentsLogger {
         };
       }
 
-      let transformed = span2json(payload);
+      let transformed = dropUncaptured(span2json(payload));
       if (_piiRedaction) transformed = redactContent(transformed);
       // Content dropped at metadata, cvs198 and encryption in one place
       const payloadToSend = prepareAppRecord(transformed, _captureLevel ?? currentAppLevel().level, AGENTS_METADATA_COLUMNS);

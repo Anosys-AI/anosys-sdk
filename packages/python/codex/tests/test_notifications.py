@@ -11,7 +11,8 @@ def _env(tmp_path):
     for var in ("REDACTION", "ANOSYS_COLLECTION_LEVEL", "ANOSYS_DISABLE", "ANOSYS_ENCRYPTION_KEY"):
         env.pop(var, None)
     env.update(CODEX_HOME=str(tmp_path), ANOSYS_HOOK_DRY_RUN="true",
-               ANOSYS_CONSENT_FILE=str(tmp_path / "consent.json"))
+               ANOSYS_CONSENT_FILE=str(tmp_path / "consent.json"),
+               PYTHONPATH=os.pathsep.join(sys.path))
     return env
 
 

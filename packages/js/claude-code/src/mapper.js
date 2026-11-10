@@ -927,8 +927,9 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
 
   // ── Build payload ───────────────────────────────────────────────────────
   let payload;
+  const useClaudePixel = (process.env.ANOSYS_CLAUDE_PIXEL || 'true').toLowerCase() === 'true';
 
-  if (CLAUDE_PIXEL) {
+  if (useClaudePixel) {
     payload = {
       timestamp: currentMs,
       user_timestamp: userTs,

@@ -68,25 +68,43 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
   _logApiUrlReady = Promise.resolve(apiUrl).then((url) => { _logApiUrl = url ?? null; return _logApiUrl; });
 
   const exporter = new AnosysHttpExporter(getUserContext);
-  const spanProcessors = [];
+  let provider;
+  const active = trace.getTracerProvider();
+  const hasLegacyAddSpan = active && typeof active.addSpanProcessor === 'function';
 
-  if (useBatchProcessor) {
-    spanProcessors.push(new BatchSpanProcessor(exporter, {
-      scheduledDelayMillis: 1000,
-      maxQueueSize: 2048,
-      maxExportBatchSize: 512,
-    }));
-    log.info('Using BatchSpanProcessor');
+  if (hasLegacyAddSpan) {
+    provider = active;
+    log.info('Attaching to existing global TracerProvider');
+    if (useBatchProcessor) {
+      provider.addSpanProcessor(new BatchSpanProcessor(exporter, {
+        scheduledDelayMillis: 1000,
+        maxQueueSize: 2048,
+        maxExportBatchSize: 512,
+      }));
+      log.info('Using BatchSpanProcessor');
+    } else {
+      provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+      log.info('Using SimpleSpanProcessor');
+    }
   } else {
-    spanProcessors.push(new SimpleSpanProcessor(exporter));
-    log.info('Using SimpleSpanProcessor');
+    const spanProcessors = [];
+    if (useBatchProcessor) {
+      spanProcessors.push(new BatchSpanProcessor(exporter, {
+        scheduledDelayMillis: 1000,
+        maxQueueSize: 2048,
+        maxExportBatchSize: 512,
+      }));
+      log.info('Using BatchSpanProcessor');
+    } else {
+      spanProcessors.push(new SimpleSpanProcessor(exporter));
+      log.info('Using SimpleSpanProcessor');
+    }
+
+    provider = new NodeTracerProvider({
+      spanProcessors: spanProcessors,
+    });
+    provider.register();
   }
-
-  const provider = new NodeTracerProvider({
-    spanProcessors: spanProcessors,
-  });
-
-  provider.register();
 
   const instrumentation = new OpenAIInstrumentation({ enrichTokens: true });
   instrumentation.setTracerProvider(provider);

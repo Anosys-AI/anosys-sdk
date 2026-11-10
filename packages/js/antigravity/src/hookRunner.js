@@ -34,6 +34,8 @@ const WORKSPACE_ALLOWED_KEYS = new Set([
 ]);
 const WORKSPACE_LEVELS = new Set(['off', 'metadata']); // ANOSYS_COLLECTION_LEVEL may only lower
 
+let _workspaceCeiling = null;
+
 function loadEnvConfig(envPath = GLOBAL_ENV_FILE, allowed = null) {
   if (!fs.existsSync(envPath)) return;
   try {
@@ -46,6 +48,16 @@ function loadEnvConfig(envPath = GLOBAL_ENV_FILE, allowed = null) {
           log('WARNING', `Ignored ${k} from the workspace settings file (not allowed there)`);
           continue;
         }
+        if (allowed && v !== undefined && v !== null) {
+          const valLower = String(v).trim().toLowerCase();
+          if (k === 'ANOSYS_DISABLE' && ['1', 'true', 'yes'].includes(valLower)) {
+            _workspaceCeiling = 'off';
+          } else if (k === 'ANOSYS_COLLECTION_LEVEL' && WORKSPACE_LEVELS.has(valLower)) {
+            if (_workspaceCeiling !== 'off') _workspaceCeiling = valLower;
+          } else if (k === 'REDACTION' && ['1', 'true', 'yes'].includes(valLower)) {
+            if (_workspaceCeiling === null) _workspaceCeiling = 'metadata';
+          }
+        }
         if (!process.env[k] && v !== undefined && v !== null) {
           process.env[k] = String(v);
         }
@@ -56,8 +68,8 @@ function loadEnvConfig(envPath = GLOBAL_ENV_FILE, allowed = null) {
   }
 }
 
-function loadRuntimeEnvironment() {
-  let directory = process.cwd();
+function loadRuntimeEnvironment(startDir = null) {
+  let directory = startDir ? path.resolve(String(startDir)) : process.cwd();
   while (true) {
     const workspaceConfig = path.join(directory, '.agents', 'anosys-env.json');
     if (fs.existsSync(workspaceConfig)) {
@@ -76,7 +88,7 @@ loadRuntimeEnvironment();
 function getConfig() {
   return {
     ingestion_url: process.env.ANOSYS_HOOK_ENDPOINT_URL || DEFAULT_INGESTION_URL,
-    api_key: process.env.ANOSYS_HOOK_APIKEY || process.env.ANOSYS_API_KEY || '',
+    api_key: process.env.ANOSYS_HOOK_APIKEY || process.env.ANOSYS_HOOK_API_KEY || process.env.ANOSYS_API_KEY || '',
     dry_run: (process.env.ANOSYS_HOOK_DRY_RUN || 'false').toLowerCase() === 'true',
   };
 }
@@ -200,8 +212,10 @@ async function processTurns(eventName, inputJson, config, level = 'metadata') {
   }
 
   if (recordsToSend.length > 0) {
+    const wsPaths = Array.isArray(inputJson.workspacePaths) ? inputJson.workspacePaths : [];
+    const wsCwd = wsPaths[0] || inputJson.cwd || null;
     // Failed records go to the bounded queue; turns are marked processed either way
-    const sent = await send(recordsToSend, cfg);
+    const sent = await send(recordsToSend, cfg, { cwd: wsCwd });
     log('INFO', `Session ${sessionId} at '${level}': ${recordsToSend.length} turn(s), ${sent} accepted`);
     state.last_emitted_turn = Math.max(...turnIndicesEmitted);
     state.processed_turns = processedTurns.slice(-500);
@@ -220,13 +234,17 @@ async function run() {
   }
 
   try {
-    const { level, source } = effectiveLevel();
+    const inputJson = await readStdin();
+    const wsPaths = Array.isArray(inputJson.workspacePaths) ? inputJson.workspacePaths : [];
+    const wsCwd = wsPaths[0] || inputJson.cwd || null;
+    if (wsCwd) loadRuntimeEnvironment(wsCwd);
+    const { level, source } = effectiveLevel({ explicit: _workspaceCeiling, cwd: wsCwd });
     if (level === OFF) {
       log('INFO', `Collection is off (${source}); nothing sent`);
     } else if (isPaused(PAUSE_FILE)) {
       log('INFO', 'Collection paused after an authorization error; nothing sent');
     } else {
-      await processTurns(eventName, await readStdin(), getConfig(), level);
+      await processTurns(eventName, inputJson, getConfig(), level);
     }
   } catch (err) {
     log('ERROR', `Hook runner error on ${eventName}: ${err.name}`);

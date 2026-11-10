@@ -67,7 +67,15 @@ function extractToolDetails(toolSteps) {
     const dur = typeof tool.duration_ms === 'number' ? tool.duration_ms : 0;
     if (dur > 0) durations.push(dur);
 
-    if (status.toUpperCase() === 'ERROR' || status.toUpperCase() === 'FAILED' || output.toLowerCase().slice(0, 200).includes('error')) {
+    const outputHead = output.trimStart().toLowerCase().slice(0, 200);
+    if (
+      status.toUpperCase() === 'ERROR' ||
+      status.toUpperCase() === 'FAILED' ||
+      outputHead.startsWith('error:') ||
+      outputHead.startsWith('exception:') ||
+      outputHead.startsWith('traceback') ||
+      outputHead.startsWith('encountered error')
+    ) {
       toolErrors.push(`${name}: ${output.slice(0, 300)}`);
     }
 
@@ -172,7 +180,10 @@ function transformAntigravityTurn(turn, sessionId, turnId, hookMetadata) {
 
 
   const terminationReason = meta.terminationReason || null;
-  const errorObj = meta.error || null;
+  const rawError = meta.error;
+  const errorObj = (rawError && typeof rawError === 'object')
+    ? JSON.stringify(rawError)
+    : (rawError != null ? String(rawError) : null);
   const fullyIdle = typeof meta.fullyIdle === 'boolean' ? meta.fullyIdle : true;
   const executionNum = typeof meta.executionNum === 'number' ? meta.executionNum : null;
   const transcriptPath = meta.transcriptPath || null;

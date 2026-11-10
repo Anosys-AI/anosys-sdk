@@ -310,9 +310,6 @@ class AnosysClaudeAgentsLogger:
         """
         global _tracing_initialized
 
-        # Resolve API URL
-        self.log_api_url = resolve_api_key()
-
         # Optional user context function
         self.get_user_context = get_user_context or (lambda: None)
 
@@ -325,9 +322,15 @@ class AnosysClaudeAgentsLogger:
             emit_llm_spans=emit_llm_spans,
             agent_name=agent_name,
         )
+        if level == OFF:
+            self.log_api_url = ""
+            return
+
+        # Resolve API URL
+        self.log_api_url = resolve_api_key()
 
         # Initialize tracing if not already done
-        if not _tracing_initialized and level != OFF:
+        if not _tracing_initialized:
             setup_api(self.log_api_url)
             setup_tracing(
                 self.log_api_url,

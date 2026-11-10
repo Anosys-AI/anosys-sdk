@@ -305,13 +305,17 @@ def extract_genai_span_info(
     if _has_reasoning(output_messages):
         assign(variables, "has_thinking", True)
 
-    # Agents
-    assign(variables, "gen_ai.agent.id", to_str_or_none(attributes.get("gen_ai.agent.id")))
-    assign(variables, "gen_ai.agent.name", to_str_or_none(attributes.get("gen_ai.agent.name")))
-    assign(variables, "gen_ai.agent.description", to_str_or_none(attributes.get("gen_ai.agent.description")))
+    # Agents & Tools
+    assign(variables, "gen_ai.agent.id", to_str_or_none(attributes.get("gen_ai.agent.id") or attributes.get("anthropic.agent.id")))
+    assign(variables, "gen_ai.agent.name", to_str_or_none(attributes.get("gen_ai.agent.name") or attributes.get("anthropic.agent.name")))
+    assign(variables, "gen_ai.agent.description", to_str_or_none(attributes.get("gen_ai.agent.description") or attributes.get("anthropic.agent.description")))
     assign(variables, "gen_ai.conversation.id", to_str_or_none(attributes.get("gen_ai.conversation.id")))
     if kind_val == "AGENT":
         assign(variables, "is_agent", True)
+    if kind_val == "TOOL":
+        assign(variables, "gen_ai.tool.name", to_str_or_none(attributes.get("gen_ai.tool.name")))
+        assign(variables, "gen_ai.tool.call.id", to_str_or_none(attributes.get("gen_ai.tool.call.id")))
+        assign(variables, "gen_ai.tool.type", to_str_or_none(attributes.get("gen_ai.tool.type")))
 
     # Legacy LLM fields
     system_text = _system_text(system_instructions)

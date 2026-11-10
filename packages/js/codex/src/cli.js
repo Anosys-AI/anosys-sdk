@@ -3,7 +3,7 @@
 
 const fs = require('fs');
 const readline = require('readline');
-const { cmdPrivacy, cmdPurge, effectiveLevel, printDoctor } = require('anosys-sdk-core');
+const { METADATA, cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, writeConsent } = require('anosys-sdk-core');
 const {
   INGESTION_URL,
   hookCommand,
@@ -72,6 +72,10 @@ async function cmdInstall(args) {
 
   const configPath = getConfigPath();
   const envPath = getEnvPath();
+
+  if (args.includes('--redaction')) {
+    writeConsent(METADATA, 'install --redaction');
+  }
 
   if (autoUpdate) {
     console.log(`\nUpdating ${configPath} ...`);

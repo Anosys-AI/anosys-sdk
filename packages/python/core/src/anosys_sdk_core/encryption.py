@@ -72,6 +72,10 @@ JSON_COLUMNS: Set[str] = {
     "written_paths", "commands", "server_tool_use",
     "otel_resource", "otel_attributes", "otel_events", "otel_links", "otel_labels",
     "otel_log_attributes", "llm_tools", "llm_token_count", "llm_invocation_parameters",
+    "gen_ai_input_messages", "gen_ai_output_messages", "gen_ai_system_instructions",
+    "gen_ai_tool_definitions", "gen_ai_request_stop_sequences",
+    "gen_ai_request_encoding_formats", "gen_ai_response_finish_reasons",
+    "otel_histogram_bucket_counts", "otel_histogram_bucket_bounds",
 }
 
 try:
@@ -189,6 +193,9 @@ def get_target_columns(data: Optional[Dict[str, Any]] = None, keep: Optional[Ite
     """
     explicit = explicit_target_columns()
     if explicit is not None:
+        if data is not None:
+            mirror_cols = {c for c in ("cvs199", "cvs18", "otel_events") if c in data}
+            return explicit | mirror_cols
         return explicit
     if keep is not None and data is not None:
         keep = keep if isinstance(keep, (set, frozenset)) else set(keep)

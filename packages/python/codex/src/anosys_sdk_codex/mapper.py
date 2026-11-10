@@ -43,27 +43,22 @@ CV_METADATA_FIELDS = {
 METADATA_FIELDS = BASE_METADATA_FIELDS | CV_METADATA_FIELDS
 
 OPENAI_PRICING: Dict[str, Dict[str, float]] = {
-    "gpt-4o": {
-        "input": 2.50 / 1e6,
-        "output": 10.00 / 1e6,
-        "cached": 1.25 / 1e6,
-    },
     "gpt-4o-mini": {
         "input": 0.15 / 1e6,
         "output": 0.60 / 1e6,
         "cached": 0.075 / 1e6,
     },
-    "o1": {
-        "input": 15.00 / 1e6,
-        "output": 60.00 / 1e6,
-        "cached": 7.50 / 1e6,
+    "gpt-4o": {
+        "input": 2.50 / 1e6,
+        "output": 10.00 / 1e6,
+        "cached": 1.25 / 1e6,
     },
     "o1-mini": {
         "input": 1.10 / 1e6,
         "output": 4.40 / 1e6,
         "cached": 0.55 / 1e6,
     },
-    "o3": {
+    "o1": {
         "input": 15.00 / 1e6,
         "output": 60.00 / 1e6,
         "cached": 7.50 / 1e6,
@@ -72,6 +67,11 @@ OPENAI_PRICING: Dict[str, Dict[str, float]] = {
         "input": 1.10 / 1e6,
         "output": 4.40 / 1e6,
         "cached": 0.55 / 1e6,
+    },
+    "o3": {
+        "input": 15.00 / 1e6,
+        "output": 60.00 / 1e6,
+        "cached": 7.50 / 1e6,
     },
     "default": {
         "input": 2.50 / 1e6,
@@ -88,8 +88,9 @@ def calculate_cost(
     cached_tokens: int = 0,
 ) -> float:
     rates = OPENAI_PRICING.get("default", {"input": 2.5e-6, "output": 1.0e-5, "cached": 1.25e-6})
-    for m_key, r in OPENAI_PRICING.items():
-        if m_key in model.lower():
+    model_lower = (model or "").lower()
+    for m_key, r in sorted(OPENAI_PRICING.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if m_key != "default" and m_key in model_lower:
             rates = r
             break
 

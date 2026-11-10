@@ -9,13 +9,15 @@ const SECRET_PATTERNS = [
   /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\bASIA[0-9A-Z]{16}\b/g,
-  /\bghp_[A-Za-z0-9]{30,}\b/g,
+  /\bgh[pousr]_[A-Za-z0-9]{30,}\b/g,
   /\bgithub_pat_[A-Za-z0-9_]{30,}\b/g,
+  /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
   /\bxox[abpr]-[A-Za-z0-9-]{10,}\b/g,
   /\bAIza[0-9A-Za-z_-]{35}\b/g,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----/g,
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
 ];
+const URL_BASIC_AUTH = /(:\/\/[^/\s:@]+:)[^/\s@]{6,}(?=@)/g;
 // key = value assignments: keep the key, replace the value
 const ASSIGNMENT = /((?:api[_-]?key|apikey|secret|password|passwd|token|authorization)["']?\s*[:=]\s*["']?(?:bearer\s+)?)[A-Za-z0-9_\-/+=.]{12,}/gi;
 
@@ -24,6 +26,7 @@ function scrubSecrets(value) {
   if (typeof value === 'string') {
     let out = value;
     for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, SECRET_REPLACEMENT);
+    out = out.replace(URL_BASIC_AUTH, (_, prefix) => prefix + SECRET_REPLACEMENT);
     return out.replace(ASSIGNMENT, (_, prefix) => prefix + SECRET_REPLACEMENT);
   }
   if (Array.isArray(value)) return value.map(scrubSecrets);

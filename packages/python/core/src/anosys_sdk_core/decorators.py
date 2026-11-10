@@ -186,11 +186,36 @@ async def _handle_logging_async_gen(func: Callable, args: tuple, kwargs: dict, s
         _log_payload(source, args, kwargs, output, error_info, caller_info)
 
 
+def _handle_logging_sync_gen(func: Callable, args: tuple, kwargs: dict, source: Optional[str]):
+    """Handle logging for synchronous generator functions."""
+    caller_info = _get_caller_info()
+    aggregated_output = []
+    error_info = None
+
+    try:
+        for item in func(*args, **kwargs):
+            aggregated_output.append(item)
+            yield item
+    except Exception as e:
+        error_info = {
+            "type": type(e).__name__,
+            "message": str(e),
+            "stack": traceback.format_exc()
+        }
+        raise
+    finally:
+        if all(isinstance(x, str) for x in aggregated_output):
+            output = "".join(aggregated_output)
+        else:
+            output = aggregated_output
+        _log_payload(source, args, kwargs, output, error_info, caller_info)
+
+
 def anosys_logger(source: Optional[str] = None) -> Callable:
     """
     Decorator to log function input/output to AnoSys API.
     
-    Supports sync, async, and async generator functions.
+    Supports sync, sync generator, async, and async generator functions.
     Captures caller information and error stack traces.
     
     Args:
@@ -210,6 +235,11 @@ def anosys_logger(source: Optional[str] = None) -> Callable:
             async def wrapper(*args, **kwargs):
                 async for item in _handle_logging_async_gen(func, args, kwargs, source):
                     yield item
+            return wrapper
+        elif inspect.isgeneratorfunction(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                yield from _handle_logging_sync_gen(func, args, kwargs, source)
             return wrapper
         elif asyncio.iscoroutinefunction(func):
             @wraps(func)

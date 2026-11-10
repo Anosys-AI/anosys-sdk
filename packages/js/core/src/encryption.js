@@ -47,6 +47,10 @@ const JSON_COLUMNS = new Set([
   'written_paths', 'commands', 'server_tool_use',
   'otel_resource', 'otel_attributes', 'otel_events', 'otel_links', 'otel_labels',
   'otel_log_attributes', 'llm_tools', 'llm_token_count', 'llm_invocation_parameters',
+  'gen_ai_input_messages', 'gen_ai_output_messages', 'gen_ai_system_instructions',
+  'gen_ai_tool_definitions', 'gen_ai_request_stop_sequences',
+  'gen_ai_request_encoding_formats', 'gen_ai_response_finish_reasons',
+  'otel_histogram_bucket_counts', 'otel_histogram_bucket_bounds',
 ]);
 
 const keyCache = new Map();
@@ -149,7 +153,14 @@ function explicitTargetColumns() {
  */
 function getTargetColumns(data = null, keep = null) {
   const explicit = explicitTargetColumns();
-  if (explicit) return explicit;
+  if (explicit) {
+    if (data && typeof data === 'object') {
+      for (const mirror of ['cvs199', 'cvs18', 'otel_events']) {
+        if (mirror in data) explicit.add(mirror);
+      }
+    }
+    return explicit;
+  }
   if (keep && data) {
     const kept = keep instanceof Set ? keep : new Set(keep);
     return new Set(Object.entries(data)

@@ -408,19 +408,16 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
         attributes_json.get('gen_ai', {}).get('system_instructions') or
         attributes_json.get('llm', {}).get('system')
     )
-    # Fallback to input.value for system instructions if not found elsewhere
-    if not system_instr:
-        input_val_attr = attributes_json.get('input', {}).get('value')
-        if input_val_attr and isinstance(input_val_attr, str):
-            system_instr = input_val_attr
     
     input_parts = []
     if system_instr:
         input_parts.append(f"System: {system_instr}")
     
+    raw_in_msgs = attributes_json.get('llm', {}).get('input_messages')
+    in_msgs_fallback = raw_in_msgs.get('input_messages') if isinstance(raw_in_msgs, dict) else raw_in_msgs
     flattened_input = (
         flatten_messages(attributes_json.get('gen_ai', {}).get('input', {}).get('messages')) or
-        flatten_messages(attributes_json.get('llm', {}).get('input_messages', {}).get('input_messages'))
+        flatten_messages(in_msgs_fallback)
     )
     if flattened_input:
         input_parts.append(flattened_input)
@@ -429,9 +426,11 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
         attributes_json.get('input', {}).get('value') or 
         attributes_json.get('raw', {}).get('input')
     )
+    raw_out_msgs = attributes_json.get('llm', {}).get('output_messages')
+    out_msgs_fallback = raw_out_msgs.get('output_messages') if isinstance(raw_out_msgs, dict) else raw_out_msgs
     output_val = (
         flatten_messages(attributes_json.get('gen_ai', {}).get('output', {}).get('messages')) or
-        flatten_messages(attributes_json.get('llm', {}).get('output_messages', {}).get('output_messages')) or
+        flatten_messages(out_msgs_fallback) or
         attributes_json.get('output', {}).get('value') or 
         attributes_json.get('raw', {}).get('output')
     )

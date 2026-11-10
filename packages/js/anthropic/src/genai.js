@@ -258,12 +258,17 @@ export function extractGenAiSpanInfo(span, {
   assign(variables, 'gen_ai.tool.definitions', toolDefinitions);
   if (hasReasoning(outputMessages)) assign(variables, 'has_thinking', true);
 
-  // Agents
-  assign(variables, 'gen_ai.agent.id', toStrOrNull(attributes['gen_ai.agent.id']));
-  assign(variables, 'gen_ai.agent.name', toStrOrNull(attributes['gen_ai.agent.name']));
-  assign(variables, 'gen_ai.agent.description', toStrOrNull(attributes['gen_ai.agent.description']));
+  // Agents & Tools
+  assign(variables, 'gen_ai.agent.id', toStrOrNull(attributes['gen_ai.agent.id'] ?? attributes['anthropic.agent.id']));
+  assign(variables, 'gen_ai.agent.name', toStrOrNull(attributes['gen_ai.agent.name'] ?? attributes['anthropic.agent.name']));
+  assign(variables, 'gen_ai.agent.description', toStrOrNull(attributes['gen_ai.agent.description'] ?? attributes['anthropic.agent.description']));
   assign(variables, 'gen_ai.conversation.id', toStrOrNull(attributes['gen_ai.conversation.id']));
   if (kindVal === 'AGENT') assign(variables, 'is_agent', true);
+  if (kindVal === 'TOOL') {
+    assign(variables, 'gen_ai.tool.name', toStrOrNull(attributes['gen_ai.tool.name']));
+    assign(variables, 'gen_ai.tool.call.id', toStrOrNull(attributes['gen_ai.tool.call.id']));
+    assign(variables, 'gen_ai.tool.type', toStrOrNull(attributes['gen_ai.tool.type']));
+  }
 
   // Legacy LLM fields
   const sysText = systemText(systemInstructions);

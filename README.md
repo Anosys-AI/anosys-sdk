@@ -28,26 +28,27 @@ Python packages require Python 3.10 or later. JavaScript packages declare Node.j
 
 | Package | Version | Install |
 | --- | --- | --- |
-| [anosys-sdk-core](packages/python/core/) | 1.1.0 | `pip install anosys-sdk-core` |
-| [anosys-sdk-openai](packages/python/openai/) | 1.0.14 | `pip install anosys-sdk-openai` |
-| [anosys-sdk-openai-agents](packages/python/openai_agents/) | 1.0.13 | `pip install anosys-sdk-openai-agents` |
-| [anosys-sdk-anthropic](packages/python/anthropic/) | 1.0.0 | `pip install anosys-sdk-anthropic` |
-| [anosys-sdk-claude-agents](packages/python/claude_agents/) | 1.0.0 | `pip install anosys-sdk-claude-agents` |
-| [anosys-claude-code](packages/python/claude_code/) | 0.2.9 | `pip install anosys-claude-code` |
-| [anosys-codex](packages/python/codex/) | 0.1.1 | `pip install anosys-codex` |
-| [anosys-antigravity](packages/python/antigravity/) | 0.1.0 | `pip install anosys-antigravity` |
+| [anosys-sdk-core](packages/python/core/) | 2.0.0 | `pip install anosys-sdk-core` |
+| [anosys-sdk-openai](packages/python/openai/) | 1.1.0 | `pip install anosys-sdk-openai` |
+| [anosys-sdk-openai-agents](packages/python/openai_agents/) | 1.1.0 | `pip install anosys-sdk-openai-agents` |
+| [anosys-sdk-anthropic](packages/python/anthropic/) | 1.1.0 | `pip install anosys-sdk-anthropic` |
+| [anosys-sdk-claude-agents](packages/python/claude_agents/) | 1.1.0 | `pip install anosys-sdk-claude-agents` |
+| [anosys-claude-code](packages/python/claude_code/) | 0.3.0 | `pip install anosys-claude-code` |
+| [anosys-codex](packages/python/codex/) | 0.2.0 | `pip install anosys-codex` |
+| [anosys-antigravity](packages/python/antigravity/) | 0.2.0 | `pip install anosys-antigravity` |
 
 ### JavaScript
 
 | Package | Version | Install |
 | --- | --- | --- |
-| [anosys-sdk-openai](packages/js/openai/) | 1.0.12 | `npm install anosys-sdk-openai openai` |
-| [anosys-sdk-openai-agents](packages/js/openai-agents/) | 1.0.12 | `npm install anosys-sdk-openai-agents @openai/agents` |
-| [anosys-sdk-anthropic](packages/js/anthropic/) | 1.0.0 | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` |
-| [anosys-sdk-claude-agents](packages/js/claude-agents/) | 1.0.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
-| [anosys-sdk-claude-code](packages/js/claude-code/) | 0.2.6 | `npx -y anosys-sdk-claude-code install` |
-| [anosys-sdk-codex](packages/js/codex/) | 0.1.0 | `npm install -g anosys-sdk-codex` |
-| [anosys-sdk-antigravity](packages/js/antigravity/) | 0.1.0 | `npm install -g anosys-sdk-antigravity` |
+| [anosys-sdk-core](packages/js/core/) | 2.0.0 | `npm install anosys-sdk-core` |
+| [anosys-sdk-openai](packages/js/openai/) | 1.1.0 | `npm install anosys-sdk-openai openai` |
+| [anosys-sdk-openai-agents](packages/js/openai-agents/) | 1.1.0 | `npm install anosys-sdk-openai-agents @openai/agents` |
+| [anosys-sdk-anthropic](packages/js/anthropic/) | 1.1.0 | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` |
+| [anosys-sdk-claude-agents](packages/js/claude-agents/) | 1.1.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
+| [anosys-sdk-claude-code](packages/js/claude-code/) | 0.3.0 | `npx -y anosys-sdk-claude-code install` |
+| [anosys-sdk-codex](packages/js/codex/) | 0.2.0 | `npm install -g anosys-sdk-codex` |
+| [anosys-sdk-antigravity](packages/js/antigravity/) | 0.2.0 | `npm install -g anosys-sdk-antigravity` |
 
 ## Getting started
 
@@ -219,7 +220,7 @@ scripts/release.sh <component> <new-version>
 
 | Component | Package | Registry |
 | --- | --- | --- |
-| core | anosys-sdk-core | PyPI |
+| core / core-js | anosys-sdk-core | PyPI / npm |
 | openai-py / openai-js | anosys-sdk-openai | PyPI / npm |
 | openai-agents-py / openai-agents-js | anosys-sdk-openai-agents | PyPI / npm |
 | anthropic-py / anthropic-js | anosys-sdk-anthropic | PyPI / npm |

@@ -4,7 +4,7 @@
  */
 
 const readline = require('readline');
-const { cmdPrivacy, cmdPurge, effectiveLevel, printDoctor } = require('anosys-sdk-core');
+const { METADATA, cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, writeConsent } = require('anosys-sdk-core');
 const {
   HOOK_NAME,
   HOOK_COMMAND,
@@ -97,6 +97,10 @@ async function cmdInstall(args) {
   if (!yes) {
     const choice = (await promptUser(`Update ${hooksPath}? (Y/n): `)).toLowerCase();
     autoUpdate = choice !== 'n';
+  }
+
+  if (args.redaction) {
+    writeConsent(METADATA, 'install --redaction');
   }
 
   if (autoUpdate) {

@@ -25,7 +25,8 @@ def test_hook_survives_read_only_home(package, args, stdin, tmp_path):
     home.mkdir()
     home.chmod(stat.S_IRUSR | stat.S_IXUSR)
     env = {k: v for k, v in os.environ.items() if not k.startswith(("ANOSYS_", "CODEX_"))}
-    env.update(HOME=str(home), CODEX_HOME=str(home / ".codex"), ANOSYS_CONSENT_FILE=str(home / "c.json"))
+    env.update(HOME=str(home), CODEX_HOME=str(home / ".codex"), ANOSYS_CONSENT_FILE=str(home / "c.json"),
+               PYTHONPATH=os.pathsep.join(sys.path))
     try:
         start = time.monotonic()
         result = subprocess.run([sys.executable, *args], input=stdin, env=env, capture_output=True,

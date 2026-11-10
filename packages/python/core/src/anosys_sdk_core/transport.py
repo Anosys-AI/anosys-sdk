@@ -431,6 +431,7 @@ def deliver(
     post: Optional[Callable[..., Any]] = None,
     budget: Optional[float] = None,
     metadata_fields: Optional[Iterable[str]] = None,
+    cwd: Optional[str] = None,
 ) -> int:
     """
     Send queued retries plus ``records``; requeue only what is retryable.
@@ -461,7 +462,7 @@ def deliver(
             if retry:
                 logger.warning("Queue busy (another hook run); %d record(s) not kept for retry", len(retry))
             return ok
-        return _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline, metadata_fields)
+        return _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline, metadata_fields, cwd=cwd)
 
 
 def hook_time_budget() -> float:
@@ -514,11 +515,11 @@ class _QueueLock:
                 pass
 
 
-def _apply_current_level(pending: List[Dict[str, Any]], metadata_fields: Iterable[str]) -> List[Dict[str, Any]]:
+def _apply_current_level(pending: List[Dict[str, Any]], metadata_fields: Iterable[str], cwd: Optional[str] = None) -> List[Dict[str, Any]]:
     """Downgrade queued entries to the level in force now (consent can be withdrawn while they wait)."""
     from anosys_sdk_core.privacy import FULL, METADATA, OFF, effective_level, filter_fields
 
-    level, _ = effective_level()
+    level, _ = effective_level(cwd=cwd)
     if level == OFF:
         return []
     if level == FULL:
@@ -531,10 +532,10 @@ def _apply_current_level(pending: List[Dict[str, Any]], metadata_fields: Iterabl
     return pending
 
 
-def _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline, metadata_fields=None) -> int:
+def _deliver_locked(url, records, queue, pause_marker, headers, timeout, post, deadline, metadata_fields=None, cwd=None) -> int:
     pending = queue.load()
     if metadata_fields is not None and pending:
-        pending = _apply_current_level(pending, metadata_fields)
+        pending = _apply_current_level(pending, metadata_fields, cwd=cwd)
     sent = 0
     still_pending: List[Dict[str, Any]] = []
     if pending:
