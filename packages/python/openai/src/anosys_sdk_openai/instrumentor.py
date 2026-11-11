@@ -18,12 +18,36 @@ from opentelemetry.sdk.trace.export import (
     SpanExporter,
     SpanExportResult,
 )
+try:
+    from fi_instrumentation.fi_types import SpanAttributes
+    _GENAI_FALLBACKS = {
+        "GEN_AI_INPUT_MESSAGES": "gen_ai.input.messages",
+        "GEN_AI_OUTPUT_MESSAGES": "gen_ai.output.messages",
+        "GEN_AI_PROMPTS": "gen_ai.prompts",
+        "GEN_AI_PROVIDER_NAME": "gen_ai.provider.name",
+        "GEN_AI_REQUEST_MODEL": "gen_ai.request.model",
+        "GEN_AI_REQUEST_PARAMETERS": "gen_ai.request.parameters",
+        "GEN_AI_SPAN_KIND": "gen_ai.span.kind",
+        "GEN_AI_TOOL_DEFINITIONS": "gen_ai.tool.definitions",
+        "GEN_AI_USAGE_INPUT_TOKENS": "gen_ai.usage.input_tokens",
+        "GEN_AI_USAGE_INPUT_TOKENS_CACHE_READ": "gen_ai.usage.input_tokens.cache_read",
+        "GEN_AI_USAGE_OUTPUT_TOKENS": "gen_ai.usage.output_tokens",
+        "GEN_AI_USAGE_OUTPUT_TOKENS_REASONING": "gen_ai.usage.output_tokens.reasoning",
+        "GEN_AI_USAGE_TOTAL_TOKENS": "gen_ai.usage.total_tokens",
+    }
+    for attr, val in _GENAI_FALLBACKS.items():
+        if not hasattr(SpanAttributes, attr):
+            setattr(SpanAttributes, attr, val)
+except Exception:
+    pass
+
 from traceai_openai import OpenAIInstrumentor
-import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import accepts_span, current_app_level, prepare_app_record, resolve_app_level, user_context_value
+from anosys_sdk_core.privacy import METADATA, OFF
+from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_openai.hooks import extract_span_info
 
 logger = logging.getLogger(__name__)
@@ -31,7 +55,12 @@ logger = logging.getLogger(__name__)
 # Module-level state
 _lock = threading.Lock()
 _tracing_initialized = False
-_log_api_url = "https://www.anosys.ai"
+_log_api_url = ""  # set by setup_tracing; empty = nothing is sent
+
+# Spans this exporter owns; everything else on a shared provider is left alone
+OPENAI_SCOPES = ("traceai_openai", "openinference.instrumentation.openai", "opentelemetry.instrumentation.openai")
+OPENAI_SYSTEMS = ("openai",)
+_capture_level = None  # set by AnosysOpenAILogger; until then the shared level applies (anosys_sdk_core.capture)
 
 
 class AnosysHttpExporter(SpanExporter):
@@ -50,22 +79,17 @@ class AnosysHttpExporter(SpanExporter):
         global _log_api_url
 
         for span in spans:
+            if not accepts_span(span, OPENAI_SCOPES, OPENAI_SYSTEMS):
+                continue
             try:
                 span_json = json.loads(span.to_json(indent=2))
                 data = extract_span_info(span_json)
 
                 # Attach user context if available
                 try:
-                    user_context = self._get_user_context()
-                    if user_context:
-                        data["user_context"] = {
-                            "session_id": (user_context.get("session_id", "unknown_session")
-                                           if isinstance(user_context, dict)
-                                           else getattr(user_context, "session_id", "unknown_session")),
-                            "token": (user_context.get("token")
-                                      if isinstance(user_context, dict)
-                                      else getattr(user_context, "token", None)),
-                        }
+                    value = user_context_value(self._get_user_context())
+                    if value:
+                        data["cvs5"] = value
                 except Exception:
                     pass
 
@@ -73,14 +97,15 @@ class AnosysHttpExporter(SpanExporter):
                 span_name = data.get("otel_name") or "unknown"
                 logger.debug("Exporting span from: %s | Name: %s", span_source, span_name)
 
-                data = encrypt_payload(data)
-                response = requests.post(_log_api_url, json=data, timeout=5)
-                response.raise_for_status()
+                # Level filtering, cvs198 and encryption in one place
+                data = prepare_app_record(data, _capture_level or current_app_level()[0])
+                if data is None:
+                    continue
+                # size-limited, in the background: never blocks the instrumented call
+                send_app_record(_log_api_url, data)
 
-            except requests.exceptions.HTTPError as e:
-                logger.error("HTTP export failed (%s): %s", e.response.status_code, e)
             except Exception as e:
-                logger.error("Export failed: %s", e)
+                logger.error("AnoSys export failed (%s)", type(e).__name__)  # no span content in logs
 
         return SpanExportResult.SUCCESS
 
@@ -142,7 +167,15 @@ def setup_tracing(
         except Exception as e:
             logger.warning("Uninstrument warning: %s", e)
 
-        instrumentor.instrument(tracer_provider=trace_provider)
+        instrument_kwargs = {"tracer_provider": trace_provider}
+        if (_capture_level or current_app_level()[0]) == METADATA:
+            # Defense in depth: ask the instrumentation not to record content either
+            try:
+                from traceai_openai import TraceConfig
+                instrument_kwargs["config"] = TraceConfig(hide_inputs=True, hide_outputs=True)
+            except ImportError:
+                pass
+        instrumentor.instrument(**instrument_kwargs)
         logger.info("AnoSys instrumented OpenAI and OpenTelemetry traces")
 
 
@@ -160,23 +193,34 @@ class AnosysOpenAILogger:
         response = client.chat.completions.create(...)
     """
     
-    def __init__(self, get_user_context: Optional[Callable] = None):
+    def __init__(self, get_user_context: Optional[Callable] = None, capture_content: Optional[bool] = None):
         """
         Initialize the AnoSys OpenAI Logger.
         
         Args:
             get_user_context: Optional function that returns user context dict
+            capture_content: True to send prompts and completions, False for
+                metadata only. None (default) follows ANOSYS_COLLECTION_LEVEL and a
+                project ``.anosys`` file (see anosys_sdk_core.capture); full otherwise.
         """
-        global _tracing_initialized
+        global _tracing_initialized, _capture_level, _log_api_url
+
+        _capture_level, source = resolve_app_level(capture_content)
+        self.capture_level = _capture_level
+        logger.info("AnoSys OpenAI collection level: %s (%s)", _capture_level, source)
+        if _capture_level == OFF:
+            return
         
         # Resolve API URL
         self.log_api_url = resolve_api_key()
+        if self.log_api_url:
+            _log_api_url = self.log_api_url
+            setup_api(self.log_api_url)
         
         # Optional user context function
         self.get_user_context = get_user_context or (lambda: None)
         
         # Initialize tracing if not already done
         if not _tracing_initialized:
-            setup_api(self.log_api_url)
             setup_tracing(self.log_api_url, get_user_context=self.get_user_context)
             _tracing_initialized = True

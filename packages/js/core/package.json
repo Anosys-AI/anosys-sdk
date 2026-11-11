@@ -1,0 +1,31 @@
+{
+  "name": "anosys-sdk-core",
+  "version": "2.0.0",
+  "description": "AnoSys SDK core for Node.js \u2014 collection levels, consent, size-limited delivery and client-side encryption shared by all AnoSys packages",
+  "author": "AnoSys <support@anosys.ai>",
+  "license": "Apache-2.0",
+  "homepage": "https://anosys.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anosys-ai/anosys-sdk.git"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "anosys",
+    "observability",
+    "privacy",
+    "encryption"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

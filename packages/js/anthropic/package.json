@@ -1,7 +1,7 @@
 {
   "name": "anosys-sdk-anthropic",
-  "version": "1.0.0",
-  "description": "AnoSys SDK for Anthropic — automatic instrumentation and logging for Anthropic (Claude) API calls",
+  "version": "1.1.0",
+  "description": "AnoSys SDK for Anthropic \u2014 automatic instrumentation and logging for Anthropic (Claude) API calls",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
   "homepage": "https://anosys.ai",
@@ -14,6 +14,9 @@
   "exports": {
     ".": "./src/index.js"
   },
+  "files": [
+    "src/"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },
@@ -31,8 +34,8 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
-    "axios": "^1.7.0",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "anosys-sdk-core": "^2.0.0"
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=1.0.0"

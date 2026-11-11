@@ -29,7 +29,6 @@ const REQUEST_PARAMETERS = [
 ];
 
 const STATUS_CODES = { 0: 'UNSET', 1: 'OK', 2: 'ERROR' };
-const SPAN_KINDS = { 0: 'INTERNAL', 1: 'SERVER', 2: 'CLIENT', 3: 'PRODUCER', 4: 'CONSUMER' };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,11 +38,6 @@ function toTimestamp(dtStr) {
   return Number.isNaN(ms) ? null : Math.floor(ms);
 }
 
-function hrTimeToIso(hrTime) {
-  if (!Array.isArray(hrTime)) return null;
-  const ms = Number(hrTime[0]) * 1e3 + Number(hrTime[1]) / 1e6;
-  return new Date(ms).toISOString();
-}
 
 function toStrOrNull(val) {
   if (val === null || val === undefined) return null;
@@ -70,50 +64,32 @@ function toNumber(value) {
  * Convert an OTel ReadableSpan to the shape of Python's `ReadableSpan.to_json()`,
  * so both languages feed the extractor the same structure.
  */
-export function spanToJson(span) {
-  const ctx = typeof span.spanContext === 'function' ? span.spanContext() : (span.context ?? {});
-  const parentId = span.parentSpanContext?.spanId ?? span.parentSpanId ?? null;
-  const statusCode = span.status?.code ?? 0;
-  return {
-    name: span.name,
-    context: {
-      trace_id: ctx.traceId ? `0x${ctx.traceId}` : null,
-      span_id: ctx.spanId ? `0x${ctx.spanId}` : null,
-      trace_state: ctx.traceState ? ctx.traceState.serialize() : '[]',
-    },
-    kind: `SpanKind.${SPAN_KINDS[span.kind] ?? 'INTERNAL'}`,
-    parent_id: parentId ? `0x${parentId}` : null,
-    start_time: hrTimeToIso(span.startTime),
-    end_time: hrTimeToIso(span.endTime),
-    status: span.status?.message
-      ? { status_code: STATUS_CODES[statusCode], description: span.status.message }
-      : { status_code: STATUS_CODES[statusCode] },
-    attributes: { ...(span.attributes ?? {}) },
-    events: (span.events ?? []).map(e => ({
-      name: e.name,
-      timestamp: hrTimeToIso(e.time),
-      attributes: { ...(e.attributes ?? {}) },
-    })),
-    links: [],
-    resource: { attributes: { ...(span.resource?.attributes ?? {}) }, schema_url: '' },
-  };
-}
+// One implementation in anosys-sdk-core (no circular serialisation of SDK 2.x spans)
+export { spanToJson } from 'anosys-sdk-core';
 
 function partText(part) {
+  if (!part || typeof part !== 'object') return typeof part === 'string' ? part : null;
   const type = part.type;
-  if (type === 'text' || type === 'reasoning') {
-    const content = part.content;
-    return type === 'reasoning' && content ? `[Thinking] ${content}` : content;
+  if (type === 'text') {
+    return part.text ?? part.content ?? null;
   }
-  if (type === 'tool_call') {
-    const args = typeof part.arguments === 'object' ? JSON.stringify(part.arguments) : part.arguments;
-    return `[Tool Call: ${part.name}] ${args ?? ''}`.trimEnd();
+  if (type === 'reasoning' || type === 'thinking') {
+    const content = part.thinking ?? part.content;
+    return content ? `[Thinking] ${content}` : null;
   }
-  if (type === 'tool_call_response') {
-    const resp = typeof part.response === 'object' ? JSON.stringify(part.response) : part.response;
+  if (type === 'tool_call' || type === 'tool_use') {
+    const name = part.name ?? part.tool_name ?? '';
+    const args = part.input ?? part.arguments;
+    const argsStr = typeof args === 'object' ? JSON.stringify(args) : args;
+    return `[Tool Call: ${name}] ${argsStr ?? ''}`.trimEnd();
+  }
+  if (type === 'tool_call_response' || type === 'tool_result') {
+    const resp = typeof part.content === 'object' ? JSON.stringify(part.content) : (part.content ?? part.response);
     return `[Tool Result] ${resp ?? ''}`.trimEnd();
   }
-  return typeof part.content === 'string' ? part.content : null;
+  if (part.text) return part.text;
+  if (part.content) return typeof part.content === 'string' ? part.content : JSON.stringify(part.content);
+  return null;
 }
 
 /**
@@ -129,10 +105,17 @@ export function flattenMessages(messages) {
   const blocks = [];
   for (const message of messages) {
     if (!message || typeof message !== 'object') continue;
+    if (message.type && !message.role) {
+      const text = partText(message);
+      if (text) blocks.push(text);
+      continue;
+    }
     const role = message.role;
     let text;
     if (Array.isArray(message.parts)) {
       text = message.parts.filter(p => p && typeof p === 'object').map(partText).filter(Boolean).join('\n');
+    } else if (Array.isArray(message.content)) {
+      text = message.content.filter(p => p && typeof p === 'object').map(partText).filter(Boolean).join('\n');
     } else {
       text = typeof message.content === 'string' ? message.content : toStrOrNull(message.content);
     }
@@ -156,7 +139,11 @@ function systemText(systemInstructions) {
 function hasReasoning(messages) {
   messages = parseJson(messages);
   if (!Array.isArray(messages)) return false;
-  return messages.some(m => Array.isArray(m?.parts) && m.parts.some(p => p?.type === 'reasoning'));
+  return messages.some(m => {
+    if (m?.type === 'reasoning' || m?.type === 'thinking') return true;
+    const blocks = Array.isArray(m?.parts) ? m.parts : (Array.isArray(m?.content) ? m.content : null);
+    return Array.isArray(blocks) && blocks.some(p => p?.type === 'reasoning' || p?.type === 'thinking');
+  });
 }
 
 // ── Main span extraction ──────────────────────────────────────────────────────
@@ -254,9 +241,13 @@ export function extractGenAiSpanInfo(span, {
   const inputTokens = toNumber(attributes['gen_ai.usage.input_tokens']);
   const outputTokens = toNumber(attributes['gen_ai.usage.output_tokens']);
   let totalTokens = toNumber(attributes['gen_ai.usage.total_tokens']);
-  const cacheRead = toNumber(attributes['gen_ai.usage.cache_read.input_tokens']);
+  const cacheRead = toNumber(
+    attributes['gen_ai.usage.cache_read.input_tokens'] ?? attributes['gen_ai.usage.cache_read_input_tokens'],
+  );
   const cacheCreation = toNumber(
-    attributes['gen_ai.usage.cache_creation.input_tokens'] ?? attributes['gen_ai.usage.cache_write.input_tokens'],
+    attributes['gen_ai.usage.cache_creation.input_tokens']
+      ?? attributes['gen_ai.usage.cache_creation_input_tokens']
+      ?? attributes['gen_ai.usage.cache_write.input_tokens'],
   );
   const reasoningTokens = toNumber(attributes['gen_ai.usage.reasoning.output_tokens']);
   if (totalTokens == null && inputTokens != null && outputTokens != null) totalTokens = inputTokens + outputTokens;
@@ -288,14 +279,19 @@ export function extractGenAiSpanInfo(span, {
   assign(variables, 'gen_ai.output.messages', outputMessages);
   assign(variables, 'gen_ai.system_instructions', systemInstructions);
   assign(variables, 'gen_ai.tool.definitions', toolDefinitions);
-  if (hasReasoning(outputMessages)) assign(variables, 'has_thinking', true);
+  if (Boolean(attributes?.has_thinking) || Boolean(attributes?.['gen_ai.thinking']) || hasReasoning(outputMessages)) assign(variables, 'has_thinking', true);
 
-  // Agents
-  assign(variables, 'gen_ai.agent.id', toStrOrNull(attributes['gen_ai.agent.id']));
-  assign(variables, 'gen_ai.agent.name', toStrOrNull(attributes['gen_ai.agent.name']));
-  assign(variables, 'gen_ai.agent.description', toStrOrNull(attributes['gen_ai.agent.description']));
+  // Agents & Tools
+  assign(variables, 'gen_ai.agent.id', toStrOrNull(attributes['gen_ai.agent.id'] ?? attributes['anthropic.agent.id']));
+  assign(variables, 'gen_ai.agent.name', toStrOrNull(attributes['gen_ai.agent.name'] ?? attributes['anthropic.agent.name']));
+  assign(variables, 'gen_ai.agent.description', toStrOrNull(attributes['gen_ai.agent.description'] ?? attributes['anthropic.agent.description']));
   assign(variables, 'gen_ai.conversation.id', toStrOrNull(attributes['gen_ai.conversation.id']));
   if (kindVal === 'AGENT') assign(variables, 'is_agent', true);
+  if (kindVal === 'TOOL') {
+    assign(variables, 'gen_ai.tool.name', toStrOrNull(attributes['gen_ai.tool.name']));
+    assign(variables, 'gen_ai.tool.call.id', toStrOrNull(attributes['gen_ai.tool.call.id']));
+    assign(variables, 'gen_ai.tool.type', toStrOrNull(attributes['gen_ai.tool.type']));
+  }
 
   // Legacy LLM fields
   const sysText = systemText(systemInstructions);

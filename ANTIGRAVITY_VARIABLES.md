@@ -48,7 +48,7 @@ The table below explains exactly where the AnoSys SDK extracts every piece of in
 | `hook_name` | `cvs18` | Hook event | `'Stop'` or `'PreInvocation'` |
 | `hook_command` | `cvs19` | CLI command | `'anosys-antigravity run'` |
 | `error_obj` / `error` | `cvs25` | `Stop` hook stdin JSON | `input_json.get("error")` (present if turn failed) |
-| `integration_version` | `cvs32` | Package version | Package `INTEGRATION_VERSION` (`'0.1.0'`) |
+| `integration_version` | `cvs32` | Package version | Package `INTEGRATION_VERSION` (`'0.2.0'`) |
 | `os_user` | `cvs33` | Environment variable | Host OS username (`USERNAME` or `USER`) |
 | `active_document` | `cvs70` | `USER_INPUT` `<ADDITIONAL_METADATA>` | Regex: `Active Document:\s*([^\r\n(]+)` |
 | `active_document_language`| `cvs71` | `USER_INPUT` `<ADDITIONAL_METADATA>` | Regex: `\((LANGUAGE_\w+)\)` |
@@ -124,7 +124,7 @@ This table describes all named variables emitted in the descriptive JSON payload
 | `transcript_path` | `string` | `cvs88` | Metadata | Path to Antigravity transcript JSONL file. |
 | `artifact_directory` | `string` | `cvs89` | Metadata | Path to session artifacts folder. |
 | `workspace_paths` | `array` / `string` | `cvs93` | Metadata | All workspace directories attached to session. |
-| `integration_version` | `string` | `cvs32` | Metadata | Version string of the AnoSys Antigravity SDK (`0.1.0`). |
+| `integration_version` | `string` | `cvs32` | Metadata | Version string of the AnoSys Antigravity SDK (`0.2.0`). |
 | `os_user` | `string` | `cvs33` | Environment | OS username of developer running Antigravity. |
 | `raw` / `cvs199` | `string` | `cvs199` | Audit Context | Serialized JSON array of all raw planner steps, tool calls, and results. |
 | `source_tag` / `cvs200` | `string` | `cvs200` | Source Tag | Hook signature tag, always `'AntigravityHook'`. |
@@ -150,7 +150,7 @@ This table describes all named variables emitted in the descriptive JSON payload
 | **`cvs18`** | `hook_name` | Hook event (`'Stop'` or `'PreInvocation'`) |
 | **`cvs19`** | `hook_command` | Hook command (`'anosys-antigravity run'`) |
 | **`cvs25`** | `error_obj` | Error details / message |
-| **`cvs32`** | `integration_version` | SDK version (`'0.1.0'`) |
+| **`cvs32`** | `integration_version` | SDK version (`'0.2.0'`) |
 | **`cvs33`** | `os_user` | Operating system username |
 | **`cvs70`** | `active_document` | Active file opened in IDE |
 | **`cvs71`** | `active_document_language` | Language of active document |

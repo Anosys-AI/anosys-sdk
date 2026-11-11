@@ -27,7 +27,16 @@ _CLIENT_TIME_RE = re.compile(r"The current local time is:\s*([^\r\n.]+)", re.IGN
 _CREATED_AT_RE = re.compile(r"^Created At:\s*(\S+)", re.MULTILINE)
 _COMPLETED_AT_RE = re.compile(r"^Completed At:\s*(\S+)", re.MULTILINE)
 
-_NON_TOOL_TYPES = {"USER_INPUT", "PLANNER_RESPONSE", "CONVERSATION_HISTORY"}
+_NON_TOOL_TYPES = {
+    "USER_INPUT",
+    "PLANNER_RESPONSE",
+    "CONVERSATION_HISTORY",
+    "SYSTEM",
+    "THOUGHT",
+    "MEMORY",
+    "CHECKPOINT",
+    "SUMMARY",
+}
 
 
 def iso_to_ms(value: str) -> int:

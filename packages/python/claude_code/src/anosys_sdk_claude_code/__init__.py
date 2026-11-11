@@ -10,7 +10,7 @@ except ImportError:
 
 from anosys_sdk_claude_code.installer import update_env, update_stop_hooks
 from anosys_sdk_claude_code.mapper import transform_record
-from anosys_sdk_claude_code.encryption import (
+from anosys_sdk_core.encryption import (
     ANOSYS_ENCRYPTION_PREFIX,
     DEFAULT_ENCRYPTED_COLUMNS,
     derive_256_bit_key,

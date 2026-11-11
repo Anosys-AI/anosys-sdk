@@ -3,9 +3,10 @@
 
 const fs = require('fs');
 const readline = require('readline');
+const { METADATA, cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, writeConsent } = require('anosys-sdk-core');
 const {
-  HOOK_COMMAND,
   INGESTION_URL,
+  hookCommand,
   getConfigPath,
   getEnvPath,
   loadToml,
@@ -17,7 +18,9 @@ const {
   backup,
   validateApiKey
 } = require('./installer');
-const { run } = require('./hookRunner');
+const hookRunner = require('./hookRunner');
+
+const { run } = hookRunner;
 
 function prompt(question, defaultVal = '') {
   return new Promise(resolve => {
@@ -34,16 +37,6 @@ async function cmdInstall(args) {
   console.log('=============================================');
 
   const nonInteractive = args.includes('-y') || args.includes('--yes') || args.includes('--non-interactive');
-
-  let redaction = args.includes('--redaction');
-  if (!redaction && !args.includes('--no-redaction')) {
-    if (nonInteractive) {
-      redaction = false;
-    } else {
-      const choice = (await prompt('Enable content redaction? (y/N): ', 'n')).toLowerCase();
-      redaction = choice === 'y';
-    }
-  }
 
   let apiKey = '';
   const keyIdx = args.indexOf('--api-key');
@@ -80,32 +73,35 @@ async function cmdInstall(args) {
   const configPath = getConfigPath();
   const envPath = getEnvPath();
 
+  if (args.includes('--redaction')) {
+    writeConsent(METADATA, 'install --redaction');
+  }
+
   if (autoUpdate) {
     console.log(`\nUpdating ${configPath} ...`);
     const backupPath = backup(configPath);
-    updateCodexConfig(HOOK_COMMAND, configPath);
-    updateCodexEnv({ apiKey, redaction, customPath: envPath });
+    updateCodexConfig(null, configPath);
+    updateCodexEnv({ apiKey, customPath: envPath });
 
     if (backupPath) console.log(`  Backed up original settings -> ${backupPath}`);
-    console.log('  Hook command registered in notify: ["anosys-codex", "run"]');
+    console.log(`  Hook command registered in notify: ${JSON.stringify(hookCommand())}`);
     console.log(`  Ingestion URL: ${INGESTION_URL}`);
     if (apiKey) {
       const masked = apiKey.length > 4 ? '*'.repeat(apiKey.length - 4) + apiKey.slice(-4) : '****';
       console.log(`  Logs API key: ${masked}`);
     }
-    console.log(`  Redaction: ${redaction ? 'enabled' : 'disabled'}`);
+    const { level, source } = effectiveLevel();
+    console.log(`  Collecting: ${level} (from ${source})`);
     console.log('\n✅ Codex hook installed successfully.');
-    console.log('\n⚠️  IMPORTANT (Codex Security Trust):');
-    console.log('   In your next Codex CLI session, run the \'/hooks\' command');
-    console.log(`   and approve the '${HOOK_COMMAND}' entry to allow tracing.\n`);
+    console.log('\nBy default only metadata is sent (no prompts, answers, commands or files).');
+    console.log('To send full content, accept the data-collection policy: anosys-codex privacy full\n');
   } else {
     console.log('\n================================================================');
     console.log('Add the following to your ~/.codex/config.toml file:');
-    console.log('\nnotify = ["anosys-codex", "run"]\n');
+    console.log(`\nnotify = ${JSON.stringify(hookCommand())}\n`);
     console.log('And create ~/.codex/anosys-env.sh with:');
     console.log(`export ANOSYS_HOOK_APIKEY="${apiKey}"`);
     console.log(`export ANOSYS_HOOK_ENDPOINT_URL="${INGESTION_URL}"`);
-    console.log(`export REDACTION="${redaction ? 'true' : 'false'}"`);
     console.log('================================================================\n');
   }
 }
@@ -147,7 +143,9 @@ function cmdStatus() {
   const installed = hasAnosysHook(data);
 
   if (installed) {
+    const { level, source } = effectiveLevel();
     console.log('\nStatus: ✅ Installed and active in config.toml');
+    console.log(`Collecting: ${level} (from ${source})`);
     console.log(`Notify hooks: ${JSON.stringify(data.notify || [])}`);
   } else {
     console.log('\nStatus: ❌ Not registered in config.toml');
@@ -166,11 +164,22 @@ async function main() {
     await cmdUninstall();
   } else if (cmd === 'status') {
     cmdStatus();
+  } else if (cmd === 'privacy') {
+    process.exit(await cmdPrivacy('anosys-codex', args.slice(1)));
+  } else if (cmd === 'purge') {
+    const { LOG_FILE, PENDING_FILE, PAUSE_FILE } = hookRunner;
+    process.exit(await cmdPurge([PENDING_FILE, LOG_FILE, `${LOG_FILE}.1`, `${LOG_FILE}.2`, PAUSE_FILE], args));
+  } else if (cmd === 'doctor') {
+    const data = loadToml(getConfigPath());
+    printDoctor('anosys-codex', ['anosys-codex', 'anosys-sdk-codex'],
+      hasAnosysHook(data) ? JSON.stringify(data.notify) : null,
+      { config: getConfigPath(), 'env file': getEnvPath(), state: hookRunner.STATE_FILE,
+        'pending queue': hookRunner.PENDING_FILE, log: hookRunner.LOG_FILE });
   } else if (cmd === 'run') {
-    await run();
+    await run(args.slice(1));
     process.exit(0);
   } else {
-    console.log('Usage: anosys-codex <install|uninstall|status|run> [--api-key <key>] [-y|--yes] [--redaction|--no-redaction] [--auto-update|--no-auto-update]');
+    console.log('Usage: anosys-codex <install|uninstall|status|privacy|doctor|purge|run> [--api-key <key>] [-y|--yes] [--auto-update|--no-auto-update]');
     process.exit(1);
   }
 }

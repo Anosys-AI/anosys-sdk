@@ -1,9 +1,9 @@
 import json
+import os
 import tempfile
 from pathlib import Path
 
 from anosys_sdk_codex.installer import (
-    HOOK_COMMAND,
     backup,
     has_anosys_hook,
     load_toml,
@@ -79,6 +79,7 @@ def test_transform_codex_turn():
     assert mapped["cvs200"] == "CodexHook"
     assert mapped["sessionId"] == "session-abc"
     assert mapped["uuid"] == "turn-123"
+    assert mapped["raw_uuid"] == "turn-123"
     assert mapped["userPrompt"] == "Refactor auth logic"
     assert mapped["assistantText"] == "Refactoring complete."
     assert mapped["model"] == "gpt-4o"
@@ -91,23 +92,63 @@ def test_transform_codex_turn():
     assert mapped["tool_count"] == 1
     assert "pytest" in mapped["commands"]
     assert "cvs199" in mapped
+    # In native CC schema mode, duplicate CV columns are not emitted
+    assert "cvn41" not in mapped
+    assert "cvs90" not in mapped
+    assert "cvs13" not in mapped
 
 
-def test_transform_codex_turn_redaction():
+def test_transform_codex_turn_fallback_cv(monkeypatch):
+    monkeypatch.setenv("ANOSYS_CODEX_PIXEL", "false")
     turn = {
-        "turn_id": "turn-999",
-        "model": "o3-mini",
-        "user_prompt": "Secret API password is ABC",
-        "assistant_output": "Got your password ABC",
-        "tokens": {"input_tokens": 10, "output_tokens": 10},
-        "tool_calls": [{"tool": "shell", "args": "echo secret", "output": "secret"}],
+        "turn_id": "turn-123",
+        "model": "gpt-4o",
+        "model_provider": "openai",
+        "cwd": "/workspace/project",
+        "permission_mode": "auto",
+        "user_prompt": "Refactor auth logic",
+        "assistant_output": "Refactoring complete.",
+        "turn_start_ms": 1700000000000,
+        "turn_end_ms": 1700000005000,
+        "duration_ms": 5000,
+        "tokens": {
+            "input_tokens": 1500,
+            "output_tokens": 300,
+            "total_tokens": 1800,
+            "cached_input_tokens": 500,
+            "cache_write_input_tokens": 0,
+            "reasoning_output_tokens": 100,
+        },
+        "tool_calls": [
+            {
+                "tool": "shell",
+                "args": json.dumps({"command": "pytest"}),
+                "output": "1 passed",
+                "call_id": "call_1",
+                "start_ts": 1700000001000,
+                "end_ts": 1700000002000,
+            }
+        ],
     }
-
-    mapped = transform_codex_turn(turn, session_id="session-sec", turn_id="turn-999", redact=True)
-
-    assert mapped["userPrompt"] == "[REDACTED]"
-    assert mapped["assistantText"] == "[REDACTED]"
-    assert "[REDACTED]" in mapped["cvs199"]
+    mapped = transform_codex_turn(turn, session_id="session-abc", turn_id="turn-123")
+    assert mapped["cvs200"] == "CodexHook"
+    assert mapped["cvs1"] == "session-abc"
+    assert mapped["cvs13"] == "turn-123"
+    assert mapped["cvs4"] == "Refactor auth logic"
+    assert mapped["cvs5"] == "Refactoring complete."
+    assert mapped["cvs9"] == "gpt-4o"
+    assert mapped["cvs2"] == "project"
+    assert mapped["cvn1"] == 1500
+    assert mapped["cvn2"] == 300
+    assert mapped["cvn4"] == 500
+    assert mapped["cvb1"] is True
+    assert mapped["cvb2"] is False
+    assert mapped["cvn41"] == 1
+    assert "pytest" in mapped["cvs90"]
+    assert "cvs199" in mapped
+    # In fallback CV mode, native tool/token columns are not duplicated
+    assert "commands" not in mapped
+    assert "tool_count" not in mapped
 
 
 def test_installer_config_lifecycle():
@@ -119,7 +160,7 @@ def test_installer_config_lifecycle():
         config_path.write_text('[desktop]\nfollowUpQueueMode = "steer"\n\n[plugins."browser@openai-bundled"]\nenabled = true\n', encoding="utf-8")
 
         # 1. Update config
-        updated = update_codex_config(HOOK_COMMAND, path=config_path)
+        updated = update_codex_config(path=config_path)
         assert updated is True
         assert config_path.is_file()
 
@@ -129,10 +170,10 @@ def test_installer_config_lifecycle():
 
         data = load_toml(config_path)
         assert has_anosys_hook(data) is True
-        assert "anosys-codex" in data["notify"]
+        assert data["notify"][1:] == ["-m", "anosys_sdk_codex.hook_runner"]
 
         # 2. Idempotent check
-        updated_again = update_codex_config(HOOK_COMMAND, path=config_path)
+        updated_again = update_codex_config(path=config_path)
         assert updated_again is False
 
         # 3. Backup
@@ -140,11 +181,13 @@ def test_installer_config_lifecycle():
         assert bk is not None and bk.is_file()
 
         # 4. Update env
-        update_codex_env(api_key="test-api-key", redaction=True, path=env_path)
+        update_codex_env(api_key="test-api-key", path=env_path)
         assert env_path.is_file()
         env_content = env_path.read_text(encoding="utf-8")
         assert "test-api-key" in env_content
-        assert 'REDACTION="true"' in env_content
+        assert "REDACTION" not in env_content
+        if os.name != "nt":
+            assert (env_path.stat().st_mode & 0o777) == 0o600
 
         # 5. Remove config
         removed = remove_codex_config(config_path)
@@ -244,24 +287,17 @@ def test_validate_api_key_cc_pixel():
         assert validate_api_key("t-key", "cc") is False
 
 
-def test_transform_codex_turn_encryption():
-    import os
-    from unittest.mock import patch
-    from anosys_sdk_codex.encryption import ANOSYS_ENCRYPTION_PREFIX, decrypt, derive_256_bit_key
 
-    turn = {
-        "model": "gpt-4o",
-        "user_prompt": "Codex secret query",
-        "assistant_output": "Codex completion text",
-    }
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "codex-secret"}):
-        result = transform_codex_turn(turn, session_id="s1", turn_id="t1")
-        assert result["user_prompt"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["assistant_text"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["cvs4"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["cvs5"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
 
-        key = derive_256_bit_key("codex-secret")
-        assert decrypt(result["user_prompt"], key) == "Codex secret query"
-        assert decrypt(result["assistant_text"], key) == "Codex completion text"
+def test_multiline_notify_is_replaced_not_duplicated(tmp_path):
+    """Audit 4.4: a notify array written over several lines is found and chained, the TOML stays valid."""
+    config = tmp_path / "config.toml"
+    config.write_text('model = "o3"\nnotify = [\n  "python3",\n  "/x/notify.py",\n  "--arg=[1]",\n]\n\n[tui]\nnotify = true\n')
+    update_codex_config(path=config)
+    data = load_toml(config)
+    assert has_anosys_hook(data)
+    assert data["tui"]["notify"] is True
+    top = config.read_text().split("[tui]")[0]
+    assert top.count("notify =") == 1
+    assert '"python3",\n' not in config.read_text()
+    assert "/x/notify.py" in str(data["notify"])   # the previous notifier is chained

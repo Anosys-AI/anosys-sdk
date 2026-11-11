@@ -10,16 +10,7 @@
 
 const os = require('os');
 const path = require('path');
-const fs = require('fs');
-const {
-  encryptPayload,
-  derive256BitKey,
-  decrypt,
-  getEncryptionKey,
-  getTargetColumns,
-  ANOSYS_ENCRYPTION_PREFIX,
-  DEFAULT_ENCRYPTED_COLUMNS,
-} = require('./encryption');
+const { BASE_METADATA_FIELDS } = require('anosys-sdk-core');
 
 // Version of the Claude Code integration package (read from package.json)
 const INTEGRATION_VERSION = require('../package.json').version;
@@ -30,24 +21,29 @@ const OS_USER = os.userInfo().username;
 // Toggle for descriptive schema vs legacy CV schema
 const CLAUDE_PIXEL = (process.env.ANOSYS_CLAUDE_PIXEL || 'true').toLowerCase() === 'true';
 
-// Toggle for redacting sensitive content (questions, answers, thinking)
-const REDACTION = (process.env.REDACTION || 'false').toLowerCase() === 'true';
-
-// Local log for unhandled record types
+// Legacy debug file older versions appended unrecognized raw records to.
+// Nothing writes it anymore; `anosys-sdk-claude-code purge` deletes it.
 const UNHANDLED_LOG_PATH = path.join(os.homedir(), '.claude', 'hooks', 'unhandled_records.jsonl');
 
-/**
- * Log unhandled records to a local JSONL file for future mapping improvements.
- * @param {object} record
- */
+// Unrecognized record types seen in this process (counted, never stored)
+const UNHANDLED_COUNTS = {};
+
+// Fields sent at the `metadata` level, for both layouts (same list as the Python hook).
+// Everything else (prompts, answers, tool results, commands, files, titles, task text,
+// errors, the raw record in cvs199) is `full`-only.
+const CV_METADATA_FIELDS = new Set([
+  ...Array.from({ length: 15 }, (_, i) => `cvb${i + 1}`),
+  ...Array.from({ length: 43 }, (_, i) => `cvn${i + 1}`),
+  ...[1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 23, 27, 28, 29, 31,
+    32, 33, 34, 36, 37, 38, 39, 42, 43, 44, 46, 47, 48, 52, 53, 54, 55, 56, 58, 59, 63, 64, 65,
+    66, 67, 68, 69, 71, 73, 77, 78, 92, 93, 94].map(n => `cvs${n}`),
+]);
+const METADATA_FIELDS = new Set([...BASE_METADATA_FIELDS, ...CV_METADATA_FIELDS]);
+
+/** Count an unrecognized record type. Its content is never written anywhere. */
 function logUnhandled(record) {
-  try {
-    const dir = path.dirname(UNHANDLED_LOG_PATH);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(UNHANDLED_LOG_PATH, JSON.stringify(record) + '\n', 'utf8');
-  } catch (_) {
-    // Silently fail to avoid crashing the hook
-  }
+  const kind = String((record && record.type) || 'unknown').slice(0, 64);
+  UNHANDLED_COUNTS[kind] = (UNHANDLED_COUNTS[kind] || 0) + 1;
 }
 
 /**
@@ -68,53 +64,6 @@ function toUnixMs(isoStr) {
   } catch (_) {
     return Date.now();
   }
-}
-
-/**
- * Scrub sensitive content from the raw record, returning a redacted deep copy.
- * @param {object} record
- * @returns {object}
- */
-function redactRawRecord(record) {
-  const rec = JSON.parse(JSON.stringify(record)); // deep copy
-
-  // Message content (User/Assistant)
-  if (rec.message && typeof rec.message === 'object') {
-    if ('content' in rec.message) {
-      rec.message.content = 'REDACTED';
-    }
-  }
-
-  // Generic content field (System messages, Queue operations, etc.)
-  if ('content' in rec && typeof rec.content === 'string') {
-    rec.content = 'REDACTED';
-  }
-
-  // Queue operation specific
-  if ('operation' in rec && 'content' in rec) {
-    rec.content = 'REDACTED';
-  }
-
-  // Last prompt context
-  if ('lastPrompt' in rec) {
-    rec.lastPrompt = 'REDACTED';
-  }
-
-  // Session summary
-  if ('summary' in rec) {
-    rec.summary = 'REDACTED';
-  }
-
-  // File history snapshots
-  if (rec.snapshot && typeof rec.snapshot === 'object') {
-    if (rec.snapshot.trackedFileBackups && typeof rec.snapshot.trackedFileBackups === 'object') {
-      for (const k of Object.keys(rec.snapshot.trackedFileBackups)) {
-        rec.snapshot.trackedFileBackups[k] = 'REDACTED';
-      }
-    }
-  }
-
-  return rec;
 }
 
 // Pricing based on Anthropic rates (USD per 1M tokens)
@@ -190,10 +139,6 @@ function calculateCost(model, usage) {
  * @returns {object}
  */
 function transformRecord(record, incrementalTokens = null, contextOverrides = null) {
-  if (REDACTION) {
-    record = redactRawRecord(record);
-  }
-
   if (contextOverrides === null) {
     contextOverrides = {};
   }
@@ -982,8 +927,9 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
 
   // ── Build payload ───────────────────────────────────────────────────────
   let payload;
+  const useClaudePixel = (process.env.ANOSYS_CLAUDE_PIXEL || 'true').toLowerCase() === 'true';
 
-  if (CLAUDE_PIXEL) {
+  if (useClaudePixel) {
     payload = {
       timestamp: currentMs,
       user_timestamp: userTs,
@@ -1243,8 +1189,9 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
       cvs87: originStr,
       cvs88: imagePasteIdsStr,
       cvs89: fileAttachmentsStr,
-      cvs90: writtenPathsStr,
-      cvs91: commandsStr,
+      // same columns as Codex and Antigravity (one CC table): cvs90 = commands, cvs91 = written paths
+      cvs90: commandsStr,
+      cvs91: writtenPathsStr,
       cvs92: worktreeOriginalCwd,
       cvs93: worktreePath,
       cvs94: worktreeName,
@@ -1315,7 +1262,8 @@ function transformRecord(record, incrementalTokens = null, contextOverrides = nu
   const cleanPayload = Object.fromEntries(
     Object.entries(payload).filter(([, v]) => v !== null && v !== undefined)
   );
-  return encryptPayload(cleanPayload);
+  // Level filtering and encryption happen in the hook runner
+  return cleanPayload;
 }
 
 module.exports = {
@@ -1323,17 +1271,12 @@ module.exports = {
   calculateCost,
   toUnixMs,
   logUnhandled,
-  redactRawRecord,
-  encryptPayload,
-  derive256BitKey,
-  decrypt,
-  getEncryptionKey,
-  getTargetColumns,
-  ANOSYS_ENCRYPTION_PREFIX,
-  DEFAULT_ENCRYPTED_COLUMNS,
   INTEGRATION_VERSION,
   OS_USER,
   CLAUDE_PIXEL,
-  REDACTION,
   PRICING_CONFIG,
+  METADATA_FIELDS,
+  CV_METADATA_FIELDS,
+  UNHANDLED_COUNTS,
+  UNHANDLED_LOG_PATH,
 };

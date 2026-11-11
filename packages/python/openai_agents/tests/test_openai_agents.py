@@ -259,7 +259,7 @@ def test_agents_starting_indices_valid():
 def test_openai_agents_encryption_exports():
     import os
     from unittest.mock import patch
-    from anosys_sdk_openai_agents import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_256_bit_key, decrypt
+    from anosys_sdk_openai_agents import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_keys, decrypt
 
     with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "agents-key"}):
         payload = {
@@ -274,5 +274,89 @@ def test_openai_agents_encryption_exports():
         assert encrypted["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
         assert encrypted["otel_name"] == "MyAgent"
 
-        key = derive_256_bit_key("agents-key")
+        key = derive_keys("agents-key")
         assert decrypt(encrypted["llm_input"], key) == "agent prompt"
+
+
+# ── unified capture control ─────────────────────────────────────────────────
+
+def _processor(monkeypatch, level, **attrs):
+    from anosys_sdk_openai_agents import processor as proc
+    posted = []
+    monkeypatch.setattr(proc, "send_app_record", lambda url, data: posted.append(data))
+    monkeypatch.setattr(proc, "_capture_level", level)
+    monkeypatch.delenv("ANOSYS_ENCRYPTION_KEY", raising=False)
+    p = object.__new__(proc.AnosysOpenAIAgentsLogger)
+    p.log_api_url = "https://example.invalid"
+    p.get_user_context = lambda: None
+    p.capture_inputs = attrs.get("capture_inputs", True)
+    p.capture_outputs = attrs.get("capture_outputs", True)
+    p.pii_redaction = attrs.get("pii_redaction", False)
+    monkeypatch.setitem(proc._capture_flags, "inputs", p.capture_inputs)
+    monkeypatch.setitem(proc._capture_flags, "outputs", p.capture_outputs)
+    return p, posted
+
+
+FUNCTION_SPAN = {
+    "span_data": {"type": "function", "name": "lookup", "input": "email bob@example.com", "output": "result text"},
+    "trace_id": "t1", "span_id": "s1", "source": "on_span_end",
+}
+
+
+def test_processor_metadata_sends_no_content(monkeypatch):
+    p, posted = _processor(monkeypatch, "metadata")
+    p._log_summary(FUNCTION_SPAN)
+    body = json.dumps(posted[0])
+    assert posted[0]["cvs198"] == "metadata;app"
+    assert "bob@example.com" not in body and "result text" not in body and "cvs199" not in posted[0]
+
+
+def test_processor_full_is_labelled_app_not_policy(monkeypatch):
+    p, posted = _processor(monkeypatch, "full")
+    p._log_summary(FUNCTION_SPAN)
+    assert posted[0]["cvs198"] == "full;app" and "result text" in posted[0]["llm_output"]
+
+
+def test_processor_honours_capture_flags_and_pii_redaction(monkeypatch):
+    p, posted = _processor(monkeypatch, "full", capture_outputs=False, pii_redaction=True)
+    p._log_summary(FUNCTION_SPAN)
+    assert "llm_output" not in posted[0]
+    assert "bob@example.com" not in posted[0]["llm_input"]
+
+
+def test_processor_off_sends_nothing(monkeypatch):
+    p, posted = _processor(monkeypatch, "off")
+    p._log_summary(FUNCTION_SPAN)
+    assert posted == []
+
+
+def test_logger_flags_resolve_one_level(monkeypatch, tmp_path):
+    from anosys_sdk_core.capture import resolve_app_level
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANOSYS_COLLECTION_LEVEL", raising=False)
+    assert resolve_app_level(any([False, False])) == ("metadata", "argument")
+
+
+def test_processor_partial_capture_drops_raw_copies(monkeypatch):
+    p, posted = _processor(monkeypatch, "full", capture_outputs=False)
+    p._log_summary(FUNCTION_SPAN)
+    rec = posted[0]
+    assert "llm_output" not in rec and "cvs199" not in rec      # the raw span repeated the output
+    assert "result text" not in json.dumps(rec)
+    assert "llm_input" in rec
+
+
+def test_single_false_flag_does_not_switch_everything_off(monkeypatch, tmp_path):
+    from anosys_sdk_openai_agents import processor as proc
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANOSYS_COLLECTION_LEVEL", raising=False)
+    monkeypatch.setattr(proc, "_tracing_initialized", True)        # no instrumentation in tests
+    monkeypatch.setattr(proc, "resolve_api_key", lambda: "")
+    monkeypatch.setattr(proc, "_capture_flags", dict(proc._capture_flags))
+    monkeypatch.setattr(proc, "_pii", dict(proc._pii))
+    monkeypatch.setattr(proc, "_capture_level", proc._capture_level)
+    logger = proc.AnosysOpenAIAgentsLogger(capture_outputs=False)
+    assert logger.capture_level == "full"
+    assert logger.capture_inputs and logger.capture_parameters and not logger.capture_outputs
+    logger = proc.AnosysOpenAIAgentsLogger(capture_inputs=False, capture_outputs=False, capture_parameters=False)
+    assert logger.capture_level == "metadata"

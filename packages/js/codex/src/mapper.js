@@ -3,6 +3,7 @@
 const path = require('path');
 const os = require('os');
 const {
+  BASE_METADATA_FIELDS,
   encryptPayload,
   derive256BitKey,
   encrypt,
@@ -11,26 +12,51 @@ const {
   getTargetColumns,
   ANOSYS_ENCRYPTION_PREFIX,
   DEFAULT_ENCRYPTED_COLUMNS,
-} = require('./encryption');
+} = require('anosys-sdk-core');
 
 const INTEGRATION_VERSION = require('../package.json').version || '0.1.0';
 const OS_USER = os.userInfo().username || 'unknown';
 
+function isCcPixel() {
+  const pt = (process.env.ANOSYS_PIXEL_TYPE || '').trim().toLowerCase();
+  if (pt) return ['cc', 'claudecode', 'codex'].includes(pt);
+  if ((process.env.ANOSYS_CODEX_PIXEL || '').trim().toLowerCase() === 'false') return false;
+  if ((process.env.ANOSYS_CLAUDE_PIXEL || '').trim().toLowerCase() === 'false') return false;
+  const url = (process.env.ANOSYS_HOOK_ENDPOINT_URL || '').toLowerCase();
+  if (['/g/', '/generic/', '/c/', '/custom/', '/t/', '/otel/'].some((s) => url.includes(s))) {
+    return false;
+  }
+  return true;
+}
+
+// Fields sent at the `metadata` level (same as Python mapper.METADATA_FIELDS)
+const CV_METADATA_FIELDS = new Set([
+  'cvs1', 'cvs2', 'cvs7', 'cvs9', 'cvs12', 'cvs13', 'cvs17', 'cvs19', 'cvs32', 'cvs33',
+  'cvn1', 'cvn2', 'cvn3', 'cvn4', 'cvn5', 'cvn6', 'cvn7', 'cvn41',
+  'cvb1', 'cvb2',
+]);
+
+const METADATA_FIELDS = new Set([
+  ...BASE_METADATA_FIELDS,
+  ...CV_METADATA_FIELDS,
+]);
+
 const OPENAI_PRICING = {
-  'gpt-4o': { input: 2.50 / 1e6, output: 10.00 / 1e6, cached: 1.25 / 1e6 },
   'gpt-4o-mini': { input: 0.15 / 1e6, output: 0.60 / 1e6, cached: 0.075 / 1e6 },
-  'o1': { input: 15.00 / 1e6, output: 60.00 / 1e6, cached: 7.50 / 1e6 },
+  'gpt-4o': { input: 2.50 / 1e6, output: 10.00 / 1e6, cached: 1.25 / 1e6 },
   'o1-mini': { input: 1.10 / 1e6, output: 4.40 / 1e6, cached: 0.55 / 1e6 },
-  'o3': { input: 15.00 / 1e6, output: 60.00 / 1e6, cached: 7.50 / 1e6 },
+  'o1': { input: 15.00 / 1e6, output: 60.00 / 1e6, cached: 7.50 / 1e6 },
   'o3-mini': { input: 1.10 / 1e6, output: 4.40 / 1e6, cached: 0.55 / 1e6 },
+  'o3': { input: 15.00 / 1e6, output: 60.00 / 1e6, cached: 7.50 / 1e6 },
   'default': { input: 2.50 / 1e6, output: 10.00 / 1e6, cached: 1.25 / 1e6 }
 };
 
 function calculateCost(model, inputTokens, outputTokens, cachedTokens = 0) {
   const m = (model || '').toLowerCase();
   let rates = OPENAI_PRICING.default;
-  for (const [k, r] of Object.entries(OPENAI_PRICING)) {
-    if (m.includes(k)) {
+  const sortedEntries = Object.entries(OPENAI_PRICING).sort((a, b) => b[0].length - a[0].length);
+  for (const [k, r] of sortedEntries) {
+    if (k !== 'default' && m.includes(k)) {
       rates = r;
       break;
     }
@@ -86,22 +112,14 @@ function extractCommandsAndPaths(toolCalls) {
   return { commands, writtenPaths };
 }
 
-function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, redact = null) {
-  const envRedaction = (process.env.REDACTION || 'false').toLowerCase() === 'true';
-  const doRedact = redact !== null ? redact : envRedaction;
-
+function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null) {
   const model = turn.model || 'unknown';
   const provider = turn.model_provider || 'openai';
   const cwd = turn.cwd || '';
   const project = cwd ? path.basename(cwd) : null;
 
-  let userPrompt = turn.user_prompt || '';
-  let assistantText = turn.assistant_output || '';
-
-  if (doRedact) {
-    userPrompt = '[REDACTED]';
-    assistantText = '[REDACTED]';
-  }
+  const userPrompt = turn.user_prompt || '';
+  const assistantText = turn.assistant_output || '';
 
   const tokens = turn.tokens || {};
   const inputTokens = Number(tokens.input_tokens || 0);
@@ -127,10 +145,6 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
 
   const cleanToolCalls = toolCalls.map(tc => {
     const c = Object.assign({}, tc);
-    if (doRedact) {
-      c.args = '[REDACTED]';
-      c.output = '[REDACTED]';
-    }
     return c;
   });
 
@@ -147,23 +161,7 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
     events: []
   };
 
-  const origPrompt = turn.user_prompt || '';
-  const origAssistant = turn.assistant_output || '';
-  let rawToSerialize = rawData;
-  if (doRedact) {
-    try {
-      let s = JSON.stringify(rawData);
-      if (origPrompt) {
-        s = s.split(origPrompt).join('[REDACTED]');
-      }
-      if (origAssistant) {
-        s = s.split(origAssistant).join('[REDACTED]');
-      }
-      rawToSerialize = JSON.parse(s);
-    } catch (_) {
-      rawToSerialize = rawData;
-    }
-  }
+  const rawToSerialize = rawData;
 
   let permMode = null;
   if (turn.permission_mode) {
@@ -186,10 +184,11 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
   const commandsStr = commands.length ? JSON.stringify(commands) : null;
   const writtenPathsStr = writtenPaths.length ? JSON.stringify(writtenPaths) : null;
 
-  const payload = {
+  const payload = isCcPixel() ? {
     session_id: sessionId,
     sessionId: sessionId,
     uuid: turnId,
+    raw_uuid: turnId,
     eventId: turnId,
     event_id: turnId,
     event_type: 'codex_turn',
@@ -230,17 +229,33 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
     has_thinking: reasoningTokens > 0,
     integration_version: INTEGRATION_VERSION,
     os_user: OS_USER,
-
-    // Legacy CV attributes for dashboard UI
+    // Raw backup & hook identifiers
+    cvs199: JSON.stringify(rawToSerialize),
+    cvs200: 'CodexHook'
+  } : {
+    // Fallback CV mode for generic/custom pixels without native tool/token columns
+    timestamp: startTs,
+    user_timestamp: startTs,
+    event_id: turnId,
+    eventId: turnId,
+    uuid: turnId,
+    event_type: 'codex_turn',
+    event_source_name: 'codex',
+    debug: false,
     cvs1: sessionId,
     cvs2: project,
     cvs4: userPrompt,
     cvs5: assistantText,
+    cvs7: permMode,
     cvs9: model,
     cvs12: cwd,
+    cvs13: turnId,
+    cvs17: provider,
     cvs19: 'anosys-codex run',
     cvs32: INTEGRATION_VERSION,
     cvs33: OS_USER,
+    cvs90: commandsStr,
+    cvs91: writtenPathsStr,
     cvn1: inputTokens,
     cvn2: outputTokens,
     cvn3: totalTokens,
@@ -248,6 +263,10 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
     cvn5: cacheWriteTokens,
     cvn6: durationMs,
     cvn7: costEst,
+    cvn41: toolCalls.length,
+    cvb1: reasoningTokens > 0,
+    cvb2: false,
+    // Raw backup & hook identifiers
     cvs199: JSON.stringify(rawToSerialize),
     cvs200: 'CodexHook'
   };
@@ -259,13 +278,15 @@ function transformCodexTurn(turn, sessionId, turnId, incrementalTokens = null, r
       cleanPayload[k] = v;
     }
   }
-  return encryptPayload(cleanPayload);
+  // Collection level, secret scrubbing and encryption are applied by the hook runner
+  return cleanPayload;
 }
 
 module.exports = {
   calculateCost,
   extractCommandsAndPaths,
   transformCodexTurn,
+  METADATA_FIELDS,
   encryptPayload,
   derive256BitKey,
   encrypt,

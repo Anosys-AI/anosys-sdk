@@ -1,27 +1,24 @@
 import { trace } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { BatchSpanProcessor, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import axios from 'axios';
 
-import { DEFAULT_API_URL, resolveApiKey, log } from './config.js';
+import { resolveApiKey, log } from './config.js';
 import { setupApi } from './decorators.js';
 import { spanToJson } from './genai.js';
 import { extractSpanInfo, isAnthropicSpan } from './hooks.js';
-import { encryptPayload } from './encryption.js';
+import { currentAppLevel, FULL, OFF, prepareAppRecord, resolveAppLevel, scopeName, sendAppRecord, userContextValue } from 'anosys-sdk-core';
 
 // Read by the Anthropic SDK when a client is constructed
 export const CONTENT_MODE_ENV = 'ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE';
 
-let _logApiUrl = DEFAULT_API_URL;
-let _logApiUrlReady = Promise.resolve(DEFAULT_API_URL);
+let _logApiUrl = null; // null = nothing is sent
+let _logApiUrlReady = Promise.resolve(null);
 let _tracingInitialized = false;
 let _provider = null;
 let _captureContent = true;
+let _captureLevel = null; // set by AnosysAnthropicLogger; until then the shared level applies (anosys-sdk-core capture.js)
 let _hub = null;
 
-function scopeName(span) {
-  return span.instrumentationScope?.name ?? span.instrumentationLibrary?.name ?? '';
-}
 
 // ── OTel HTTP exporter ────────────────────────────────────────────────────────
 
@@ -34,8 +31,12 @@ export class AnosysHttpExporter {
     getUserContext = null,
     acceptsSpan = isAnthropicSpan,
     extract = extractSpanInfo,
+    getLevel = () => _captureLevel ?? currentAppLevel().level,
+    getUrl = () => _logApiUrl,
   } = {}) {
     this._getUserContext = getUserContext ?? (() => null);
+    this._getLevel = getLevel;
+    this._getUrl = getUrl;
     this._acceptsSpan = acceptsSpan;
     this._extract = extract;
   }
@@ -49,11 +50,9 @@ export class AnosysHttpExporter {
         // Attach user context if available
         try {
           const userCtx = await this._getUserContext();
-          if (userCtx && typeof userCtx === 'object') {
-            data.cvs5 = JSON.stringify({
-              session_id: userCtx.session_id ?? 'unknown_session',
-              token: userCtx.token ?? null,
-            });
+          const value = userContextValue(userCtx);
+          if (value) {
+            data.cvs5 = value;
           }
         } catch { /* user context errors must not block export */ }
 
@@ -65,15 +64,14 @@ export class AnosysHttpExporter {
           data.llm_output ? String(data.llm_output).length : 0,
         );
 
-        const payloadToSend = encryptPayload(data);
+        // Level filtering, cvs198 and encryption in one place
+        const payloadToSend = prepareAppRecord(data, this._getLevel());
+        if (!payloadToSend) continue;
         await _logApiUrlReady;
-        await axios.post(_logApiUrl, payloadToSend, { timeout: 5000 });
+        // size-limited, in the background: never blocks the instrumented call
+        sendAppRecord(this._getUrl(), payloadToSend);
       } catch (e) {
-        if (e.response) {
-          log.error('HTTP export failed (%d): %s', e.response.status, e.message);
-        } else {
-          log.error('Export failed:', e.message);
-        }
+        log.error(`Export failed (${e?.name || 'Error'})`); // no span content in logs
       }
     }
     resultCallback?.({ code: 0 });
@@ -140,7 +138,7 @@ export function getAnthropicOpenTelemetryOptions() {
 
 /** Set the ingestion URL; a promise holds exports until it resolves. */
 export function setLogApiUrl(apiUrl) {
-  _logApiUrlReady = Promise.resolve(apiUrl).then((url) => { _logApiUrl = url ?? DEFAULT_API_URL; return _logApiUrl; });
+  _logApiUrlReady = Promise.resolve(apiUrl).then((url) => { _logApiUrl = url ?? null; return _logApiUrl; });
   return _logApiUrlReady;
 }
 
@@ -169,29 +167,37 @@ export class AnosysAnthropicLogger {
   /**
    * @param {object}   [opts]
    * @param {Function} [opts.getUserContext]     Returns { session_id, token }
-   * @param {boolean}  [opts.captureContent=true] Record prompts and completions. Applies to
+   * @param {boolean}  [opts.captureContent] true: record prompts and completions; false: metadata
+   *   only. Omitted: follow ANOSYS_COLLECTION_LEVEL and a project `.anosys` file; full otherwise. Applies to
    *   clients created afterwards that are given no `openTelemetry` option of their own.
    * @param {boolean}  [opts.useBatchProcessor=false]
    */
-  constructor({ getUserContext = null, captureContent = true, useBatchProcessor = false } = {}) {
+  constructor({ getUserContext = null, captureContent = null, useBatchProcessor = false } = {}) {
     this.getUserContext = getUserContext;
-    _captureContent = captureContent;
+    const { level, source } = resolveAppLevel(captureContent);
+    _captureLevel = level;
+    _captureContent = level === FULL;
+    this.captureLevel = level;
+    log.info('AnoSys Anthropic collection level: %s (%s)', level, source);
     // The SDK records metadata only unless content mode is requested
-    if (captureContent && process.env[CONTENT_MODE_ENV] === undefined) {
+    if (_captureContent && process.env[CONTENT_MODE_ENV] === undefined) {
       process.env[CONTENT_MODE_ENV] = 'content';
     }
     // The provider is registered synchronously so clients created right after see it
-    if (!_tracingInitialized) {
+    if (level === OFF) {
+      this.ready = Promise.resolve();
+    } else if (!_tracingInitialized) {
       _tracingInitialized = true;
-      setupTracing(_logApiUrlReady, useBatchProcessor, this.getUserContext);
-      this.ready = this._init();
+      const url = _logApiUrl || resolveApiKey();
+      setupTracing(url, useBatchProcessor, this.getUserContext);
+      this.ready = this._init(url);
     } else {
       this.ready = Promise.resolve();
     }
   }
 
-  async _init() {
-    this.logApiUrl = await setLogApiUrl(resolveApiKey());
+  async _init(url = null) {
+    this.logApiUrl = await setLogApiUrl(url || resolveApiKey());
     await setupApi({ path: this.logApiUrl });
   }
 }

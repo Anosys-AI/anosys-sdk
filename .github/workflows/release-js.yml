@@ -3,6 +3,7 @@ name: Release JavaScript
 on:
   push:
     tags:
+      - "core-js-v*"
       - "openai-js-v*"
       - "openai-agents-js-v*"
       - "claude-code-js-v*"
@@ -34,6 +35,7 @@ jobs:
         run: |
           tag="${{ github.event.inputs.tag || github.ref_name }}"
           case "$tag" in
+            core-js-v*)           dir="packages/js/core" ;;
             openai-js-v*)         dir="packages/js/openai" ;;
             openai-agents-js-v*)  dir="packages/js/openai-agents" ;;
             claude-code-js-v*)    dir="packages/js/claude-code" ;;

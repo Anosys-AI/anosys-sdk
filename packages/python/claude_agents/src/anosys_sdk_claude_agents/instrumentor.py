@@ -23,11 +23,12 @@ from opentelemetry.sdk.trace.export import (
     SpanExporter,
     SpanExportResult,
 )
-import requests
 
 from anosys_sdk_core.config import resolve_api_key
 from anosys_sdk_core.decorators import setup_api
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import current_app_level, prepare_app_record, resolve_app_level, user_context_value
+from anosys_sdk_core.privacy import FULL, OFF
+from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_claude_agents.hooks import extract_span_info
 from anosys_sdk_claude_agents.mapping import CLAUDE_AGENTS_SCOPE
 from anosys_sdk_claude_agents.tracer import AgentRunTracer
@@ -37,9 +38,9 @@ logger = logging.getLogger(__name__)
 # Module-level state
 _lock = threading.Lock()
 _tracing_initialized = False
-_log_api_url = "https://www.anosys.ai"
+_log_api_url = ""  # set by setup_tracing; empty = nothing is sent
 _tracer: Optional[trace.Tracer] = None
-_run_settings = {"capture_content": True, "emit_llm_spans": False, "agent_name": None}
+_run_settings = {"capture_content": True, "emit_llm_spans": False, "agent_name": None, "level": None}
 _originals: dict = {}
 
 
@@ -68,29 +69,23 @@ class AnosysHttpExporter(SpanExporter):
 
                 # Attach user context if available
                 try:
-                    user_context = self._get_user_context()
-                    if user_context:
-                        data["cvs5"] = json.dumps({
-                            "session_id": (user_context.get("session_id", "unknown_session")
-                                           if isinstance(user_context, dict)
-                                           else getattr(user_context, "session_id", "unknown_session")),
-                            "token": (user_context.get("token")
-                                      if isinstance(user_context, dict)
-                                      else getattr(user_context, "token", None)),
-                        })
+                    value = user_context_value(self._get_user_context())
+                    if value:
+                        data["cvs5"] = value
                 except Exception:
                     pass
 
                 logger.debug("Exporting span from: %s | Name: %s", data.get("cvs200"), data.get("otel_name"))
 
-                data = encrypt_payload(data)
-                response = requests.post(_log_api_url, json=data, timeout=5)
-                response.raise_for_status()
+                # Level filtering, cvs198 and encryption in one place
+                data = prepare_app_record(data, _run_settings["level"] or current_app_level()[0])
+                if data is None:
+                    continue
+                # size-limited, in the background: never blocks the instrumented call
+                send_app_record(_log_api_url, data)
 
-            except requests.exceptions.HTTPError as e:
-                logger.error("HTTP export failed (%s): %s", e.response.status_code, e)
             except Exception as e:
-                logger.error("Export failed: %s", e)
+                logger.error("AnoSys export failed (%s)", type(e).__name__)  # no span content in logs
 
         return SpanExportResult.SUCCESS
 
@@ -296,7 +291,7 @@ class AnosysClaudeAgentsLogger:
         self,
         get_user_context: Optional[Callable] = None,
         agent_name: Optional[str] = None,
-        capture_content: bool = True,
+        capture_content: Optional[bool] = None,
         emit_llm_spans: bool = False,
         use_batch_processor: bool = False,
     ):
@@ -306,24 +301,33 @@ class AnosysClaudeAgentsLogger:
         Args:
             get_user_context: Optional function that returns user context dict
             agent_name: Name recorded as gen_ai.agent.name (default: "claude_agent")
-            capture_content: If True, record prompts, results and tool input/output (default: True)
+            capture_content: True to record prompts, results and tool input/output, False for
+                metadata only. None (default) follows ANOSYS_COLLECTION_LEVEL and a project
+                ``.anosys`` file (see anosys_sdk_core.capture); full otherwise.
             emit_llm_spans: If True, also emit one chat span per assistant response.
                 Usage totals stay on the agent span; chat spans carry per-call usage.
             use_batch_processor: If True, use BatchSpanProcessor
         """
         global _tracing_initialized
 
-        # Resolve API URL
-        self.log_api_url = resolve_api_key()
-
         # Optional user context function
         self.get_user_context = get_user_context or (lambda: None)
 
+        level, source = resolve_app_level(capture_content)
+        self.capture_level = level
+        logger.info("AnoSys Claude Agents collection level: %s (%s)", level, source)
         _run_settings.update(
-            capture_content=capture_content,
+            level=level,
+            capture_content=level == FULL,
             emit_llm_spans=emit_llm_spans,
             agent_name=agent_name,
         )
+        if level == OFF:
+            self.log_api_url = ""
+            return
+
+        # Resolve API URL
+        self.log_api_url = resolve_api_key()
 
         # Initialize tracing if not already done
         if not _tracing_initialized:

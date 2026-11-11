@@ -6,18 +6,16 @@ Provides decorators to automatically log function inputs, outputs, and errors.
 
 import asyncio
 import inspect
-import io
 import json
 import logging
-import sys
 import traceback
 from functools import wraps
 from typing import Any, Callable, Dict, Optional
 
-import requests
 
 from anosys_sdk_core.config import resolve_api_key
-from anosys_sdk_core.encryption import encrypt_payload
+from anosys_sdk_core.capture import current_app_level, prepare_app_record
+from anosys_sdk_core.transport import send_app_record
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
 from anosys_sdk_core.util.json import to_json_fallback, to_str_or_none
 from anosys_sdk_core.util.batching import assign, reassign
@@ -25,7 +23,7 @@ from anosys_sdk_core.util.batching import assign, reassign
 logger = logging.getLogger(__name__)
 
 # Global configuration
-_log_api_url: str = "https://www.anosys.ai"
+_log_api_url: str = ""  # set by setup_api; empty = nothing is sent
 _key_to_cvs: Dict[str, str] = BASE_KEY_MAPPING.copy()
 _starting_indices: Dict[str, int] = DEFAULT_STARTING_INDICES.copy()
 
@@ -79,12 +77,7 @@ def _log_payload(
                  source, caller_info['function'], caller_info['file'], caller_info['line'])
 
     if error_info:
-        logger.debug("Error occurred: %s", error_info['message'])
-    else:
-        out_str = str(output)
-        if len(out_str) > 200:
-            out_str = out_str[:200] + "..."
-        logger.debug("Captured output: %s", out_str)
+        logger.debug("Error occurred: %s", error_info['type'])  # never the message or the output
     
     # Prepare payload
     input_array = [to_str_or_none(arg) for arg in args]
@@ -110,22 +103,21 @@ def _log_payload(
     
     # Send log
     try:
-        mapped_data = reassign(variables, _key_to_cvs, _starting_indices)
-        mapped_data = encrypt_payload(mapped_data)
-        response = requests.post(_log_api_url, json=mapped_data, timeout=5)
-        response.raise_for_status()
-        logger.debug("Logged successfully")
+        mapped_data = prepare_app_record(reassign(variables, _key_to_cvs, _starting_indices), current_app_level()[0])
+        if mapped_data is None:
+            return  # collection is off
+        # size-limited, in the background: never blocks the decorated function
+        send_app_record(_log_api_url, mapped_data)
+        logger.debug("Queued for AnoSys")
     except Exception as e:
-        logger.error("POST failed: %s", e)
+        logger.error("AnoSys logging failed (%s)", type(e).__name__)
 
 
 def _handle_logging_sync(func: Callable, args: tuple, kwargs: dict, source: Optional[str]) -> Any:
     """Handle logging for synchronous functions."""
     caller_info = _get_caller_info()
-    
-    old_stdout = sys.stdout
-    sys.stdout = io.StringIO()
-    
+    # The return value is logged. stdout is not captured: swapping the process-wide
+    # sys.stdout hid the function's prints and was unsafe across threads.
     text = None
     error_info = None
     
@@ -139,10 +131,7 @@ def _handle_logging_sync(func: Callable, args: tuple, kwargs: dict, source: Opti
         }
         raise
     finally:
-        printed_output = sys.stdout.getvalue()
-        sys.stdout = old_stdout
-        output = text if text else printed_output.strip()
-        _log_payload(source, args, kwargs, output, error_info, caller_info)
+        _log_payload(source, args, kwargs, text, error_info, caller_info)
     
     return text
 
@@ -197,11 +186,36 @@ async def _handle_logging_async_gen(func: Callable, args: tuple, kwargs: dict, s
         _log_payload(source, args, kwargs, output, error_info, caller_info)
 
 
+def _handle_logging_sync_gen(func: Callable, args: tuple, kwargs: dict, source: Optional[str]):
+    """Handle logging for synchronous generator functions."""
+    caller_info = _get_caller_info()
+    aggregated_output = []
+    error_info = None
+
+    try:
+        for item in func(*args, **kwargs):
+            aggregated_output.append(item)
+            yield item
+    except Exception as e:
+        error_info = {
+            "type": type(e).__name__,
+            "message": str(e),
+            "stack": traceback.format_exc()
+        }
+        raise
+    finally:
+        if all(isinstance(x, str) for x in aggregated_output):
+            output = "".join(aggregated_output)
+        else:
+            output = aggregated_output
+        _log_payload(source, args, kwargs, output, error_info, caller_info)
+
+
 def anosys_logger(source: Optional[str] = None) -> Callable:
     """
     Decorator to log function input/output to AnoSys API.
     
-    Supports sync, async, and async generator functions.
+    Supports sync, sync generator, async, and async generator functions.
     Captures caller information and error stack traces.
     
     Args:
@@ -222,6 +236,11 @@ def anosys_logger(source: Optional[str] = None) -> Callable:
                 async for item in _handle_logging_async_gen(func, args, kwargs, source):
                     yield item
             return wrapper
+        elif inspect.isgeneratorfunction(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                yield from _handle_logging_sync_gen(func, args, kwargs, source)
+            return wrapper
         elif asyncio.iscoroutinefunction(func):
             @wraps(func)
             async def wrapper(*args, **kwargs):
@@ -235,15 +254,17 @@ def anosys_logger(source: Optional[str] = None) -> Callable:
     return decorator
 
 
-def anosys_raw_logger(data: Optional[Dict[str, Any]] = None) -> Optional[requests.Response]:
+def anosys_raw_logger(data: Optional[Dict[str, Any]] = None) -> bool:
     """
-    Directly log raw data to AnoSys API.
+    Log raw data to AnoSys. Sending happens in the background, so this never
+    waits on the network.
     
     Args:
         data: Dictionary of data to log
         
     Returns:
-        Response object on success, None on failure
+        True when the record was queued for sending; False when collection is
+        off, there is no endpoint, the queue is full, or the record failed
         
     Example:
         anosys_raw_logger({
@@ -261,11 +282,13 @@ def anosys_raw_logger(data: Optional[Dict[str, Any]] = None) -> Optional[request
         # Raw data capture - ALWAYS mandatory
         if "raw" not in data:
             data["raw"] = json.dumps(data, default=to_json_fallback)
-        mapped_data = reassign(data, _key_to_cvs, _starting_indices)
-        response = requests.post(_log_api_url, json=mapped_data, timeout=5)
-        response.raise_for_status()
-        logger.debug("Raw logger: data logged successfully")
-        return response
+        mapped_data = prepare_app_record(reassign(data, _key_to_cvs, _starting_indices), current_app_level()[0])
+        if mapped_data is None:
+            return False  # collection is off
+        # size-limited, in the background: never blocks the caller
+        queued = send_app_record(_log_api_url, mapped_data)
+        logger.debug("Raw logger: queued for AnoSys")
+        return queued
     except Exception as err:
-        logger.error("POST failed: %s", err)
-        return None
+        logger.error("AnoSys logging failed (%s)", type(err).__name__)
+        return False

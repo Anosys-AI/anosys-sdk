@@ -2,7 +2,7 @@
 Redaction utilities for AnoSys SDK.
 
 Provides utilities for redacting sensitive information before logging.
-This module is a placeholder for future PII redaction functionality.
+redact_string: PII patterns (OpenAI Agents pii_redaction); scrub_secrets: credentials (hooks).
 """
 
 import re
@@ -15,7 +15,8 @@ PATTERNS: Dict[str, Pattern] = {
     "phone": re.compile(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'),
     "ssn": re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
     "credit_card": re.compile(r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'),
-    "api_key": re.compile(r'\b(sk-|pk-|api[-_]?key)[a-zA-Z0-9]{20,}\b', re.IGNORECASE),
+    # provider keys, including the dashed forms (sk-proj-..., sk-ant-api03-..., sk-svcacct-...)
+    "api_key": re.compile(r'\b(?:sk|pk|rk)-[A-Za-z0-9_-]{20,}|\bapi[-_]?key[A-Za-z0-9_-]{20,}', re.IGNORECASE),
 }
 
 # Placeholder text for redacted content
@@ -49,43 +50,44 @@ def redact_string(
     return result
 
 
-def redact_dict(
-    data: Dict[str, Any],
-    sensitive_keys: Optional[List[str]] = None,
-    patterns: Optional[List[str]] = None,
-    replacement: str = REDACTED
-) -> Dict[str, Any]:
+# Secret-shaped strings scrubbed from hook content even at ``full`` (best effort)
+SECRET_PATTERNS: List[Pattern] = [
+    re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),
+    re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_\-]{20,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bASIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{30,}\b"),
+    re.compile(r"\bglpat-[A-Za-z0-9_\-]{20,}\b"),
+    re.compile(r"\bxox[abpr]-[A-Za-z0-9\-]{10,}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
+    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----"),
+    re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b"),  # JWT
+    re.compile(r"(://[^/\s:@]+:)[^/\s@]{6,}(?=@)"),  # URL basic-auth credentials
+    re.compile(
+        r"(?i)((?:api[_-]?key|apikey|secret|password|passwd|token|authorization)\\?[\"']?\s*[:=]\s*\\?[\"']?(?:bearer\s+)?)"
+        r"[A-Za-z0-9_\-/+=.]{12,}"
+    ),
+]
+SECRET_REPLACEMENT = "[SECRET]"
+
+
+def scrub_secrets(value: Any) -> Any:
     """
-    Redact sensitive data from a dictionary.
-    
-    Args:
-        data: Dictionary to redact
-        sensitive_keys: Keys to fully redact (e.g., ["password", "token"])
-        patterns: Pattern names to apply to string values
-        replacement: Replacement text
-        
-    Returns:
-        Dictionary with sensitive content redacted
+    Replace secret-shaped substrings (API keys, tokens, private keys) in a
+    string, or in every string inside a dict/list. Best effort: it catches
+    common key formats, not every secret.
     """
-    if sensitive_keys is None:
-        sensitive_keys = ["password", "secret", "token", "api_key", "apikey"]
-    
-    result = {}
-    for key, value in data.items():
-        # Fully redact sensitive keys
-        if any(sk.lower() in key.lower() for sk in sensitive_keys):
-            result[key] = replacement
-        elif isinstance(value, str):
-            result[key] = redact_string(value, patterns, replacement)
-        elif isinstance(value, dict):
-            result[key] = redact_dict(value, sensitive_keys, patterns, replacement)
-        elif isinstance(value, list):
-            result[key] = [
-                redact_dict(v, sensitive_keys, patterns, replacement) 
-                if isinstance(v, dict) else v 
-                for v in value
-            ]
-        else:
-            result[key] = value
-    
-    return result
+    if isinstance(value, str):
+        result = value
+        for pattern in SECRET_PATTERNS:
+            if pattern.groups:
+                result = pattern.sub(lambda m: m.group(1) + SECRET_REPLACEMENT, result)
+            else:
+                result = pattern.sub(SECRET_REPLACEMENT, result)
+        return result
+    if isinstance(value, dict):
+        return {k: scrub_secrets(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [scrub_secrets(v) for v in value]
+    return value

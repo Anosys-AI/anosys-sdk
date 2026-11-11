@@ -42,15 +42,19 @@ jobs:
         working-directory: packages/js/claude-code
         run: npm test
 
-      - name: Pack npm package
-        working-directory: packages/js/claude-code
-        run: npm pack
-
-      - name: Install package globally
+      - name: Pack npm packages (local core + claude-code)
         shell: bash
         run: |
+          (cd packages/js/core && npm pack)
+          (cd packages/js/claude-code && npm pack)
+
+      - name: Install packages globally
+        shell: bash
+        run: |
+          # core first, from this checkout, so an unpublished core version resolves
+          CORE=$(ls packages/js/core/*.tgz | head -n 1)
           FILE=$(ls packages/js/claude-code/*.tgz | head -n 1)
-          npm install -g "$FILE"
+          npm install -g "$CORE" "$FILE"
 
       - name: Verify CLI command execution (status)
         shell: bash
@@ -103,7 +107,8 @@ jobs:
           for (const group of stopHooks) {
             if (group && Array.isArray(group.hooks)) {
               for (const hook of group.hooks) {
-                if (hook.owner === "anosys" && hook.type === "command" && hook.command === "npx anosys-sdk-claude-code run") {
+                if (hook.owner === "anosys" && hook.type === "command" && /cli\.js"? run$/.test(hook.command)
+                    && hook.command.includes(process.execPath.split(path.sep).pop())) {
                   found = true;
                 }
               }
@@ -198,14 +203,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install build
 
-      - name: Build package wheel
-        working-directory: packages/python/claude_code
-        run: python -m build
-
-      - name: Install package
+      - name: Build package wheels (local core + claude_code)
         shell: bash
         run: |
-          python -m pip install packages/python/claude_code/dist/*.whl
+          python -m build packages/python/core
+          python -m build packages/python/claude_code
+
+      - name: Install packages
+        shell: bash
+        run: |
+          # core first, from this checkout, so an unpublished core version resolves
+          python -m pip install packages/python/core/dist/*.whl packages/python/claude_code/dist/*.whl
 
       - name: Verify CLI command execution (status)
         shell: bash
@@ -257,7 +265,7 @@ jobs:
                   for hook in group["hooks"]:
                       if (hook.get("owner") == "anosys" and 
                           hook.get("type") == "command" and 
-                          hook.get("command") == "anosys-claude-code run"):
+                          hook.get("command", "").endswith("-m anosys_sdk_claude_code.cli run")):
                           found = True
 
           if not found:

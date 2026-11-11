@@ -1,0 +1,317 @@
+{
+  "app_level": [
+    {
+      "env": {},
+      "explicit": null,
+      "project": null,
+      "expected": [
+        "full",
+        "default"
+      ]
+    },
+    {
+      "env": {
+        "ANOSYS_COLLECTION_LEVEL": "metadata"
+      },
+      "explicit": null,
+      "project": null,
+      "expected": [
+        "metadata",
+        "ANOSYS_COLLECTION_LEVEL"
+      ]
+    },
+    {
+      "env": {
+        "ANOSYS_COLLECTION_LEVEL": "metadata"
+      },
+      "explicit": true,
+      "project": null,
+      "expected": [
+        "full",
+        "argument"
+      ]
+    },
+    {
+      "env": {},
+      "explicit": false,
+      "project": null,
+      "expected": [
+        "metadata",
+        "argument"
+      ]
+    },
+    {
+      "env": {},
+      "explicit": "off",
+      "project": null,
+      "expected": [
+        "off",
+        "argument"
+      ]
+    },
+    {
+      "env": {
+        "ANOSYS_COLLECTION_LEVEL": "bogus"
+      },
+      "explicit": null,
+      "project": null,
+      "expected": [
+        "full",
+        "default"
+      ]
+    },
+    {
+      "env": {},
+      "explicit": true,
+      "project": "metadata",
+      "expected": [
+        "metadata",
+        ".anosys"
+      ]
+    },
+    {
+      "env": {},
+      "explicit": "off",
+      "project": "metadata",
+      "expected": [
+        "off",
+        "argument"
+      ]
+    },
+    {
+      "env": {
+        "ANOSYS_DISABLE": "1"
+      },
+      "explicit": true,
+      "project": null,
+      "expected": [
+        "off",
+        "ANOSYS_DISABLE"
+      ]
+    }
+  ],
+  "hook_level": [
+    {
+      "env": {},
+      "explicit": null,
+      "consent": null,
+      "project": null,
+      "expected": [
+        "metadata",
+        "default"
+      ]
+    },
+    {
+      "env": {
+        "ANOSYS_COLLECTION_LEVEL": "full"
+      },
+      "explicit": null,
+      "consent": null,
+      "project": null,
+      "expected": [
+        "metadata",
+        "ANOSYS_COLLECTION_LEVEL (no consent)"
+      ]
+    },
+    {
+      "env": {
+        "ANOSYS_COLLECTION_LEVEL": "full"
+      },
+      "explicit": null,
+      "consent": "current",
+      "project": null,
+      "expected": [
+        "full",
+        "consent"
+      ]
+    },
+    {
+      "env": {},
+      "explicit": null,
+      "consent": "old",
+      "project": null,
+      "expected": [
+        "metadata",
+        "consent (no consent)"
+      ]
+    },
+    {
+      "env": {
+        "REDACTION": "true"
+      },
+      "explicit": null,
+      "consent": null,
+      "project": null,
+      "expected": [
+        "metadata",
+        "REDACTION"
+      ]
+    },
+    {
+      "env": {},
+      "explicit": "off",
+      "consent": "current",
+      "project": null,
+      "expected": [
+        "off",
+        "flag"
+      ]
+    },
+    {
+      "env": {},
+      "explicit": null,
+      "consent": "current",
+      "project": "metadata",
+      "expected": [
+        "metadata",
+        ".anosys"
+      ]
+    },
+    {
+      "env": {
+        "ANOSYS_DISABLE": "true"
+      },
+      "explicit": null,
+      "consent": "current",
+      "project": null,
+      "expected": [
+        "off",
+        "ANOSYS_DISABLE"
+      ]
+    }
+  ],
+  "app_finalize": [
+    {
+      "level": "metadata",
+      "extra": [],
+      "record": {
+        "otel_trace_id": "t1",
+        "otel_name": "chat",
+        "gen_ai_request_model": "m",
+        "gen_ai_usage_input_tokens": 12,
+        "cvb2": false,
+        "llm_input": "secret prompt",
+        "gen_ai_input_messages": [
+          {
+            "role": "user"
+          }
+        ],
+        "cvs18": "{}",
+        "cvs199": "{raw}",
+        "cvs105": "dynamic",
+        "cvs200": "src",
+        "consent": "stale",
+        "gen_ai_response_finish_reasons": [
+          "stop"
+        ]
+      },
+      "expected": {
+        "otel_trace_id": "t1",
+        "otel_name": "chat",
+        "gen_ai_request_model": "m",
+        "gen_ai_usage_input_tokens": 12,
+        "cvb2": false,
+        "cvs200": "src",
+        "gen_ai_response_finish_reasons": [
+          "stop"
+        ],
+        "cvs198": "metadata;app"
+      }
+    },
+    {
+      "level": "metadata",
+      "extra": [
+        "cvs78"
+      ],
+      "record": {
+        "cvs78": "triage",
+        "llm_output": "x"
+      },
+      "expected": {
+        "cvs78": "triage",
+        "cvs198": "metadata;app"
+      }
+    },
+    {
+      "level": "full",
+      "extra": [],
+      "record": {
+        "llm_input": "p",
+        "consent": "stale"
+      },
+      "expected": {
+        "llm_input": "p",
+        "cvs198": "full;app"
+      }
+    },
+    {
+      "level": "off",
+      "extra": [],
+      "record": {
+        "llm_input": "p"
+      },
+      "expected": null
+    }
+  ],
+  "hook_filter": [
+    {
+      "level": "metadata",
+      "record": {
+        "session_id": "s",
+        "input_tokens": 3,
+        "user_prompt": "secret",
+        "consent": "x"
+      },
+      "expected": {
+        "session_id": "s",
+        "input_tokens": 3,
+        "cvs198": "metadata;none"
+      }
+    },
+    {
+      "level": "off",
+      "record": {
+        "session_id": "s"
+      },
+      "expected": {}
+    }
+  ],
+  "consent_values": {
+    "full": "full;2026-11-09",
+    "metadata": "metadata;none",
+    "off": "off;none",
+    "app_full": "full;app",
+    "app_metadata": "metadata;app"
+  },
+  "assign": [
+    {
+      "value": "  0099  ",
+      "expected": "0099"
+    },
+    {
+      "value": 7,
+      "expected": 7
+    },
+    {
+      "value": true,
+      "expected": true
+    },
+    {
+      "value": {
+        "b": 1
+      },
+      "expected": {
+        "b": 1
+      },
+      "json": true
+    },
+    {
+      "value": "[1, 2]",
+      "expected": [
+        1,
+        2
+      ],
+      "json": true
+    }
+  ]
+}
