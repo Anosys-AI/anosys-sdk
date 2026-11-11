@@ -187,12 +187,18 @@ See [content controls](DATA_CONTROLS.md) for coverage, default columns, size lim
 
 ## Examples and references
 
+### Production & Interactive Demos
 | Workflow | OpenAI | Anthropic / Claude Agents |
 | --- | --- | --- |
 | Chat calls | [Notebook](examples/anosys_openai_chat_poc.ipynb) | [Notebook](examples/anosys_anthropic_chat_poc.ipynb) |
 | Agent workflow | [Notebook](examples/anosys_openai_agentic_poc.ipynb) | [Notebook](examples/anosys_claude_agents_agentic_poc.ipynb) |
 | Support copilot | [Notebook](examples/anosys_openai_support_copilot_demo.ipynb) | [Notebook](examples/anosys_anthropic_support_copilot_demo.ipynb) |
 | Research pipeline | [Notebook](examples/anosys_openai_research_pipeline_demo.ipynb) | [Notebook](examples/anosys_claude_agents_research_pipeline_demo.ipynb) |
+
+### Frameworks & Custom Pipeline Decorators
+- [Core Decorators & Custom Functions](examples/anosys_core_decorators_poc.ipynb): Function and pipeline observability with `@anosys_logger` and `@anosys_raw_logger`.
+- [LangChain with OpenAI Tools](examples/anosys_langchain_agentic_poc.ipynb): Observability for LangChain tool calling and multi-step reasoning.
+- [OpenRouter with LangChain](examples/anosys_openrouter_agentic_poc.ipynb): Observability across multi-vendor models via OpenRouter.
 
 - [Telemetry variables](TELEMETRY_VARIABLES.md)
 - [Claude Code variables](CLAUDE_CODE_VARIABLES.md)
