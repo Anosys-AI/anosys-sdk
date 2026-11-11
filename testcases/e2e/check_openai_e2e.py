@@ -149,6 +149,7 @@ await new OpenAI({{ apiKey: 'x', baseURL: '{FAKE_URL}/v1' }}).chat.completions.c
   {{ model: 'gpt-4o-mini', messages: [{{ role: 'user', content: 'LEAK_PROMPT' }}] }});
 await new Promise((r) => setTimeout(r, 3000));
 console.log('APP_LOGS=' + JSON.stringify(appLogs.map((r) => r.body)));
+console.log('APP_GOT_PROMPT=' + JSON.stringify(appLogs).includes('LEAK_PROMPT'));
 """
 for order in ("app-first", "anosys-first"):
     tag = f"oa-js-logs-{order}-{uuid.uuid4().hex[:6]}"
@@ -158,6 +159,8 @@ for order in ("app-first", "anosys-first"):
     check(f"js openai with app log pipeline ({order}): the app still gets its own logs", "APP_OWN_LOG" in app_logs, str(app_logs)[:200])
     check(f"js openai with app log pipeline ({order}): AnoSys still captures content",
           "LEAK_PROMPT" in json.dumps(ingested(FAKE_OUT, tag)))
+    check(f"js openai with app log pipeline ({order}): prompts are not copied into the app's own logs",
+          "APP_GOT_PROMPT=true" not in r.stdout)
 
 # JS next to an app that has its own TracerProvider
 APP_TRACES = f"""
