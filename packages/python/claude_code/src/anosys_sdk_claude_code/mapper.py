@@ -10,28 +10,51 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Optional
-from anosys_sdk_claude_code.encryption import encrypt_payload
 
-INTEGRATION_VERSION = '0.2.0'
+from anosys_sdk_core.privacy import BASE_METADATA_FIELDS
+
+INTEGRATION_VERSION = '0.3.0'
 
 OS_USER = getpass.getuser()
 
 CLAUDE_PIXEL = os.environ.get('ANOSYS_CLAUDE_PIXEL', 'true').lower() == 'true'
 
-REDACTION = os.environ.get('REDACTION', 'false').lower() == 'true'
-
+# Legacy debug file older versions appended unrecognized raw records to.
+# Nothing writes it anymore; `anosys-claude-code purge` deletes it.
 UNHANDLED_LOG_PATH = Path('~/.claude/hooks/unhandled_records.jsonl').expanduser()
+
+# Unrecognized record types seen in this process (counted, never stored)
+UNHANDLED_COUNTS: dict = {}
+
+# Fields sent at the `metadata` level, for both layouts. Descriptive mode uses
+# the shared allowlist; legacy CV mode uses the CV columns that hold the same
+# metadata (derived from the two payload definitions below). Everything else
+# (prompts, answers, tool results, commands, files, titles, task text, errors,
+# the raw record in cvs199) is `full`-only.
+CV_METADATA_FIELDS = {
+    'cvb1', 'cvb2', 'cvb3', 'cvb4', 'cvb5', 'cvb6', 'cvb7', 'cvb8', 'cvb9', 'cvb10', 'cvb11',
+    'cvb12', 'cvb13', 'cvb14', 'cvb15',
+    'cvn1', 'cvn2', 'cvn3', 'cvn4', 'cvn5', 'cvn6', 'cvn7', 'cvn8', 'cvn9', 'cvn10', 'cvn11',
+    'cvn12', 'cvn13', 'cvn14', 'cvn15', 'cvn16', 'cvn17', 'cvn18', 'cvn19', 'cvn20', 'cvn21',
+    'cvn22', 'cvn23', 'cvn24', 'cvn25', 'cvn26', 'cvn27', 'cvn28', 'cvn29', 'cvn30', 'cvn31',
+    'cvn32', 'cvn33', 'cvn34', 'cvn35', 'cvn36', 'cvn37', 'cvn38', 'cvn39', 'cvn40', 'cvn41',
+    'cvn42', 'cvn43',
+    'cvs1', 'cvs2', 'cvs3', 'cvs6', 'cvs7', 'cvs8', 'cvs9', 'cvs10', 'cvs11', 'cvs12', 'cvs13',
+    'cvs14', 'cvs15', 'cvs16', 'cvs17', 'cvs18', 'cvs20', 'cvs21', 'cvs22', 'cvs23', 'cvs27',
+    'cvs28', 'cvs29', 'cvs31', 'cvs32', 'cvs33', 'cvs34', 'cvs36', 'cvs37', 'cvs38', 'cvs39',
+    'cvs42', 'cvs43', 'cvs44', 'cvs46', 'cvs47', 'cvs48', 'cvs52', 'cvs53', 'cvs54', 'cvs55',
+    'cvs56', 'cvs58', 'cvs59', 'cvs63', 'cvs64', 'cvs65', 'cvs66', 'cvs67', 'cvs68', 'cvs69',
+    'cvs71', 'cvs73', 'cvs77', 'cvs78', 'cvs92', 'cvs93', 'cvs94',
+}
+METADATA_FIELDS = BASE_METADATA_FIELDS | CV_METADATA_FIELDS
 
 U = object()
 
 
 def log_unhandled(record: dict):
-    try:
-        UNHANDLED_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(UNHANDLED_LOG_PATH, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(record, separators=(',', ':')) + '\n')
-    except Exception:
-        pass
+    """Count an unrecognized record type. Its content is never written anywhere."""
+    kind = str(record.get('type', 'unknown'))[:64]
+    UNHANDLED_COUNTS[kind] = UNHANDLED_COUNTS.get(kind, 0) + 1
 
 
 def to_unix_ms(iso_str: str) -> int:
@@ -47,21 +70,6 @@ def to_unix_ms(iso_str: str) -> int:
         return int(dt.timestamp() * 1000)
     except Exception:
         return int(time.time() * 1000)
-
-
-def redact_raw_record(record: dict) -> dict:
-    import copy
-    rec = copy.deepcopy(record)
-    if 'message' in rec and isinstance(rec['message'], dict):
-        if 'content' in rec['message']: rec['message']['content'] = 'REDACTED'
-    if 'content' in rec and isinstance(rec['content'], str): rec['content'] = 'REDACTED'
-    if 'operation' in rec and 'content' in rec: rec['content'] = 'REDACTED'
-    if 'lastPrompt' in rec: rec['lastPrompt'] = 'REDACTED'
-    if 'summary' in rec: rec['summary'] = 'REDACTED'
-    if 'snapshot' in rec and isinstance(rec['snapshot'], dict):
-        if 'trackedFileBackups' in rec['snapshot'] and isinstance(rec['snapshot']['trackedFileBackups'], dict):
-            for k in rec['snapshot']['trackedFileBackups']: rec['snapshot']['trackedFileBackups'][k] = 'REDACTED'
-    return rec
 
 
 PRICING_CONFIG = {
@@ -98,7 +106,6 @@ def to_num(val: Any) -> Any:
 
 
 def transform_record(record: dict, incremental_tokens: Any = None, context_overrides: dict = None) -> dict:
-    if REDACTION: record = redact_raw_record(record)
     if context_overrides is None: context_overrides = {}
 
     msg_type = record.get('type', 'unknown')
@@ -106,7 +113,18 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
     usage = message.get('usage', {}) if isinstance(message, dict) else {}
     data = record.get('data', {}) if isinstance(record.get('data'), dict) else {}
     current_ms = int(time.time() * 1000)
-    user_ts = to_unix_ms(record.get('timestamp') or "")
+    ts_iso = record.get('timestamp')
+    if not ts_iso and msg_type == 'file-history-snapshot':
+        snap = record.get('snapshot')
+        ts_iso = snap.get('timestamp') if isinstance(snap, dict) else None
+    if ts_iso:
+        user_ts = to_unix_ms(ts_iso)
+    elif context_overrides.get('last_timestamp'):
+        user_ts = to_unix_ms(context_overrides['last_timestamp'])
+    elif context_overrides.get('file_mtime'):
+        user_ts = int(context_overrides['file_mtime'])
+    else:
+        user_ts = current_ms
 
     sessionId = record.get('sessionId') or context_overrides.get('sessionId') or U
     rawUuid = record.get('uuid', U)
@@ -380,6 +398,25 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
     else: cc = usage.get('cache_creation_input_tokens', 0)
     totalTokens = it + ot + cr + cc
     costEstimate = calculate_cost(pModel, usage) if pModel is not U else None
+
+    if isinstance(incremental_tokens, dict) and not incremental_tokens.get('cost') and pModel and pModel is not U:
+        rates = PRICING_CONFIG.get(pModel, PRICING_CONFIG['claude-3-5-sonnet-20241022'])
+        in_r, out_r, w_r, r_r = rates['in'], rates['out'], rates['cacheWrite'], rates['cacheRead']
+        if (it + cr + cc) > 200000 and ('sonnet' in pModel or 'opus' in pModel):
+            in_r *= 2
+            out_r *= 1.5
+            w_r *= 2
+            r_r *= 2
+        inc_in = incremental_tokens.get('input') or 0
+        inc_out = incremental_tokens.get('output') or 0
+        inc_read = incremental_tokens.get('cache_read') or 0
+        inc_create = incremental_tokens.get('cache_creation') or 0
+        incremental_tokens['cost'] = (
+            (inc_in / 1000000 * in_r)
+            + (inc_out / 1000000 * out_r)
+            + (inc_create / 1000000 * w_r)
+            + (inc_read / 1000000 * r_r)
+        )
 
     stu_vals = usage.get('server_tool_use', {}) if isinstance(usage.get('server_tool_use'), dict) else {}
     itrs = json.dumps(usage.get('iterations'), separators=(',', ':')) if 'iterations' in usage else None
@@ -687,20 +724,20 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
             'cvs35': agentDescription,
             'cvs36': entrypoint,
             'cvs37': sourceToolUseId,
-            'cvs38': (data.get('speed') or record.get('speed') or U),
-            'cvs39': (data.get('inferenceGeo') or record.get('inferenceGeo') or U),
+            'cvs38': (usage.get('speed') or data.get('speed') or record.get('speed') or U),
+            'cvs39': (usage.get('inference_geo') or data.get('inferenceGeo') or record.get('inferenceGeo') or U),
             'cvs40': (record.get('customTitle') or record.get('title') or U),
             'cvs41': (record.get('aiTitle') or U),
-            'cvs42': (record.get('sessionTag') or U),
-            'cvs43': (record.get('agentMap', {}).get('name') if isinstance(record.get('agentMap'), dict) else U),
-            'cvs44': (record.get('agentMap', {}).get('color') if isinstance(record.get('agentMap'), dict) else U),
+            'cvs42': (record.get('tag') or record.get('sessionTag') or U),
+            'cvs43': (record.get('agentName') or (record.get('agentMap', {}).get('name') if isinstance(record.get('agentMap'), dict) else U)),
+            'cvs44': (record.get('agentColor') or (record.get('agentMap', {}).get('color') if isinstance(record.get('agentMap'), dict) else U)),
             'cvs45': (json.dumps(record.get('agentSetting'), separators=(',', ':')) if 'agentSetting' in record else U),
             'cvs46': (record.get('prUrl') or U),
-            'cvs47': (record.get('attributionSurface') or U),
-            'cvs48': (record.get('sessionMode') or U),
-            'cvs49': (record.get('worktreeSession', {}).get('id') if isinstance(record.get('worktreeSession'), dict) else U),
-            'cvs50': (json.dumps(record.get('stagedNodes'), separators=(',', ':')) if 'stagedNodes' in record else U),
-            'cvs51': (record.get('origamiSummary') or U),
+            'cvs47': (record.get('surface') or record.get('attributionSurface') or U),
+            'cvs48': (record.get('mode') or record.get('sessionMode') or U),
+            'cvs49': (json.dumps(record.get('worktreeSession'), separators=(',', ':')) if record.get('worktreeSession') else U),
+            'cvs50': (json.dumps(record.get('staged'), separators=(',', ':')) if record.get('staged') is not None else (json.dumps(record.get('stagedNodes'), separators=(',', ':')) if 'stagedNodes' in record else U)),
+            'cvs51': (record.get('summary') if msg_type in ['marble-origami-commit', 'task-summary'] else (record.get('origamiSummary') or U)),
             'cvs52': (record.get('logicalParentUuid') or U),
             'cvs53': (record.get('teamName') or U),
             'cvs54': (record.get('stopSequence') or U),
@@ -712,16 +749,16 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
             'cvs60': (record.get('summaryContent') or U),
             'cvs61': (data.get('statusMessage') or U),
             'cvs62': (json.dumps(data.get('hookSpecificOutput'), separators=(',', ':')) if 'hookSpecificOutput' in data else U),
-            'cvs63': (record.get('worktreeSession', {}).get('branch') if isinstance(record.get('worktreeSession'), dict) else U),
-            'cvs64': (record.get('serviceTier') or U),
+            'cvs63': ((record.get('worktreeSession', {}).get('worktreeBranch') or record.get('worktreeSession', {}).get('branch')) if isinstance(record.get('worktreeSession'), dict) else U),
+            'cvs64': (usage.get('service_tier') or record.get('serviceTier') or U),
             'cvs65': (record.get('firstArchivedUuid') or U),
             'cvs66': (record.get('lastArchivedUuid') or U),
-            'cvs67': (record.get('originalBranch') or U),
-            'cvs68': (record.get('originalHeadCommit') or U),
-            'cvs69': (record.get('tmuxSessionName') or U),
-            'cvs70': (record.get('taskDescription') or U),
-            'cvs71': (record.get('taskType') or U),
-            'cvs72': (str(record.get('iterations')) if 'iterations' in record else U),
+            'cvs67': (record.get('originalBranch') or (record.get('worktreeSession', {}).get('originalBranch') if isinstance(record.get('worktreeSession'), dict) else U)),
+            'cvs68': (record.get('originalHeadCommit') or (record.get('worktreeSession', {}).get('originalHeadCommit') if isinstance(record.get('worktreeSession'), dict) else U)),
+            'cvs69': (record.get('tmuxSessionName') or (record.get('worktreeSession', {}).get('tmuxSessionName') if isinstance(record.get('worktreeSession'), dict) else U)),
+            'cvs70': (data.get('taskDescription') or record.get('taskDescription') or U),
+            'cvs71': (data.get('taskType') or record.get('taskType') or U),
+            'cvs72': (json.dumps(usage.get('iterations'), separators=(',', ':')) if 'iterations' in usage else (str(record.get('iterations')) if 'iterations' in record else U)),
             'cvs73': advisorModel,
             'cvs74': upgradeNudge,
             'cvs75': url,
@@ -739,8 +776,9 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
             'cvs87': originStr or U,
             'cvs88': imagePasteIdsStr or U,
             'cvs89': fileAttachmentsStr or U,
-            'cvs90': writtenPathsStr or U,
-            'cvs91': commandsStr or U,
+            # same columns as Codex and Antigravity (one CC table): cvs90 = commands, cvs91 = written paths
+            'cvs90': commandsStr or U,
+            'cvs91': writtenPathsStr or U,
             'cvs92': (record.get('worktreeSession', {}).get('originalCwd') if isinstance(record.get('worktreeSession'), dict) else U),
             'cvs93': (record.get('worktreeSession', {}).get('worktreePath') if isinstance(record.get('worktreeSession'), dict) else U),
             'cvs94': (record.get('worktreeSession', {}).get('worktreeName') if isinstance(record.get('worktreeSession'), dict) else U),
@@ -806,5 +844,5 @@ def transform_record(record: dict, incremental_tokens: Any = None, context_overr
             'cvb15': isP50,
         }
 
-    res = {k: v for k, v in payload.items() if v is not None and v is not U}
-    return encrypt_payload(res)
+    # Collection level, secret scrubbing and encryption are applied by the hook runner
+    return {k: v for k, v in payload.items() if v is not None and v is not U}

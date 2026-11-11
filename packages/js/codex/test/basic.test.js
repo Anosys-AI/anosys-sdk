@@ -13,7 +13,6 @@ const {
 } = require('../src/mapper');
 
 const {
-  HOOK_COMMAND,
   backup,
   hasAnosysHook,
   loadToml,
@@ -82,6 +81,7 @@ test('transformCodexTurn matches AnoSys schema', () => {
   assert.equal(mapped.cvs200, 'CodexHook');
   assert.equal(mapped.sessionId, 'session-js');
   assert.equal(mapped.uuid, 'turn-js-1');
+  assert.equal(mapped.raw_uuid, 'turn-js-1');
   assert.equal(mapped.userPrompt, 'Run build');
   assert.equal(mapped.assistantText, 'Build successful.');
   assert.equal(mapped.model, 'gpt-4o');
@@ -94,23 +94,70 @@ test('transformCodexTurn matches AnoSys schema', () => {
   assert.equal(mapped.tool_count, 1);
   assert.ok(mapped.commands.includes('npm run build'));
   assert.ok(mapped.cvs199);
+  // In native CC schema mode, duplicate CV columns are not emitted
+  assert.equal(mapped.cvn41, undefined);
+  assert.equal(mapped.cvs90, undefined);
+  assert.equal(mapped.cvs13, undefined);
 });
 
-test('transformCodexTurn handles content redaction', () => {
+test('transformCodexTurn fallback CV mode when not CC pixel', (t) => {
+  const oldEnv = process.env.ANOSYS_CODEX_PIXEL;
+  process.env.ANOSYS_CODEX_PIXEL = 'false';
+  t.after(() => {
+    if (oldEnv === undefined) delete process.env.ANOSYS_CODEX_PIXEL;
+    else process.env.ANOSYS_CODEX_PIXEL = oldEnv;
+  });
+
   const turn = {
-    turn_id: 'turn-redact',
-    model: 'o1',
-    user_prompt: 'Confidential project details',
-    assistant_output: 'Here is the confidential response',
-    tokens: { input_tokens: 10, output_tokens: 10 },
-    tool_calls: [{ tool: 'shell', args: 'cat secret.key', output: 'secret' }]
+    turn_id: 'turn-js-1',
+    model: 'gpt-4o',
+    model_provider: 'openai',
+    cwd: '/project/app',
+    permission_mode: 'auto',
+    user_prompt: 'Run build',
+    assistant_output: 'Build successful.',
+    turn_start_ms: 1700000000000,
+    turn_end_ms: 1700000004000,
+    duration_ms: 4000,
+    tokens: {
+      input_tokens: 1200,
+      output_tokens: 250,
+      total_tokens: 1450,
+      cached_input_tokens: 400,
+      reasoning_output_tokens: 50
+    },
+    tool_calls: [
+      {
+        tool: 'shell',
+        args: JSON.stringify({ command: 'npm run build' }),
+        output: 'Done',
+        call_id: 'c_build',
+        start_ts: 1700000001000,
+        end_ts: 1700000002000
+      }
+    ]
   };
 
-  const mapped = transformCodexTurn(turn, 'sess-redact', 'turn-redact', null, true);
+  const mapped = transformCodexTurn(turn, 'session-js', 'turn-js-1');
 
-  assert.equal(mapped.userPrompt, '[REDACTED]');
-  assert.equal(mapped.assistantText, '[REDACTED]');
-  assert.ok(mapped.cvs199.includes('[REDACTED]'));
+  assert.equal(mapped.cvs200, 'CodexHook');
+  assert.equal(mapped.cvs1, 'session-js');
+  assert.equal(mapped.cvs13, 'turn-js-1');
+  assert.equal(mapped.cvs4, 'Run build');
+  assert.equal(mapped.cvs5, 'Build successful.');
+  assert.equal(mapped.cvs9, 'gpt-4o');
+  assert.equal(mapped.cvs2, 'app');
+  assert.equal(mapped.cvn1, 1200);
+  assert.equal(mapped.cvn2, 250);
+  assert.equal(mapped.cvn4, 400);
+  assert.equal(mapped.cvb1, true);
+  assert.equal(mapped.cvb2, false);
+  assert.equal(mapped.cvn41, 1);
+  assert.ok(mapped.cvs90.includes('npm run build'));
+  assert.ok(mapped.cvs199);
+  // In fallback CV mode, native tool/token columns are not duplicated
+  assert.equal(mapped.commands, undefined);
+  assert.equal(mapped.tool_count, undefined);
 });
 
 test('installer manages config.toml lifecycle idempotently and preserves existing sections', () => {
@@ -122,7 +169,7 @@ test('installer manages config.toml lifecycle idempotently and preserves existin
   fs.writeFileSync(configPath, '[desktop]\nfollowUpQueueMode = "steer"\n\n[plugins."browser@openai-bundled"]\nenabled = true\n', 'utf8');
 
   // 1. Update config
-  const updated = updateCodexConfig(HOOK_COMMAND, configPath);
+  const updated = updateCodexConfig(null, configPath);
   assert.equal(updated, true);
   assert.ok(fs.existsSync(configPath));
 
@@ -132,10 +179,10 @@ test('installer manages config.toml lifecycle idempotently and preserves existin
 
   const data = loadToml(configPath);
   assert.equal(hasAnosysHook(data), true);
-  assert.ok(data.notify.includes('anosys-codex'));
+  assert.equal(data.notify[0], process.execPath);
 
   // 2. Idempotent check
-  const updatedAgain = updateCodexConfig(HOOK_COMMAND, configPath);
+  const updatedAgain = updateCodexConfig(null, configPath);
   assert.equal(updatedAgain, false);
 
   // 3. Backup
@@ -143,11 +190,14 @@ test('installer manages config.toml lifecycle idempotently and preserves existin
   assert.ok(bk && fs.existsSync(bk));
 
   // 4. Update env
-  updateCodexEnv({ apiKey: 'key-123', redaction: true, customPath: envPath });
+  updateCodexEnv({ apiKey: 'key-123', customPath: envPath });
   assert.ok(fs.existsSync(envPath));
   const envText = fs.readFileSync(envPath, 'utf8');
   assert.ok(envText.includes('key-123'));
-  assert.ok(envText.includes('REDACTION="true"'));
+  assert.ok(!envText.includes('REDACTION'));
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(envPath).mode & 0o777, 0o600);
+  }
 
   // 5. Remove config
   const removed = removeCodexConfig(configPath);
@@ -273,114 +323,6 @@ test('validateApiKey returns true for CC pixel and false for non-CC pixel', asyn
     assert.equal(isT, false);
   } finally {
     https.get = origGet;
-  }
-});
-
-const {
-  derive256BitKey,
-  encrypt,
-  decrypt,
-  encryptPayload,
-  ANOSYS_ENCRYPTION_PREFIX,
-} = require('../src/mapper');
-
-test('encryption matches cross-platform AES-256-CBC test vector exactly', () => {
-  const key = derive256BitKey('YOUR_SECRET_KEY_HERE');
-  const ciphertext = encrypt('Hello from AnoSys Technologies!', key);
-  const prefixed = ANOSYS_ENCRYPTION_PREFIX + ciphertext;
-
-  assert.equal(
-    prefixed,
-    'enc:J+0Ntn9F5hhtKSBGTFZPce61f8zwRKwrp7bNpwp2Cw4='
-  );
-  assert.equal(decrypt(prefixed, key), 'Hello from AnoSys Technologies!');
-  assert.equal(decrypt(ciphertext, key), 'Hello from AnoSys Technologies!');
-});
-
-test('transformCodexTurn handles encryption when ANOSYS_ENCRYPTION_KEY is set', () => {
-  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
-  try {
-    const turn = {
-      model: 'gpt-4o',
-      user_prompt: 'Codex secret query',
-      assistant_output: 'Codex completion text',
-    };
-    const res = transformCodexTurn(turn, 's1', 't1');
-    assert.ok(res.user_prompt.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.ok(res.assistant_text.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.ok(res.cvs4.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.ok(res.cvs5.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.ok(res.cvs199.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.equal(res.model, 'gpt-4o');
-
-    const key = derive256BitKey('codex-secret-key');
-    assert.equal(decrypt(res.user_prompt, key), 'Codex secret query');
-    assert.equal(decrypt(res.assistant_text, key), 'Codex completion text');
-  } finally {
-    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    else delete process.env.ANOSYS_ENCRYPTION_KEY;
-  }
-});
-
-test('supports ANOSYS_ENCRYPTED_COLUMNS and typo alias ANOSYS_ENCRYPTES_COLUMNS override', () => {
-  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-  const oldCols = process.env.ANOSYS_ENCRYPTES_COLUMNS;
-  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
-  process.env.ANOSYS_ENCRYPTES_COLUMNS = 'user_prompt';
-  try {
-    const turn = {
-      model: 'gpt-4o',
-      user_prompt: 'Only encrypt this',
-      assistant_output: 'Do not encrypt this',
-    };
-    const res = transformCodexTurn(turn, 's1', 't1');
-    assert.ok(res.user_prompt.startsWith(ANOSYS_ENCRYPTION_PREFIX));
-    assert.equal(res.assistant_text, 'Do not encrypt this');
-  } finally {
-    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    else delete process.env.ANOSYS_ENCRYPTION_KEY;
-    if (oldCols) process.env.ANOSYS_ENCRYPTES_COLUMNS = oldCols;
-    else delete process.env.ANOSYS_ENCRYPTES_COLUMNS;
-  }
-});
-
-test('warns on non-string column and skips encryption', () => {
-  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
-  let warned = false;
-  const originalWarn = console.warn;
-  console.warn = (...args) => {
-    warned = true;
-    originalWarn(...args);
-  };
-  try {
-    const payload = {
-      user_prompt: 12345,
-      cvs199: true,
-    };
-    const res = encryptPayload(payload);
-    assert.equal(res.user_prompt, 12345);
-    assert.equal(res.cvs199, true);
-    assert.ok(warned);
-  } finally {
-    console.warn = originalWarn;
-    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    else delete process.env.ANOSYS_ENCRYPTION_KEY;
-  }
-});
-
-test('is idempotent and does not re-encrypt already encrypted fields', () => {
-  const oldKey = process.env.ANOSYS_ENCRYPTION_KEY;
-  process.env.ANOSYS_ENCRYPTION_KEY = 'codex-secret-key';
-  try {
-    const payload = { user_prompt: 'Test message' };
-    const res1 = encryptPayload(payload);
-    const res2 = encryptPayload(res1);
-    assert.equal(res1.user_prompt, res2.user_prompt);
-  } finally {
-    if (oldKey) process.env.ANOSYS_ENCRYPTION_KEY = oldKey;
-    else delete process.env.ANOSYS_ENCRYPTION_KEY;
   }
 });
 

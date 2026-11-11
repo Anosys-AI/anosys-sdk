@@ -4,61 +4,83 @@
 
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const http = require('http');
+const {
+  FULL, OFF, RANK = { off: 0, metadata: 1, full: 2 }, PendingQueue, createHookLog, deliver, effectiveLevel, encryptPayload, filterFields, isPaused, prepareHookRecord, scrubSecrets, writePrivateFile,
+} = require('anosys-sdk-core');
 const { GLOBAL_CONFIG_DIR, GLOBAL_ENV_FILE, DEFAULT_INGESTION_URL } = require('./constants');
 const { parseTranscript } = require('./transcript');
-const { transformAntigravityTurn } = require('./mapper');
+const { METADATA_FIELDS, transformAntigravityTurn } = require('./mapper');
 
 const STATE_DIR = path.join(GLOBAL_CONFIG_DIR, 'state');
 const PENDING_FILE = path.join(STATE_DIR, 'pending_records.jsonl');
+const PAUSE_FILE = path.join(STATE_DIR, 'anosys_paused.json');
 const LOG_FILE = path.join(STATE_DIR, 'anosys_hook.log');
+
 
 try {
   fs.mkdirSync(STATE_DIR, { recursive: true });
 } catch {}
 
-function log(level, message, ...args) {
-  const ts = new Date().toISOString();
-  const formatted = `[${ts}] [${level}] ${message} ${args.length ? JSON.stringify(args) : ''}\n`;
-  try {
-    fs.appendFileSync(LOG_FILE, formatted, 'utf-8');
-  } catch {}
-  if (level === 'ERROR' || process.env.ANOSYS_VERBOSE === 'true') {
-    process.stderr.write(formatted);
-  }
-}
+// The hook log records ids, sizes and status codes only, never prompts or payloads.
+const log = createHookLog(LOG_FILE);
 
-function loadEnvConfig(envPath = GLOBAL_ENV_FILE) {
+// A workspace file is part of the repository, so anyone who can commit to it
+// controls it. It may choose which AnoSys key the records are filed under and
+// lower collection; it can never raise the level, point at a consent file,
+// change the endpoint, encryption, proxies or certificates.
+const WORKSPACE_ALLOWED_KEYS = new Set([
+  'ANOSYS_HOOK_APIKEY', 'ANOSYS_HOOK_API_KEY', 'ANOSYS_HOOK_DRY_RUN',
+  'REDACTION', 'ANOSYS_DISABLE', 'ANOSYS_COLLECTION_LEVEL',
+]);
+const WORKSPACE_LEVELS = new Set(['off', 'metadata']); // ANOSYS_COLLECTION_LEVEL may only lower
+
+let _workspaceCeiling = null;
+
+function loadEnvConfig(envPath = GLOBAL_ENV_FILE, allowed = null) {
   if (!fs.existsSync(envPath)) return;
   try {
     const raw = fs.readFileSync(envPath, 'utf-8');
     const data = JSON.parse(raw);
     if (data && typeof data === 'object') {
       for (const [k, v] of Object.entries(data)) {
+        if (allowed && (!allowed.has(k)
+            || (k === 'ANOSYS_COLLECTION_LEVEL' && !WORKSPACE_LEVELS.has(String(v).trim().toLowerCase())))) {
+          log('WARNING', `Ignored ${k} from the workspace settings file (not allowed there)`);
+          continue;
+        }
+        if (allowed && v !== undefined && v !== null) {
+          const valLower = String(v).trim().toLowerCase();
+          if (k === 'ANOSYS_DISABLE' && ['1', 'true', 'yes'].includes(valLower)) {
+            _workspaceCeiling = 'off';
+          } else if (k === 'ANOSYS_COLLECTION_LEVEL' && WORKSPACE_LEVELS.has(valLower)) {
+            if (_workspaceCeiling !== 'off') _workspaceCeiling = valLower;
+          } else if (k === 'REDACTION' && ['1', 'true', 'yes'].includes(valLower)) {
+            if (_workspaceCeiling === null) _workspaceCeiling = 'metadata';
+          }
+        }
         if (!process.env[k] && v !== undefined && v !== null) {
           process.env[k] = String(v);
         }
       }
     }
   } catch (err) {
-    log('WARN', `Failed to load env config from ${envPath}: ${err.message}`);
+    log('WARNING', `Failed to load env config from ${envPath}: ${err.name}`);
   }
 }
 
-function loadRuntimeEnvironment() {
-  let directory = process.cwd();
+function loadRuntimeEnvironment(startDir = null) {
+  loadEnvConfig();
+  let directory = startDir ? path.resolve(String(startDir)) : process.cwd();
   while (true) {
     const workspaceConfig = path.join(directory, '.agents', 'anosys-env.json');
     if (fs.existsSync(workspaceConfig)) {
-      loadEnvConfig(workspaceConfig);
+      loadEnvConfig(workspaceConfig, WORKSPACE_ALLOWED_KEYS);
       break;
     }
     const parent = path.dirname(directory);
     if (parent === directory) break;
     directory = parent;
   }
-  loadEnvConfig();
 }
 
 loadRuntimeEnvironment();
@@ -66,9 +88,8 @@ loadRuntimeEnvironment();
 function getConfig() {
   return {
     ingestion_url: process.env.ANOSYS_HOOK_ENDPOINT_URL || DEFAULT_INGESTION_URL,
-    api_key: process.env.ANOSYS_HOOK_APIKEY || process.env.ANOSYS_API_KEY || '',
+    api_key: process.env.ANOSYS_HOOK_APIKEY || process.env.ANOSYS_HOOK_API_KEY || process.env.ANOSYS_API_KEY || '',
     dry_run: (process.env.ANOSYS_HOOK_DRY_RUN || 'false').toLowerCase() === 'true',
-    redaction: (process.env.REDACTION || 'false').toLowerCase() === 'true',
   };
 }
 
@@ -93,130 +114,27 @@ function loadState(sessionId) {
 function saveState(sessionId, state) {
   try {
     const sf = getSessionStateFile(sessionId);
-    fs.writeFileSync(sf, JSON.stringify(state, null, 2), 'utf-8');
+    writePrivateFile(sf, JSON.stringify(state, null, 2)); // 0600
   } catch (err) {
-    log('ERROR', `Failed to save state for ${sessionId}: ${err.message}`);
+    log('ERROR', `Failed to save state for ${sessionId}: ${err.name}`);
   }
 }
 
-function loadPendingRecords() {
-  if (!fs.existsSync(PENDING_FILE)) return [];
-  const records = [];
-  try {
-    const lines = fs.readFileSync(PENDING_FILE, 'utf-8').split('\n');
-    for (let line of lines) {
-      line = line.trim();
-      if (line) {
-        records.push(JSON.parse(line));
-      }
-    }
-  } catch (err) {
-    log('ERROR', `Failed to load pending records: ${err.message}`);
-  }
-  return records;
+/** Apply the collection level, scrub secrets at `full`, then encrypt. */
+function prepareRecord(mapped, level) {
+  // Level filter, secret scrubbing and encryption: the shared core step
+  return prepareHookRecord(mapped, level, METADATA_FIELDS);
 }
 
-function savePendingRecords(records, overwrite = false) {
-  try {
-    const mode = overwrite ? 'w' : 'a';
-    const content = records.map(r => JSON.stringify(r)).join('\n') + '\n';
-    if (overwrite) {
-      fs.writeFileSync(PENDING_FILE, content, 'utf-8');
-    } else {
-      fs.appendFileSync(PENDING_FILE, content, 'utf-8');
-    }
-  } catch (err) {
-    log('ERROR', `Failed to save pending records: ${err.message}`);
+/** Deliver records (and queued retries) within the size limit. Resolves to the count accepted. */
+async function send(records, config, options = {}) {
+  if (config.dry_run) {
+    log('INFO', `[DRY RUN] Would send ${records.length} record(s)`);
+    return records.length;
   }
-}
-
-function clearPendingRecords() {
-  try {
-    if (fs.existsSync(PENDING_FILE)) {
-      fs.unlinkSync(PENDING_FILE);
-    }
-  } catch (err) {
-    log('ERROR', `Failed to clear pending records: ${err.message}`);
-  }
-}
-
-function postChunk(chunk, config) {
-  return new Promise((resolve) => {
-    if (config.dry_run) {
-      log('INFO', `[DRY RUN] Would POST ${chunk.length} records to ${config.ingestion_url}`);
-      return resolve({ success: true, records: chunk });
-    }
-
-    try {
-      const url = new URL(config.ingestion_url);
-      const dataStr = JSON.stringify(chunk);
-      const isHttps = url.protocol === 'https:';
-      const client = isHttps ? https : http;
-
-      const headers = {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(dataStr),
-        'User-Agent': 'anosys-antigravity-hook-js/0.1.0',
-      };
-      if (config.api_key) {
-        headers['anosys-apikey'] = config.api_key;
-        headers['x-api-key'] = config.api_key;
-      }
-
-      const req = client.request(
-        {
-          hostname: url.hostname,
-          port: url.port || (isHttps ? 443 : 80),
-          path: url.pathname + url.search,
-          method: 'POST',
-          headers,
-          timeout: 10000,
-        },
-        res => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            log('INFO', `Batch POST success — sent ${chunk.length} records`);
-            resolve({ success: true, records: chunk });
-          } else {
-            log('ERROR', `Batch POST failed with status ${res.statusCode}`);
-            resolve({ success: false, records: chunk });
-          }
-        }
-      );
-
-      req.on('error', err => {
-        log('ERROR', `Batch POST request error: ${err.message}`);
-        resolve({ success: false, records: chunk });
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        log('ERROR', 'Batch POST request timed out');
-        resolve({ success: false, records: chunk });
-      });
-
-      req.write(dataStr);
-      req.end();
-    } catch (err) {
-      log('ERROR', `Batch POST unexpected error: ${err.message}`);
-      resolve({ success: false, records: chunk });
-    }
-  });
-}
-
-async function postRecordsBatch(payloads, config) {
-  if (!payloads || payloads.length === 0) return [];
-  const failed = [];
-  const batchSize = 100;
-
-  for (let i = 0; i < payloads.length; i += batchSize) {
-    const chunk = payloads.slice(i, i + batchSize);
-    const res = await postChunk(chunk, config);
-    if (!res.success) {
-      failed.push(...chunk);
-    }
-  }
-
-  return failed;
+  const headers = { 'Content-Type': 'application/json' };
+  if (config.api_key) headers['anosys-apikey'] = config.api_key;
+  return deliver(config.ingestion_url, records, new PendingQueue(PENDING_FILE), PAUSE_FILE, { headers, metadataFields: METADATA_FIELDS, ...options });
 }
 
 function readStdin() {
@@ -240,7 +158,7 @@ function printResponse() {
   process.stdout.write(JSON.stringify({}) + '\n');
 }
 
-async function processTurns(eventName, inputJson, config) {
+async function processTurns(eventName, inputJson, config, level = 'metadata') {
   const cfg = config || getConfig();
   const transcriptPath = inputJson.transcriptPath;
   if (!transcriptPath) {
@@ -251,7 +169,7 @@ async function processTurns(eventName, inputJson, config) {
   const sessionId = inputJson.conversationId || path.basename(path.dirname(transcriptPath)) || 'unknown_session';
   const turns = parseTranscript(transcriptPath);
   if (!turns || turns.length === 0) {
-    log('INFO', `No turns parsed from transcript: ${transcriptPath}`);
+    log('INFO', `No turns parsed from the transcript of session ${sessionId}`);
     return;
   }
 
@@ -285,28 +203,24 @@ async function processTurns(eventName, inputJson, config) {
       turn,
       sessionId,
       turnId,
-      hookMeta,
-      cfg.redaction
+      hookMeta
     );
 
-    recordsToSend.push(payload);
+    recordsToSend.push(prepareRecord(payload, level));
     turnIndicesEmitted.push(i);
     processedTurns.push(turnId);
   }
 
   if (recordsToSend.length > 0) {
-    const failed = await postRecordsBatch(recordsToSend, cfg);
-    if (failed.length > 0) {
-      log('WARN', `Saving ${failed.length} failed records to pending queue`);
-      savePendingRecords(failed);
-    } else {
-      const maxIdx = Math.max(...turnIndicesEmitted);
-      log('INFO', `Successfully emitted ${recordsToSend.length} turns up to index ${maxIdx}`);
-      state.last_emitted_turn = maxIdx;
-      state.processed_turns = processedTurns;
-      state.last_updated = new Date().toISOString();
-      saveState(sessionId, state);
-    }
+    const wsPaths = Array.isArray(inputJson.workspacePaths) ? inputJson.workspacePaths : [];
+    const wsCwd = wsPaths[0] || inputJson.cwd || null;
+    // Failed records go to the bounded queue; turns are marked processed either way
+    const sent = await send(recordsToSend, cfg, { cwd: wsCwd });
+    log('INFO', `Session ${sessionId} at '${level}': ${recordsToSend.length} turn(s), ${sent} accepted`);
+    state.last_emitted_turn = Math.max(...turnIndicesEmitted);
+    state.processed_turns = processedTurns.slice(-500);
+    state.last_updated = new Date().toISOString();
+    saveState(sessionId, state);
   }
 }
 
@@ -320,23 +234,24 @@ async function run() {
   }
 
   try {
-    const cfg = getConfig();
-    const pending = loadPendingRecords();
-    if (pending.length > 0) {
-      log('INFO', `Retrying ${pending.length} pending records...`);
-      const stillFailed = await postRecordsBatch(pending, cfg);
-      if (stillFailed.length === 0) {
-        clearPendingRecords();
-        log('INFO', 'Successfully flushed pending records.');
-      } else {
-        savePendingRecords(stillFailed, true);
-      }
-    }
-
     const inputJson = await readStdin();
-    await processTurns(eventName, inputJson, cfg);
+    const wsPaths = Array.isArray(inputJson.workspacePaths) ? inputJson.workspacePaths : [];
+    const wsCwd = wsPaths[0] || inputJson.cwd || null;
+    if (wsCwd) loadRuntimeEnvironment(wsCwd);
+    let { level, source } = effectiveLevel(null, wsCwd);
+    if (_workspaceCeiling && (RANK[_workspaceCeiling] ?? 0) < (RANK[level] ?? 0)) {
+      level = _workspaceCeiling;
+      source = 'workspace ceiling';
+    }
+    if (level === OFF) {
+      log('INFO', `Collection is off (${source}); nothing sent`);
+    } else if (isPaused(PAUSE_FILE)) {
+      log('INFO', 'Collection paused after an authorization error; nothing sent');
+    } else {
+      await processTurns(eventName, inputJson, getConfig(), level);
+    }
   } catch (err) {
-    log('ERROR', `Hook runner error on ${eventName}: ${err.message}`);
+    log('ERROR', `Hook runner error on ${eventName}: ${err.name}`);
   } finally {
     printResponse();
   }
@@ -349,13 +264,15 @@ if (require.main === module) {
 module.exports = {
   run,
   processTurns,
+  prepareRecord,
+  send,
   loadState,
   saveState,
-  loadPendingRecords,
-  savePendingRecords,
-  clearPendingRecords,
-  postRecordsBatch,
   readStdin,
   printResponse,
   getConfig,
+  LOG_FILE,
+  PENDING_FILE,
+  PAUSE_FILE,
+  STATE_DIR,
 };

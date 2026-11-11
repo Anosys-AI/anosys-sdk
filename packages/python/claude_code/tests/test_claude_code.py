@@ -409,32 +409,6 @@ def test_load_save_state(tmp_path, monkeypatch):
     assert reloaded == data
 
 
-def test_pending_records_roundtrip(tmp_path, monkeypatch):
-    import anosys_sdk_claude_code.hook_runner as hr
-    pending_file = tmp_path / "pending_records.jsonl"
-    monkeypatch.setattr(hr, "PENDING_RECORDS_FILE", pending_file)
-
-    # Initially empty
-    assert hr.load_pending_records() == []
-
-    records = [{"event_id": "r1", "session_id": "sess"}, {"event_id": "r2", "session_id": "sess"}]
-    hr.save_pending_records(records)
-    loaded = hr.load_pending_records()
-    assert len(loaded) == 2
-    assert loaded[0]["event_id"] == "r1"
-
-    # Append more
-    hr.save_pending_records([{"event_id": "r3", "session_id": "sess"}])
-    assert len(hr.load_pending_records()) == 3
-
-    # Overwrite
-    hr.save_pending_records([{"event_id": "only", "session_id": "sess"}], overwrite=True)
-    assert len(hr.load_pending_records()) == 1
-
-    hr.clear_pending_records()
-    assert hr.load_pending_records() == []
-
-
 def test_find_all_transcripts_returns_list():
     from anosys_sdk_claude_code.hook_runner import find_all_transcripts
     result = find_all_transcripts()
@@ -484,21 +458,3 @@ def test_validate_api_key_failure():
         assert validate_api_key("any", "claudecode") is False
 
 
-def test_transform_record_encryption():
-    import os
-    from unittest.mock import patch
-    from anosys_sdk_claude_code.encryption import ANOSYS_ENCRYPTION_PREFIX, decrypt, derive_256_bit_key
-
-    rec = {
-        "type": "user",
-        "uuid": "u1",
-        "sessionId": "s1",
-        "message": {"content": "Secret prompt text"}
-    }
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "claude-secret"}):
-        result = transform_record(rec)
-        assert result["user_prompt"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert result["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-
-        key = derive_256_bit_key("claude-secret")
-        assert decrypt(result["user_prompt"], key) == "Secret prompt text"

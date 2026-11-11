@@ -130,8 +130,8 @@ Below is the complete reference of all named variables emitted for Claude Code s
 | `tool_use_result` | `string` | `cvs26` | Stringified output or stdout returned by the executed tool. |
 | `tool_count` | `number` | `cvn41` | Total number of tool calls executed during this turn. |
 | `tool_duration_ms` | `number` | `cvn39` | Cumulative time in milliseconds spent executing tools. |
-| `commands` | `string` | `cvs91` | Stringified list of shell commands executed by the agent. |
-| `written_paths` | `string` | `cvs90` | Stringified list of files created, modified, or written. |
+| `commands` | `string` | `cvs90` | Stringified list of shell commands executed by the agent. |
+| `written_paths` | `string` | `cvs91` | Stringified list of files created, modified, or written. |
 | `file_states` | `string` | `cvs57` | Snapshot state summary of tracked files. |
 | `web_search_requests` | `number` | `cvn29` | Count of web search queries executed by Claude Code. |
 | `web_fetch_requests` | `number` | `cvn30` | Count of web page URL fetch actions executed. |
@@ -299,8 +299,8 @@ This section provides the exhaustive physical database mapping for Claude Code i
 | `cvs87` | `origin` | Originating host |
 | `cvs88` | `imagePasteIds`| Image paste references |
 | `cvs89` | `fileAttachments`| Attached file names |
-| `cvs90` | `writtenPaths` | Modified file paths |
-| `cvs91` | `commands` | Shell commands run |
+| `cvs90` | `commands` | Shell commands run (same column as Codex and Antigravity) |
+| `cvs91` | `writtenPaths` | Modified file paths (same column as Codex and Antigravity) |
 | `cvs92` | `worktreeOriginalCwd`| Original worktree directory |
 | `cvs93` | `worktreePath` | Worktree folder |
 | `cvs94` | `worktreeName` | Worktree identifier |

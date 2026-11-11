@@ -15,7 +15,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import tomllib  # Python 3.11+
@@ -26,8 +26,20 @@ except ImportError:
         tomllib = None  # type: ignore[assignment]
 
 
-HOOK_COMMAND = "anosys-codex run"
+HOOK_COMMAND = "anosys-codex run"  # legacy form, still recognized on uninstall
 INGESTION_URL = "https://api.anosys.ai/ingestion"
+HOOK_MODULE = "anosys_sdk_codex.hook_runner"
+# Markers of every hook form this package has ever written
+HOOK_MARKERS = ("anosys-codex", "anosys_sdk_codex")
+# Codex runs a single notify command; another one already configured is kept
+# and called after ours with the same notification (the same convention the
+# Codex Computer Use wrapper uses).
+PREVIOUS_NOTIFY_FLAG = "--previous-notify"
+
+
+def hook_command() -> List[str]:
+    """The notify command: this interpreter by absolute path, never a bare PATH lookup."""
+    return [sys.executable, "-m", HOOK_MODULE]
 
 
 def get_codex_home() -> Path:
@@ -54,6 +66,7 @@ def backup(path: Path | None = None) -> Optional[Path]:
         timestamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
         backup_path = path.with_name(f"{path.name}.{timestamp}.bak")
         shutil.copy2(path, backup_path)
+        os.chmod(backup_path, 0o600)  # backups can hold the API key
         return backup_path
     return None
 
@@ -89,40 +102,101 @@ def _fallback_parse_toml(content: str) -> Dict[str, Any]:
     return res
 
 
-def _serialize_toml_value(val: Any) -> str:
-    if isinstance(val, bool):
-        return "true" if val else "false"
-    if isinstance(val, (int, float)):
-        return str(val)
-    if isinstance(val, str):
-        escaped = val.replace("\\", "\\\\").replace('"', '\"')
-        return f'"{escaped}"'
-    if isinstance(val, list):
-        items_str = ", ".join(_serialize_toml_value(x) for x in val)
-        return f"[{items_str}]"
-    if isinstance(val, dict):
-        items_str = ", ".join(f"{k} = {_serialize_toml_value(v)}" for k, v in val.items())
-        return f"{{ {items_str} }}"
-    return f'"{str(val)}"'
+def _is_ours(value: Any) -> bool:
+    return any(marker in str(value) for marker in HOOK_MARKERS)
 
 
-def write_toml_atomic(path: Path, data: Dict[str, Any]) -> None:
-    """Safely write TOML data atomically."""
+def has_anosys_hook(data: Dict[str, Any]) -> bool:
+    """True if the AnoSys hook appears anywhere in notify, including chained inside another wrapper."""
+    notify = data.get("notify", [])
+    return _is_ours(json.dumps(notify))
+
+
+def _notify_without_ours(notify: Any) -> Optional[List[str]]:
+    """
+    The notify command with the AnoSys hook taken out, or None when nothing is left.
+
+    Handles ours as the command (restoring the command we chained to) and ours
+    chained inside another wrapper's ``--previous-notify`` argument.
+    """
+    if isinstance(notify, str):
+        notify = [notify]
+    if not isinstance(notify, list) or not notify:
+        return None
+    items = [str(x) for x in notify]
+    prev_value = None
+    if PREVIOUS_NOTIFY_FLAG in items:
+        i = items.index(PREVIOUS_NOTIFY_FLAG)
+        prev_value = items[i + 1] if i + 1 < len(items) else None
+
+    head = items[: items.index(PREVIOUS_NOTIFY_FLAG)] if PREVIOUS_NOTIFY_FLAG in items else items
+    if any(_is_ours(x) for x in head):
+        # Ours is the command: give back what we chained to, if anything
+        if prev_value:
+            try:
+                previous = json.loads(prev_value)
+                return _notify_without_ours(previous) if has_anosys_hook({"notify": previous}) else previous
+            except json.JSONDecodeError:
+                return None
+        return None
+
+    if prev_value and _is_ours(prev_value):
+        # Ours is chained inside another wrapper
+        i = items.index(PREVIOUS_NOTIFY_FLAG)
+        try:
+            inner = _notify_without_ours(json.loads(prev_value))
+        except json.JSONDecodeError:
+            inner = None
+        rest = items[:i] + items[i + 2 :]
+        return rest + [PREVIOUS_NOTIFY_FLAG, json.dumps(inner)] if inner else rest
+    return items
+
+
+def _toml_array(values: List[str]) -> str:
+    return "[" + ", ".join(json.dumps(v) for v in values) + "]"
+
+
+# One top-level `notify = [...]` line (its strings may themselves contain brackets)
+_NOTIFY_START = re.compile(r'^[ \t]*notify[ \t]*=[ \t]*', re.MULTILINE)
+_TABLE_HEADER = re.compile(r'^[ \t]*\[', re.MULTILINE)
+
+
+def _notify_span(content: str) -> Optional[Tuple[int, int]]:
+    """
+    Start and end of the top-level ``notify = ...`` entry, including a value that
+    spans several lines (``notify = [\n  "a",\n  "b",\n]``) and brackets inside
+    strings. Entries inside a [table] are not the top-level key and are ignored.
+    """
+    header = _TABLE_HEADER.search(content)
+    limit = header.start() if header else len(content)
+    m = _NOTIFY_START.search(content, 0, limit)
+    if not m:
+        return None
+    i = m.end()
+    if i < len(content) and content[i] == "[":
+        depth, quote = 0, None
+        while i < len(content):
+            ch = content[i]
+            if quote:
+                if ch == "\\" and quote == '"':
+                    i += 1
+                elif ch == quote:
+                    quote = None
+            elif ch in ('"', "'"):
+                quote = ch
+            elif ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+    end = content.find("\n", i)
+    return m.start(), (len(content) if end == -1 else end + 1)
+
+
+def _write_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines: List[str] = []
-
-    for k, v in data.items():
-        if not isinstance(v, dict):
-            lines.append(f"{k} = {_serialize_toml_value(v)}")
-
-    for k, v in data.items():
-        if isinstance(v, dict):
-            lines.append("")
-            lines.append(f"[{k}]")
-            for sub_k, sub_v in v.items():
-                lines.append(f"{sub_k} = {_serialize_toml_value(sub_v)}")
-
-    content = "\n".join(lines).strip() + "\n"
     fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix="config_", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -136,91 +210,54 @@ def write_toml_atomic(path: Path, data: Dict[str, Any]) -> None:
         raise
 
 
-def has_anosys_hook(data: Dict[str, Any]) -> bool:
-    notify_list = data.get("notify", [])
-    if isinstance(notify_list, str):
-        notify_list = [notify_list]
-    if isinstance(notify_list, list):
-        return any("anosys-codex" in str(x) for x in notify_list)
-    return False
+def _set_notify(path: Path, notify: Optional[List[str]]) -> None:
+    content = path.read_text(encoding="utf-8") if path.is_file() else ""
+    line = f"notify = {_toml_array(notify)}\n" if notify else ""
+    span = _notify_span(content)
+    if span:
+        new_content = content[:span[0]] + line + content[span[1]:]
+    else:
+        new_content = (f"{line}\n{content}" if content else line) if line else content
+    _write_atomic(path, new_content)
 
 
-def update_codex_config(hook_command: str = HOOK_COMMAND, path: Path | None = None) -> bool:
+def update_codex_config(hook_command_args: Optional[List[str]] = None, path: Path | None = None) -> bool:
+    """
+    Register the hook in notify. A notify command already there is kept and
+    chained after ours. Re-running replaces an older AnoSys entry.
+    Returns True when the file changed.
+    """
     if path is None:
         path = get_config_path()
-
-    content = ""
-    if path.is_file():
-        content = path.read_text(encoding="utf-8")
-
     data = load_toml(path)
-    if has_anosys_hook(data):
+    current = data.get("notify")
+    existing = _notify_without_ours(current) if has_anosys_hook(data) else (
+        [str(x) for x in current] if isinstance(current, list) and current else
+        ([current] if isinstance(current, str) and current else None)
+    )
+    ours = list(hook_command_args or hook_command())
+    notify = ours + [PREVIOUS_NOTIFY_FLAG, json.dumps(existing)] if existing else ours
+    if current == notify:
         return False
-
-    if isinstance(hook_command, list):
-        args = hook_command
-    elif isinstance(hook_command, str) and hook_command.strip():
-        args = hook_command.strip().split() if " " in hook_command else [hook_command.strip()]
-    else:
-        args = ["anosys-codex", "run"]
-
-    serialized = ", ".join(f'"{x}"' for x in args)
-    notify_line = f"notify = [{serialized}]"
-    notify_pattern = re.compile(r'^[ \t]*notify[ \t]*=[ \t]*\[.*?\][ \t]*(?:\r?\n|$)', re.MULTILINE)
-
-    if notify_pattern.search(content):
-        new_content = notify_pattern.sub(f"{notify_line}\n", content)
-    else:
-        new_content = f"{notify_line}\n\n{content}" if content else f"{notify_line}\n"
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix="config_", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(new_content)
-        shutil.move(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-
+    _set_notify(path, notify)
     return True
 
 
 def remove_codex_config(path: Path | None = None) -> bool:
+    """Remove only the AnoSys part of notify; other tools' notify commands stay."""
     if path is None:
         path = get_config_path()
     if not path.is_file():
         return False
-
     data = load_toml(path)
     if not has_anosys_hook(data):
         return False
-
-    content = path.read_text(encoding="utf-8")
-    notify_pattern = re.compile(r'^[ \t]*notify[ \t]*=[ \t]*\[.*?\][ \t]*(?:\r?\n|$)', re.MULTILINE)
-    new_content = notify_pattern.sub("", content)
-
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix="config_", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(new_content)
-        shutil.move(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-
+    _set_notify(path, _notify_without_ours(data.get("notify")))
     return True
 
 
 def update_codex_env(
     api_key: str = "",
-    redaction: bool = False,
     endpoint_url: str = INGESTION_URL,
     path: Path | None = None,
 ) -> None:
@@ -234,13 +271,11 @@ def update_codex_env(
     ]
     if api_key:
         lines.append(f'export ANOSYS_HOOK_APIKEY="{api_key}"')
-    if redaction:
-        lines.append('export REDACTION="true"')
-    else:
-        lines.append('export REDACTION="false"')
-
+    # What is collected is set with `anosys-codex privacy`, not here
     content = "\n".join(lines) + "\n"
-    path.write_text(content, encoding="utf-8")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(content)
     try:
         os.chmod(path, 0o600)
     except OSError:

@@ -9,7 +9,6 @@ AnoSys schema, and POSTs batches to the AnoSys ingestion endpoint.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import sys
 import time
@@ -17,33 +16,26 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from anosys_sdk_codex.installer import get_codex_home, get_env_path
-from anosys_sdk_codex.mapper import transform_codex_turn
-from anosys_sdk_codex.encryption import encrypt_payload
+from anosys_sdk_core.hook_cli import setup_hook_logging
+from anosys_sdk_core.privacy import OFF, effective_level, prepare_hook_record, write_private_file
+from anosys_sdk_core.transport import PendingQueue, deliver, is_paused
+
+from anosys_sdk_codex.installer import PREVIOUS_NOTIFY_FLAG, get_codex_home, get_env_path
+from anosys_sdk_codex.mapper import METADATA_FIELDS, transform_codex_turn
 
 CODEX_HOME = get_codex_home()
 STATE_DIR = CODEX_HOME / "state"
 STATE_FILE = STATE_DIR / "anosys_state.json"
 PENDING_FILE = STATE_DIR / "pending_records.jsonl"
+PAUSE_FILE = STATE_DIR / "anosys_paused.json"
 LOG_FILE = STATE_DIR / "anosys_hook.log"
 
-STATE_DIR.mkdir(parents=True, exist_ok=True)
-
-logging.basicConfig(
-    filename=str(LOG_FILE),
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-log = logging.getLogger("anosys_codex_hook")
-
-_stderr = logging.StreamHandler(sys.stderr)
-_stderr.setLevel(logging.INFO)
-_stderr.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
-log.addHandler(_stderr)
+# The hook log records ids, sizes and status codes only, never prompts or payloads.
+log = setup_hook_logging(LOG_FILE, "anosys_codex_hook")
 
 
 def load_env_file(path: Path | None = None) -> None:
+    """Load saved settings (API key, endpoint) without overriding the environment."""
     if path is None:
         path = get_env_path()
     if not path.is_file():
@@ -63,14 +55,15 @@ def load_env_file(path: Path | None = None) -> None:
             if key and key not in os.environ:
                 os.environ[key] = val
     except Exception as e:
-        log.warning("Failed to load env file %s: %s", path, e)
+        log.warning("Failed to load env file %s: %s", path, type(e).__name__)
 
 
 load_env_file()
 
 INGESTION_URL = os.environ.get("ANOSYS_HOOK_ENDPOINT_URL", "https://api.anosys.ai/ingestion")
-API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "")
+API_KEY = os.environ.get("ANOSYS_HOOK_APIKEY", "") or os.environ.get("ANOSYS_HOOK_API_KEY", "")
 DRY_RUN = os.environ.get("ANOSYS_HOOK_DRY_RUN", "false").lower() == "true"
+
 
 
 def load_state() -> Dict[str, Any]:
@@ -84,76 +77,31 @@ def load_state() -> Dict[str, Any]:
 
 def save_state(state: Dict[str, Any]) -> None:
     try:
-        STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        write_private_file(STATE_FILE, json.dumps(state, indent=2))  # 0600
     except Exception as e:
-        log.error("Failed to save state: %s", e)
+        log.error("Failed to save state: %s", type(e).__name__)
 
 
-def load_pending_records() -> List[Dict[str, Any]]:
-    if not PENDING_FILE.is_file():
-        return []
-    records = []
-    try:
-        with open(PENDING_FILE, "r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if line:
-                    records.append(json.loads(line))
-    except Exception as e:
-        log.error("Failed to load pending records: %s", e)
-    return records
-
-
-def save_pending_records(records: List[Dict[str, Any]], overwrite: bool = False) -> None:
-    try:
-        mode = "w" if overwrite else "a"
-        with open(PENDING_FILE, mode, encoding="utf-8") as fh:
-            for r in records:
-                fh.write(json.dumps(r, separators=(",", ":")) + "\n")
-    except Exception as e:
-        log.error("Failed to save pending records: %s", e)
-
-
-def clear_pending_records() -> None:
-    try:
-        if PENDING_FILE.is_file():
-            PENDING_FILE.unlink()
-    except Exception as e:
-        log.error("Failed to clear pending records: %s", e)
-
-
-def post_records_batch(payloads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    if not payloads:
-        return []
-
-    import requests
-
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "anosys-codex-hook/0.1.1",
-    }
+def _headers() -> Dict[str, str]:
+    headers = {"Content-Type": "application/json", "User-Agent": "anosys-codex-hook/0.2.0"}
     if API_KEY:
         headers["anosys-apikey"] = API_KEY
         headers["x-api-key"] = API_KEY
+    return headers
 
-    failed_records = []
-    batch_size = 100
 
-    for i in range(0, len(payloads), batch_size):
-        chunk = payloads[i : i + batch_size]
-        if DRY_RUN:
-            log.info("[DRY RUN] Would POST chunk of %d records", len(chunk))
-            continue
-        try:
-            encrypted_chunk = [encrypt_payload(p) for p in chunk]
-            resp = requests.post(INGESTION_URL, json=encrypted_chunk, headers=headers, timeout=15)
-            resp.raise_for_status()
-            log.info("Batch POST success — sent %d records", len(chunk))
-        except Exception as e:
-            log.error("Batch POST failed for %d records: %s", len(chunk), e)
-            failed_records.extend(chunk)
+def prepare_record(mapped: Dict[str, Any], level: str) -> Dict[str, Any]:
+    """Level filter, secret scrubbing and encryption: the shared core step."""
+    return prepare_hook_record(mapped, level, METADATA_FIELDS)
 
-    return failed_records
+
+def send(records: List[Dict[str, Any]], cwd: Any = None) -> int:
+    """Deliver records (and queued retries) within the size limit. Returns the number accepted."""
+    if DRY_RUN:
+        log.info("[DRY RUN] Would send %d record(s)", len(records))
+        return len(records)
+    queue = PendingQueue(PENDING_FILE)
+    return deliver(INGESTION_URL, records, queue, PAUSE_FILE, headers=_headers(), metadata_fields=METADATA_FIELDS, cwd=cwd)
 
 
 def find_rollout_file(session_id: str) -> Optional[Path]:
@@ -251,8 +199,10 @@ def extract_turn_from_rollout(rollout_path: Path, turn_id: str, fallback_event: 
                     continue
 
                 if outer == "turn_context":
-                    if payload.get("turn_id") == turn_id:
-                        raw_events.append(obj)
+                    tid = payload.get("turn_id")
+                    if tid == turn_id or tid is None:
+                        if tid == turn_id or in_turn:
+                            raw_events.append(obj)
                         model = payload.get("model") or model
                         cwd = payload.get("cwd") or cwd
                         permission_mode = payload.get("approval_policy") or permission_mode
@@ -516,43 +466,72 @@ def _extract_turn_fallback(input_json: Dict[str, Any], thread_id: str, turn_id: 
     }
 
 
-def run() -> None:
-    log.info("anosys-codex run invoked with argv: %s", sys.argv)
-
-    pending = load_pending_records()
-    if pending:
-        log.info("Found %d pending records. Retrying delivery...", len(pending))
-        still_failed = post_records_batch(pending)
-        if not still_failed:
-            clear_pending_records()
-            log.info("Successfully flushed pending records.")
+def parse_argv(argv: List[str]) -> tuple:
+    """Split Codex's argv into (previous notify command or None, notification JSON string)."""
+    args = [a for a in argv if a.strip() != "run"]
+    previous = None
+    if PREVIOUS_NOTIFY_FLAG in args:
+        i = args.index(PREVIOUS_NOTIFY_FLAG)
+        if i + 1 < len(args):
+            try:
+                previous = json.loads(args[i + 1])
+            except json.JSONDecodeError:
+                previous = None
+            del args[i : i + 2]
         else:
-            save_pending_records(still_failed, overwrite=True)
-
-    raw_input = "{}"
-    for arg in sys.argv[1:]:
-        arg_clean = arg.strip()
-        if arg_clean == "run":
-            continue
-        if arg_clean.startswith("{") or arg_clean.startswith("["):
-            raw_input = arg_clean
+            del args[i]
+    raw = "{}"
+    for arg in args:
+        if arg.strip().startswith(("{", "[")):
+            raw = arg.strip()
             break
-    if raw_input == "{}":
-        for arg in sys.argv[1:]:
-            arg_clean = arg.strip()
-            if arg_clean != "run":
-                raw_input = arg_clean
-                break
-    if raw_input == "{}" and not sys.stdin.isatty():
-        try:
-            raw_input = sys.stdin.read().strip() or "{}"
-        except Exception:
-            raw_input = "{}"
+    else:
+        if args:
+            raw = args[0].strip()
+        elif not sys.stdin.isatty():
+            try:
+                raw = sys.stdin.read().strip() or "{}"
+            except Exception:
+                raw = "{}"
+    return previous, raw
 
+
+def call_previous_notify(previous: Any, raw: str) -> None:
+    """Run the notify command that was configured before AnoSys, unchanged."""
+    if not isinstance(previous, list) or not previous:
+        return
+    try:
+        import subprocess
+        subprocess.run([str(x) for x in previous] + [raw], timeout=30, check=False)
+    except Exception as e:
+        log.warning("Previous notify command failed: %s", type(e).__name__)
+
+
+def run(argv: Optional[List[str]] = None) -> None:
+    previous, raw_input = parse_argv(list(sys.argv[1:] if argv is None else argv))
+    try:
+        process_notification(raw_input)
+    finally:
+        call_previous_notify(previous, raw_input)
+
+
+def process_notification(raw_input: str) -> None:
     try:
         event = json.loads(raw_input)
-    except Exception as e:
-        log.error("Failed to parse notify event JSON: %s", e)
+    except Exception:
+        event = None
+
+    initial_cwd = (event.get("cwd") if isinstance(event, dict) else None) or None
+    level, source = effective_level(cwd=initial_cwd)
+    if level == OFF:
+        log.info("Collection is off (%s); nothing sent", source)
+        return
+    if is_paused(PAUSE_FILE):
+        log.info("Collection paused after an authorization error; nothing sent")
+        return
+
+    if not isinstance(event, dict):
+        log.error("Notification is not valid JSON (%d bytes)", len(raw_input))
         return
 
     event_type = event.get("type")
@@ -583,22 +562,27 @@ def run() -> None:
     rollout_file = find_rollout_file(thread_id)
     turn_data: Optional[Dict[str, Any]] = None
     if rollout_file:
-        log.info("Extracting turn %s from %s", turn_id, rollout_file)
         turn_data = extract_turn_from_rollout(rollout_file, turn_id, fallback_event=event)
-
     if not turn_data:
-        log.warning("Could not extract turn from rollout file. Using fallback.")
+        log.warning("Could not extract turn %s from the rollout file; using the notification", turn_id)
         turn_data = _extract_turn_fallback(event, thread_id, turn_id)
 
-    mapped = transform_codex_turn(turn_data, session_id=thread_id, turn_id=turn_id)
+    turn_cwd = turn_data.get("cwd") or initial_cwd
+    if turn_cwd and turn_cwd != initial_cwd:
+        level, source = effective_level(cwd=turn_cwd)
+        if level == OFF:
+            log.info("Collection is off (%s); nothing sent", source)
+            return
 
-    failed = post_records_batch([mapped])
-    if failed:
-        log.warning("Ingestion failed. Saving record to pending storage.")
-        save_pending_records(failed)
-    else:
-        log.info("Turn %s successfully sent to AnoSys.", turn_id)
+    mapped = transform_codex_turn(turn_data, session_id=thread_id, turn_id=turn_id)
+    record = prepare_record(mapped, level)
+    sent = send([record], cwd=turn_cwd)
+    log.info("Turn %s (session %s) at '%s': %d record(s) accepted", turn_id, thread_id, level, sent)
+
+    # Mark the turn processed only if delivery was not paused by an authorization failure
+    if not is_paused(PAUSE_FILE):
         session_state.setdefault("processed_turns", []).append(turn_id)
+        session_state["processed_turns"] = session_state["processed_turns"][-500:]
         session_state["last_seen"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         save_state(state)
 

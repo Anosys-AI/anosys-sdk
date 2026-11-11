@@ -6,7 +6,6 @@ Covers:
 - hooks: deserialize_attributes (dotted path flattening)
 - hooks: extract_span_info with llm_invocation_parameters to avoid AttributeError
 - mapping: OPENAI_KEY_MAPPING and OPENAI_STARTING_INDICES contracts
-- streaming: StreamingAggregator accumulation
 """
 
 import json
@@ -17,7 +16,6 @@ from anosys_sdk_openai.hooks import (
     flatten_messages,
 )
 from anosys_sdk_openai.mapping import OPENAI_KEY_MAPPING, OPENAI_STARTING_INDICES
-from anosys_sdk_openai.streaming import StreamingAggregator
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -188,34 +186,18 @@ def test_key_mapping_covers_gen_ai_fields():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# StreamingAggregator
 # ──────────────────────────────────────────────────────────────────────────────
 
-def test_streaming_aggregator_starts_empty():
-    agg = StreamingAggregator()
-    assert agg.get_content() == ""
-    assert agg.get_chunks() == []
 
 
-def test_streaming_aggregator_accumulates_chunks():
-    agg = StreamingAggregator()
-    agg.add_chunk({"choices": [{"delta": {"content": "Hello"}, "finish_reason": None}]})
-    agg.add_chunk({"choices": [{"delta": {"content": " World"}, "finish_reason": None}]})
-    content = agg.get_content()
-    assert "Hello" in content or len(agg.get_chunks()) == 2  # flexible check
 
 
-def test_streaming_aggregator_handles_empty_delta():
-    agg = StreamingAggregator()
-    agg.add_chunk({"choices": [{"delta": {}, "finish_reason": None}]})
-    # Should not crash
-    assert isinstance(agg.get_content(), str)
 
 
 def test_openai_encryption_exports():
     import os
     from unittest.mock import patch
-    from anosys_sdk_openai import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_256_bit_key, decrypt
+    from anosys_sdk_openai import ANOSYS_ENCRYPTION_PREFIX, encrypt_payload, derive_keys, decrypt
 
     with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "openai-key"}):
         payload = {
@@ -230,5 +212,24 @@ def test_openai_encryption_exports():
         assert encrypted["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
         assert encrypted["session_id"] == "sess-xyz"
 
-        key = derive_256_bit_key("openai-key")
+        key = derive_keys("openai-key")
         assert decrypt(encrypted["llm_input"], key) == "What is Python?"
+
+
+def test_indexed_attributes_and_null_response_format_do_not_break_extraction():
+    """Audit 4.3: indexed attributes (llm.input_messages.0.*) are kept; response_format null is fine."""
+    span = {
+        "name": "ChatCompletion", "context": {"trace_id": "0x1", "span_id": "0x2"},
+        "start_time": "2026-11-10T00:00:00Z", "end_time": "2026-11-10T00:00:01Z",
+        "attributes": {
+            "llm.input_messages.0.message.role": "user",
+            "llm.input_messages.0.message.content": "hello there",
+            "llm.output_messages.0.message.role": "assistant",
+            "llm.output_messages.0.message.content": "hi",
+            "llm.invocation_parameters": '{"model": "gpt-5", "response_format": null}',
+            "output.value": '{"object": "chat.completion", "choices": []}',
+        },
+    }
+    data = extract_span_info(span)
+    body = json.dumps(data)
+    assert "hello there" in body and "hi" in body

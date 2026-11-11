@@ -27,6 +27,7 @@ export {
   getEncryptionKey,
   getTargetColumns,
   derive256BitKey,
+  deriveKeys,
   encrypt,
   decrypt,
   ANOSYS_ENCRYPTION_PREFIX,

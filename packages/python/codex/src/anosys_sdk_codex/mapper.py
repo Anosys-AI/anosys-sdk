@@ -10,34 +10,55 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from anosys_sdk_codex.encryption import encrypt_payload
 
-INTEGRATION_VERSION = "0.1.1"
+from anosys_sdk_core.privacy import BASE_METADATA_FIELDS
+
+INTEGRATION_VERSION = "0.2.0"
 OS_USER = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
-REDACTION = os.environ.get("REDACTION", "false").lower() == "true"
+
+
+def is_cc_pixel() -> bool:
+    """Return True if targeting a pixel with native CC schema columns (Claude Code / Codex)."""
+    pt = os.environ.get("ANOSYS_PIXEL_TYPE", "").strip().lower()
+    if pt:
+        return pt in ("cc", "claudecode", "codex")
+    if os.environ.get("ANOSYS_CODEX_PIXEL", "").strip().lower() == "false":
+        return False
+    if os.environ.get("ANOSYS_CLAUDE_PIXEL", "").strip().lower() == "false":
+        return False
+    url = os.environ.get("ANOSYS_HOOK_ENDPOINT_URL", "").lower()
+    if any(seg in url for seg in ("/g/", "/generic/", "/c/", "/custom/", "/t/", "/otel/")):
+        return False
+    return True
+
+
+# Fields sent at the `metadata` level: the shared allowlist plus the Codex
+# fallback CV columns for generic pixels. Everything else (prompts, answers,
+# commands, written paths, the raw event log in cvs199) is `full`-only.
+CV_METADATA_FIELDS = {
+    "cvs1", "cvs2", "cvs7", "cvs9", "cvs12", "cvs13", "cvs17", "cvs19", "cvs32", "cvs33",
+    "cvn1", "cvn2", "cvn3", "cvn4", "cvn5", "cvn6", "cvn7", "cvn41",
+    "cvb1", "cvb2",
+}
+METADATA_FIELDS = BASE_METADATA_FIELDS | CV_METADATA_FIELDS
 
 OPENAI_PRICING: Dict[str, Dict[str, float]] = {
-    "gpt-4o": {
-        "input": 2.50 / 1e6,
-        "output": 10.00 / 1e6,
-        "cached": 1.25 / 1e6,
-    },
     "gpt-4o-mini": {
         "input": 0.15 / 1e6,
         "output": 0.60 / 1e6,
         "cached": 0.075 / 1e6,
     },
-    "o1": {
-        "input": 15.00 / 1e6,
-        "output": 60.00 / 1e6,
-        "cached": 7.50 / 1e6,
+    "gpt-4o": {
+        "input": 2.50 / 1e6,
+        "output": 10.00 / 1e6,
+        "cached": 1.25 / 1e6,
     },
     "o1-mini": {
         "input": 1.10 / 1e6,
         "output": 4.40 / 1e6,
         "cached": 0.55 / 1e6,
     },
-    "o3": {
+    "o1": {
         "input": 15.00 / 1e6,
         "output": 60.00 / 1e6,
         "cached": 7.50 / 1e6,
@@ -46,6 +67,11 @@ OPENAI_PRICING: Dict[str, Dict[str, float]] = {
         "input": 1.10 / 1e6,
         "output": 4.40 / 1e6,
         "cached": 0.55 / 1e6,
+    },
+    "o3": {
+        "input": 15.00 / 1e6,
+        "output": 60.00 / 1e6,
+        "cached": 7.50 / 1e6,
     },
     "default": {
         "input": 2.50 / 1e6,
@@ -62,8 +88,9 @@ def calculate_cost(
     cached_tokens: int = 0,
 ) -> float:
     rates = OPENAI_PRICING.get("default", {"input": 2.5e-6, "output": 1.0e-5, "cached": 1.25e-6})
-    for m_key, r in OPENAI_PRICING.items():
-        if m_key in model.lower():
+    model_lower = (model or "").lower()
+    for m_key, r in sorted(OPENAI_PRICING.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if m_key != "default" and m_key in model_lower:
             rates = r
             break
 
@@ -116,11 +143,7 @@ def transform_codex_turn(
     session_id: str,
     turn_id: str,
     incremental_tokens: Optional[Dict[str, float]] = None,
-    redact: bool | None = None,
 ) -> Dict[str, Any]:
-    # The runner loads saved settings after package imports; read the active
-    # environment here rather than relying on the import-time constant.
-    do_redact = os.environ.get("REDACTION", "false").lower() == "true" if redact is None else redact
 
     model = turn.get("model") or "unknown"
     provider = turn.get("model_provider") or "openai"
@@ -129,10 +152,6 @@ def transform_codex_turn(
 
     user_prompt = turn.get("user_prompt") or ""
     assistant_text = turn.get("assistant_output") or ""
-
-    if do_redact:
-        user_prompt = "[REDACTED]"
-        assistant_text = "[REDACTED]"
 
     tokens = turn.get("tokens") or {}
     input_tokens = int(tokens.get("input_tokens", 0))
@@ -159,9 +178,6 @@ def transform_codex_turn(
     tool_calls_clean = []
     for tc in tool_calls:
         clean_entry = dict(tc)
-        if do_redact:
-            clean_entry["args"] = "[REDACTED]"
-            clean_entry["output"] = "[REDACTED]"
         tool_calls_clean.append(clean_entry)
 
     tool_durations = [
@@ -179,19 +195,7 @@ def transform_codex_turn(
         "events": [],
     }
 
-    orig_prompt = str(turn.get("user_prompt") or "")
-    orig_assistant = str(turn.get("assistant_output") or "")
     raw_to_serialize = raw_data
-    if do_redact:
-        try:
-            raw_str = json.dumps(raw_data, default=str)
-            if orig_prompt:
-                raw_str = raw_str.replace(orig_prompt, "[REDACTED]")
-            if orig_assistant:
-                raw_str = raw_str.replace(orig_assistant, "[REDACTED]")
-            raw_to_serialize = json.loads(raw_str)
-        except Exception:
-            raw_to_serialize = raw_data
 
     raw_perm = turn.get("permission_mode")
     if isinstance(raw_perm, dict):
@@ -212,69 +216,95 @@ def transform_codex_turn(
     commands_str = json.dumps(commands) if commands else None
     written_paths_str = json.dumps(written_paths) if written_paths else None
 
-    payload: Dict[str, Any] = {
-        "session_id": session_id,
-        "sessionId": session_id,
-        "uuid": turn_id,
-        "eventId": turn_id,
-        "event_id": turn_id,
-        "event_type": "codex_turn",
-        "event_source_name": "codex",
-        "timestamp": start_ts,
-        "user_timestamp": start_ts,
-        "debug": False,
-        "user_prompt": user_prompt,
-        "userPrompt": user_prompt,
-        "assistant_text": assistant_text,
-        "assistantText": assistant_text,
-        "model": model,
-        "primary_model": model,
-        "model_provider": provider,
-        "cwd": cwd or None,
-        "project": project,
-        "permission_mode": perm_mode,
-        "permissionMode": perm_mode,
-        "sandbox_mode": sandbox_mode,
-        "duration_ms": duration_ms,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "total_tokens": total_tokens,
-        "cache_read": cached_tokens,
-        "cache_creation": cache_write_tokens,
-        "reasoning_tokens": reasoning_tokens,
-        "cost_estimate": cost_est,
-        "incremental_input": inc.get("input", input_tokens),
-        "incremental_output": inc.get("output", output_tokens),
-        "incremental_total": inc.get("total", total_tokens),
-        "incremental_cost": inc.get("cost", cost_est),
-        "incremental_cache_read": inc.get("cache_read", cached_tokens),
-        "incremental_cache_creation": inc.get("cache_creation", cache_write_tokens),
-        "tool_count": len(tool_calls),
-        "tool_duration_ms": tool_duration_ms,
-        "commands": commands_str,
-        "written_paths": written_paths_str,
-        "has_thinking": reasoning_tokens > 0,
-        "integration_version": INTEGRATION_VERSION,
-        "os_user": OS_USER,
-        "cvs1": session_id,
-        "cvs2": project,
-        "cvs4": user_prompt,
-        "cvs5": assistant_text,
-        "cvs9": model,
-        "cvs12": cwd,
-        "cvs19": "anosys-codex run",
-        "cvs32": INTEGRATION_VERSION,
-        "cvs33": OS_USER,
-        "cvn1": input_tokens,
-        "cvn2": output_tokens,
-        "cvn3": total_tokens,
-        "cvn4": cached_tokens,
-        "cvn5": cache_write_tokens,
-        "cvn6": duration_ms,
-        "cvn7": cost_est,
-        "cvs199": json.dumps(raw_to_serialize, default=str),
-        "cvs200": "CodexHook",
-    }
+    if is_cc_pixel():
+        payload: Dict[str, Any] = {
+            "session_id": session_id,
+            "sessionId": session_id,
+            "uuid": turn_id,
+            "raw_uuid": turn_id,
+            "eventId": turn_id,
+            "event_id": turn_id,
+            "event_type": "codex_turn",
+            "event_source_name": "codex",
+            "timestamp": start_ts,
+            "user_timestamp": start_ts,
+            "debug": False,
+            "user_prompt": user_prompt,
+            "userPrompt": user_prompt,
+            "assistant_text": assistant_text,
+            "assistantText": assistant_text,
+            "model": model,
+            "primary_model": model,
+            "model_provider": provider,
+            "cwd": cwd or None,
+            "project": project,
+            "permission_mode": perm_mode,
+            "permissionMode": perm_mode,
+            "sandbox_mode": sandbox_mode,
+            "duration_ms": duration_ms,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+            "cache_read": cached_tokens,
+            "cache_creation": cache_write_tokens,
+            "reasoning_tokens": reasoning_tokens,
+            "cost_estimate": cost_est,
+            "incremental_input": inc.get("input", input_tokens),
+            "incremental_output": inc.get("output", output_tokens),
+            "incremental_total": inc.get("total", total_tokens),
+            "incremental_cost": inc.get("cost", cost_est),
+            "incremental_cache_read": inc.get("cache_read", cached_tokens),
+            "incremental_cache_creation": inc.get("cache_creation", cache_write_tokens),
+            "tool_count": len(tool_calls),
+            "tool_duration_ms": tool_duration_ms,
+            "commands": commands_str,
+            "written_paths": written_paths_str,
+            "has_thinking": reasoning_tokens > 0,
+            "integration_version": INTEGRATION_VERSION,
+            "os_user": OS_USER,
+            # Raw backup & hook identifiers
+            "cvs199": json.dumps(raw_to_serialize, default=str),
+            "cvs200": "CodexHook",
+        }
+    else:
+        # Fallback CV mode for generic/custom pixels without native tool/token columns
+        payload = {
+            "timestamp": start_ts,
+            "user_timestamp": start_ts,
+            "event_id": turn_id,
+            "eventId": turn_id,
+            "uuid": turn_id,
+            "event_type": "codex_turn",
+            "event_source_name": "codex",
+            "debug": False,
+            "cvs1": session_id,
+            "cvs2": project,
+            "cvs4": user_prompt,
+            "cvs5": assistant_text,
+            "cvs7": perm_mode,
+            "cvs9": model,
+            "cvs12": cwd,
+            "cvs13": turn_id,
+            "cvs17": provider,
+            "cvs19": "anosys-codex run",
+            "cvs32": INTEGRATION_VERSION,
+            "cvs33": OS_USER,
+            "cvs90": commands_str,
+            "cvs91": written_paths_str,
+            "cvn1": input_tokens,
+            "cvn2": output_tokens,
+            "cvn3": total_tokens,
+            "cvn4": cached_tokens,
+            "cvn5": cache_write_tokens,
+            "cvn6": duration_ms,
+            "cvn7": cost_est,
+            "cvn41": len(tool_calls),
+            "cvb1": reasoning_tokens > 0,
+            "cvb2": False,
+            # Raw backup & hook identifiers
+            "cvs199": json.dumps(raw_to_serialize, default=str),
+            "cvs200": "CodexHook",
+        }
 
-    res = {k: v for k, v in payload.items() if v is not None}
-    return encrypt_payload(res)
+    # Collection level, secret scrubbing and encryption are applied by the hook runner
+    return {k: v for k, v in payload.items() if v is not None}

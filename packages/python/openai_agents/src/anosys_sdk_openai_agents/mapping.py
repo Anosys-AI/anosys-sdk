@@ -12,19 +12,27 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan
 
 from anosys_sdk_core.models import BASE_KEY_MAPPING, DEFAULT_STARTING_INDICES
-from anosys_sdk_core.util.json import to_str_or_none, format_timestamp
+from anosys_sdk_core.util.json import format_timestamp, set_nested, to_str_or_none
 from anosys_sdk_core.util.batching import assign, reassign
 
 # Agents-specific key mapping
 AGENTS_KEY_MAPPING = {
     **BASE_KEY_MAPPING,
+    "g1": "g1",
+    "cvs3": "cvs3",  # Error
     # Metadata and Status
     "cvs60": "cvs60",  # Object type (trace/trace.span)
     "cvs61": "cvs61",  # Source (span_start/span_end)
     "cvs62": "cvs62",  # Handoffs
     "cvs63": "cvs63",  # Tools
     "cvs64": "cvs64",  # Output type
+    "cvs65": "cvs65",  # Speech group input
+    "cvs66": "cvs66",  # Transcription output
     "cvs67": "cvs67",  # MCP data
+    "cvs68": "cvs68",  # Guardrail triggered
+    "cvs69": "cvs69",  # Model
+    "cvs70": "cvs70",  # Model config
+    "cvs71": "cvs71",  # (reserved by the JS mapping, kept aligned)
     "cvs72": "cvs72",  # Data
     "cvs73": "cvs73",  # Format
     "cvs74": "cvs74",  # First content at
@@ -126,7 +134,7 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "otel_end_time": "span end time",
         "cvn2": "end time (numeric)",
         "otel_exception_message": "error message",
-        "cvs3": "user context",
+        "cvs5": "user context",
         "cvs60": "object type",
         "cvs61": "source",
         "otel_name": "span name",
@@ -148,7 +156,7 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
         "cvn2": _to_timestamp(data.get("ended_at")),
         "otel_exception_message": to_str_or_none(data.get("error")),
         
-        "cvs3": to_str_or_none(user_context),
+        "cvs5": to_str_or_none(user_context),
         "cvs60": to_str_or_none(data.get("object")),
         "cvs61": to_str_or_none(source),
     }
@@ -260,34 +268,6 @@ def span2json(span: Dict[str, Any]) -> Dict[str, Any]:
     # print(json.dumps(result, indent=2))    
 
     return clean_dict(result)
-
-
-def set_nested(obj: Dict, path: str, value: Any) -> None:
-    """Set nested dictionary value from dotted path."""
-    parts = path.split(".")
-    current = obj
-    
-    for i, part in enumerate(parts[:-1]):
-        try:
-            idx = int(part)
-            if not isinstance(current, list):
-                current = []
-            while len(current) <= idx:
-                current.append({})
-            current = current[idx]
-        except ValueError:
-            if part not in current or not isinstance(current[part], (dict, list)):
-                current[part] = {}
-            current = current[part]
-    
-    final_key = parts[-1]
-    if isinstance(value, str) and value.strip().startswith(("{", "[")):
-        try:
-            value = json.loads(value)
-        except json.JSONDecodeError:
-            pass
-    
-    current[final_key] = value
 
 
 def deserialize_attributes(attributes: Dict) -> Dict:
@@ -428,19 +408,16 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
         attributes_json.get('gen_ai', {}).get('system_instructions') or
         attributes_json.get('llm', {}).get('system')
     )
-    # Fallback to input.value for system instructions if not found elsewhere
-    if not system_instr:
-        input_val_attr = attributes_json.get('input', {}).get('value')
-        if input_val_attr and isinstance(input_val_attr, str):
-            system_instr = input_val_attr
     
     input_parts = []
     if system_instr:
         input_parts.append(f"System: {system_instr}")
     
+    raw_in_msgs = attributes_json.get('llm', {}).get('input_messages')
+    in_msgs_fallback = raw_in_msgs.get('input_messages') if isinstance(raw_in_msgs, dict) else raw_in_msgs
     flattened_input = (
         flatten_messages(attributes_json.get('gen_ai', {}).get('input', {}).get('messages')) or
-        flatten_messages(attributes_json.get('llm', {}).get('input_messages', {}).get('input_messages'))
+        flatten_messages(in_msgs_fallback)
     )
     if flattened_input:
         input_parts.append(flattened_input)
@@ -449,9 +426,11 @@ def extract_otel_span_info(span: ReadableSpan) -> Dict[str, Any]:
         attributes_json.get('input', {}).get('value') or 
         attributes_json.get('raw', {}).get('input')
     )
+    raw_out_msgs = attributes_json.get('llm', {}).get('output_messages')
+    out_msgs_fallback = raw_out_msgs.get('output_messages') if isinstance(raw_out_msgs, dict) else raw_out_msgs
     output_val = (
         flatten_messages(attributes_json.get('gen_ai', {}).get('output', {}).get('messages')) or
-        flatten_messages(attributes_json.get('llm', {}).get('output_messages', {}).get('output_messages')) or
+        flatten_messages(out_msgs_fallback) or
         attributes_json.get('output', {}).get('value') or 
         attributes_json.get('raw', {}).get('output')
     )

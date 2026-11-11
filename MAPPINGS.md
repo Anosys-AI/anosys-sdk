@@ -88,6 +88,7 @@
 | `error_type` | `cvs10` | Decorator | Error type |
 | `error_message` | `cvs11` | Decorator | Error message |
 | `error_stack` | `cvs12` | Decorator | Error stack trace |
+| `consent` | `cvs198` | Privacy | Collection level: `full;app` / `metadata;app` (app SDKs), `full;<policy>` / `metadata;none` (hooks) |
 | `raw` | `cvs199` | Source | Raw span/record JSON |
 | `from_source` | `cvs200` | Source | Source identifier |
 | `source` | `cvs200` | Source | Source (alias) |
@@ -183,6 +184,7 @@ Both Python and JS populate via `reassign()` through `AGENTS_KEY_MAPPING`:
 
 | Key in payload | CVS equivalent | Purpose |
 |---|---|---|
+| `cvs198` | `cvs198` | Collection level and policy version |
 | `cvs199` | `cvs199` | Raw record + metadata JSON |
 | `cvs200` | `cvs200` | `'ClaudeCodeHook'` (source tag) |
 
@@ -499,6 +501,23 @@ It captures agent turns, planner LLM steps (including Gemini reasoning/thinking)
 | `integration_version` | string | Antigravity package version (`cvs32`) |
 | `os_user` | string | Operating system username (`cvs33`) |
 | `cvs199` | string | JSON-serialized array of all planner steps, tool calls, and results |
+
+---
+
+## 4e. Privacy fields on hook records (Claude Code, Codex, Antigravity)
+
+| Field | CVS Column | Type | Description |
+|---|---|---|---|
+| `consent` | `cvs198` | string | Collection level and accepted policy version: `full;2026-11-09` (only with accepted consent), or `metadata;none`. Set on every hook record, in `cvs198` only. |
+
+At `metadata` the hooks send only allow-listed fields (`BASE_METADATA_FIELDS` in `anosys-sdk-core` plus each integration's own list); everything else in the tables above is sent only at `full`. Encrypted values start with `enc2:`; in JSON columns they are stored as the JSON string `"enc2:..."`. See [PRIVACY.md](PRIVACY.md) and [DATA_CONTROLS.md](DATA_CONTROLS.md).
+
+---
+
+Dynamic attributes (keys without a fixed mapping) get the first free column from the
+starting index, never one already used by another key, and never the reserved
+`cvs198`–`cvs200`. When a type's columns are used up (cvs/cvn 200, cvb 100) the
+attribute is dropped with one warning.
 
 ---
 

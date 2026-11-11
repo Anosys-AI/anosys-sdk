@@ -1,3 +1,4 @@
+import { setNested } from 'anosys-sdk-core';
 import { assign, reassign, OPENAI_KEY_MAPPING, OPENAI_STARTING_INDICES } from './mapping.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -7,27 +8,6 @@ function toTimestamp(dtStr) {
   try { return Math.floor(new Date(dtStr).getTime()); } catch { return null; }
 }
 
-function setNested(obj, path, value) {
-  const parts = path.split('.');
-  let current = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i];
-    const idx = parseInt(part, 10);
-    if (!isNaN(idx)) {
-      if (!Array.isArray(current)) current = [];
-      while (current.length <= idx) current.push({});
-      current = current[idx];
-    } else {
-      if (!current[part] || typeof current[part] !== 'object') current[part] = {};
-      current = current[part];
-    }
-  }
-  const finalKey = parts[parts.length - 1];
-  if (typeof value === 'string' && (value.trim().startsWith('{') || value.trim().startsWith('['))) {
-    try { value = JSON.parse(value); } catch { /* keep as string */ }
-  }
-  current[finalKey] = value;
-}
 
 function deserializeAttributes(attributes) {
   const result = {};
@@ -139,19 +119,68 @@ export function extractSpanInfo(span) {
       return messages.map(m => {
         const content = m.message?.content || m.content;
         if (content) return content;
-        if (m.message?.tool_calls) return JSON.stringify(m.message.tool_calls);
+        const toolCalls = m.tool_calls || m.message?.tool_calls;
+        if (toolCalls) return typeof toolCalls === 'string' ? toolCalls : JSON.stringify(toolCalls);
         return JSON.stringify(m);
       }).filter(Boolean).join('\n---\n');
     }
     return msgs;
   }
 
-  const inputMsgs  = attrs.input?.value ?? flattenMessages(genAi.input?.messages) ?? llm.input_messages;
-  const outputMsgs = attrs.output?.value ?? flattenMessages(genAi.output?.messages) ?? llm.output_messages;
-  assign(variables, 'gen_ai.input.messages',      toStrOrNull(inputMsgs));
-  assign(variables, 'gen_ai.output.messages',     toStrOrNull(outputMsgs));
+  // gen_ai_*_messages are JSON columns: the message arrays as JSON; llm_input / llm_output: the text
+  let inputMessages  = genAi.input?.messages ?? llm.input_messages;
+  let outputMessages = genAi.output?.messages ?? llm.output_messages;
+
+  if (typeof inputMessages === 'string') {
+    try {
+      const parsed = JSON.parse(inputMessages);
+      if (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) inputMessages = parsed;
+    } catch { /* keep as string */ }
+  }
+  if (typeof outputMessages === 'string') {
+    try {
+      const parsed = JSON.parse(outputMessages);
+      if (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) outputMessages = parsed;
+    } catch { /* keep as string */ }
+  }
+
+  // Fallback to span events if instrumentation recorded messages as events
+  if ((!inputMessages || !outputMessages) && Array.isArray(span.events)) {
+    const extractedInputs = [];
+    const extractedOutputs = [];
+    for (const ev of span.events) {
+      const name = ev.name || ev.attributes?.['event.name'];
+      const body = ev.body || ev.attributes || {};
+      const content = body.content || ev.attributes?.['gen_ai.prompt'] || ev.attributes?.['gen_ai.completion'];
+      if (name === 'gen_ai.system.message' || name === 'gen_ai.user.message') {
+        const role = name.includes('system') ? 'system' : 'user';
+        if (content) extractedInputs.push({ role, content });
+      } else if (name === 'gen_ai.assistant.message' || name === 'gen_ai.choice') {
+        const msg = body.message || {};
+        const outContent = msg.content || content;
+        if (outContent) extractedOutputs.push({ role: 'assistant', content: outContent });
+      }
+    }
+    if (!inputMessages && extractedInputs.length > 0) inputMessages = extractedInputs;
+    if (!outputMessages && extractedOutputs.length > 0) outputMessages = extractedOutputs;
+  }
+
+  if (inputMessages)  assign(variables, 'gen_ai.input.messages',  JSON.stringify(inputMessages));
+  if (outputMessages) assign(variables, 'gen_ai.output.messages', JSON.stringify(outputMessages));
+  const toolInput = raw['gen_ai.tool.call.arguments'] ?? genAi.tool?.call?.arguments;
+  const toolOutput = raw['gen_ai.tool.call.result'] ?? genAi.tool?.call?.result;
+  const rawLlmInput = (raw['llm_input'] ?? attrs['llm_input']) || null;
+  const rawLlmOutput = (raw['llm_output'] ?? attrs['llm_output']) || null;
+  assign(variables, 'llm_input',  toStrOrNull(rawLlmInput ?? attrs.input?.value ?? flattenMessages(inputMessages) ?? toolInput));
+  assign(variables, 'llm_output', toStrOrNull(rawLlmOutput ?? attrs.output?.value ?? flattenMessages(outputMessages) ?? toolOutput));
   assign(variables, 'gen_ai.system_instructions', toStrOrNull(genAi.system_instructions ?? llm.system));
   assign(variables, 'gen_ai.tool.definitions',    toStrOrNull(genAi.tool?.definitions ?? llm.tools));
+
+  // Kind information
+  const spanKind = raw['gen_ai.span.kind'] ?? genAi.span?.kind ?? raw['span.kind'] ?? attrs.span?.kind ?? (raw['gen_ai.operation.name'] === 'execute_tool' || span.name?.startsWith('execute_tool') ? 'TOOL' : null);
+  if (spanKind) {
+    assign(variables, 'gen_ai.span.kind', toStrOrNull(spanKind));
+  }
 
   // User context and Model Config
   const userCtx = attrs.user_context ?? attrs.anosys?.user_context;
@@ -161,7 +190,16 @@ export function extractSpanInfo(span) {
   if (modelConfig) assign(variables, 'llm_invocation_parameters', modelConfig);
 
   // Streaming
-  const isStreaming = !!(raw['llm.is_streaming'] ?? raw['gen_ai.is_streaming'] ?? req.parameters?.stream);
+  let parsedConfig = modelConfig;
+  if (typeof parsedConfig === 'string') {
+    try { parsedConfig = JSON.parse(parsedConfig); } catch { /* ignore */ }
+  }
+  const isStreaming = !!(
+    raw['llm.is_streaming'] ??
+    raw['gen_ai.is_streaming'] ??
+    req.parameters?.stream ??
+    (typeof parsedConfig === 'object' && parsedConfig?.stream)
+  );
   assign(variables, 'is_streaming', isStreaming);
 
   // Source tag
@@ -174,7 +212,11 @@ export function extractSpanInfo(span) {
   
   // Backwards compatibility for old names
   assign(variables, 'llm_model_name', toStrOrNull(req.model ?? llm.model_name));
-  assign(variables, 'llm_token_count', usage.total_tokens ?? tokenCount);
+  // llm_token_count is a JSON column
+  const tokenCounts = llm.token_count ?? (usage.total_tokens ?? tokenCount) ?? null;
+  if (tokenCounts !== null) {
+    assign(variables, 'llm_token_count', JSON.stringify(typeof tokenCounts === 'object' ? tokenCounts : { total: tokenCounts }));
+  }
 
   // Raw data capture - ALWAYS mandatory
   assign(variables, 'raw', JSON.stringify(span));

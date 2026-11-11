@@ -38,6 +38,7 @@ Components:
   antigravity       packages/python/antigravity       (anosys-antigravity)
   anthropic-py      packages/python/anthropic         (anosys-sdk-anthropic)
   claude-agents-py  packages/python/claude_agents     (anosys-sdk-claude-agents)
+  core-js           packages/js/core                  (anosys-sdk-core)
   openai-js         packages/js/openai                (anosys-sdk-openai)
   openai-agents-js  packages/js/openai-agents         (anosys-sdk-openai-agents)
   claude-code-js    packages/js/claude-code           (anosys-sdk-claude-code)
@@ -78,6 +79,7 @@ case "$component" in
   antigravity)       dir="packages/python/antigravity";   lang="python" ;;
   anthropic-py)      dir="packages/python/anthropic";     lang="python" ;;
   claude-agents-py)  dir="packages/python/claude_agents"; lang="python" ;;
+  core-js)           dir="packages/js/core";              lang="node"   ;;
   openai-js)         dir="packages/js/openai";            lang="node"   ;;
   openai-agents-js)  dir="packages/js/openai-agents";     lang="node"   ;;
   claude-code-js)    dir="packages/js/claude-code";       lang="node"   ;;
@@ -134,11 +136,19 @@ case "$lang" in
       exit 1
     fi
     # Portable sed across BSD (macOS) and GNU
-    if sed --version >/dev/null 2>&1; then
-      sed -i -E "s/^version = \".*\"/version = \"$version\"/" "$file"
-    else
-      sed -i '' -E "s/^version = \".*\"/version = \"$version\"/" "$file"
-    fi
+    sed_inplace() {
+      if sed --version >/dev/null 2>&1; then
+        sed -i -E "$@"
+      else
+        sed -i '' -E "$@"
+      fi
+    }
+    sed_inplace "s/^version = \".*\"/version = \"$version\"/" "$file"
+    for py_ver_file in "$dir"/src/*/mapper.py "$dir"/src/*/constants.py; do
+      if [[ -f $py_ver_file ]]; then
+        sed_inplace "s/^INTEGRATION_VERSION = ['\"].*['\"]/INTEGRATION_VERSION = \"$version\"/" "$py_ver_file"
+      fi
+    done
     ;;
   node)
     file="$dir/package.json"
@@ -159,17 +169,17 @@ if git diff --quiet -- "$file"; then
 fi
 
 echo
-git --no-pager diff -- "$file"
+git --no-pager diff -- "$dir"
 echo
 
 if ! confirm "commit + tag as $tag?"; then
-  git checkout -- "$file"
-  warn "aborted; reverted version change in $file"
+  git checkout -- "$dir"
+  warn "aborted; reverted version change in $dir"
   exit 1
 fi
 
 # ─── commit + tag ─────────────────────────────────────────────────────────────
-git add -- "$file"
+git add -- "$dir"
 git commit -m "release($component): $version" >/dev/null
 git tag -a "$tag" -m "$component v$version"
 ok "committed and tagged $tag locally"

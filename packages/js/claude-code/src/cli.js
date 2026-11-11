@@ -6,12 +6,16 @@
  *   install    Register the AnoSys Stop hook in ~/.claude/settings.json
  *   uninstall  Remove the AnoSys Stop hook from ~/.claude/settings.json
  *   status     Show current hook registration status
+ *   privacy    Show or change what is collected (off | metadata | full)
+ *   doctor     Show the active hook and local files
+ *   purge      Delete local queued records and logs
  *   run        Execute the hook (invoked by Claude Code on every Stop event)
  */
 
 'use strict';
 
 const readline = require('readline');
+const { METADATA, cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, runHookSafely, writeConsent } = require('anosys-sdk-core');
 const {
   SETTINGS_PATH,
   loadSettings,
@@ -23,10 +27,11 @@ const {
   removeStopHooks,
   hasAnosysHook,
   getAnosysHookCommand,
+  hookCommand,
   validateApiKey,
 } = require('./installer');
 
-const HOOK_COMMAND = 'npx anosys-sdk-claude-code run';
+const HOOK_COMMAND = hookCommand();
 const INGESTION_URL = 'https://api.anosys.ai/ingestion';
 
 function prompt(query, defaultVal = '') {
@@ -47,12 +52,6 @@ async function cmdInstall(args) {
   console.log('\nAnoSys Claude Code Hook Installer');
   console.log('='.repeat(40));
 
-  let redaction = args.redaction;
-  if (!redaction && !args.noRedaction) {
-    const choice = await prompt('Enable content redaction? (y/N): ', 'n');
-    redaction = choice.toLowerCase() === 'y';
-  }
-
   let apiKey = args.apiKey;
   if (!apiKey) {
     apiKey = await prompt('AnoSys API key for logs (leave blank to skip): ');
@@ -67,11 +66,8 @@ async function cmdInstall(args) {
     }
   }
 
-  // OTEL setup
-  let otelApiKey = args.otelKey;
-  if (otelApiKey === null) {
-    otelApiKey = await prompt('Enter your AnoSys API Key (OTEL type, leave blank to skip OTEL): ');
-  }
+  // OTEL export is opt-in with --otel-key only (it sends Claude Code's own telemetry)
+  const otelApiKey = args.otelKey;
   if (otelApiKey) {
     console.log('Validating OTEL API key...');
     const isValid = await validateApiKey(otelApiKey, 'otel');
@@ -95,9 +91,6 @@ async function cmdInstall(args) {
   if (apiKey) {
     newEnv.ANOSYS_HOOK_APIKEY = apiKey;
   }
-  if (redaction) {
-    newEnv.REDACTION = 'true';
-  }
   if (enableOtel) {
     newEnv.CLAUDE_CODE_ENABLE_TELEMETRY = '1';
     newEnv.OTEL_SERVICE_NAME = 'claude-code';
@@ -107,6 +100,11 @@ async function cmdInstall(args) {
     newEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf';
     newEnv.OTEL_EXPORTER_OTLP_ENDPOINT = INGESTION_URL;
     newEnv.OTEL_EXPORTER_OTLP_HEADERS = `anosys-apikey=${otelApiKey}`;
+    newEnv.OTEL_METRICS_INCLUDE_ACCOUNT_UUID = 'false';
+  }
+
+  if (args.redaction) {
+    writeConsent(METADATA, 'install --redaction');
   }
 
   if (autoUpdate) {
@@ -125,11 +123,14 @@ async function cmdInstall(args) {
     if (apiKey) {
       console.log(`  Logs API key: ${'*'.repeat(Math.max(0, apiKey.length - 4))}${apiKey.slice(-4)}`);
     }
-    console.log(`  Redaction: ${redaction ? 'enabled' : 'disabled'}`);
+    const { level, source } = effectiveLevel();
+    console.log(`  Collecting: ${level} (from ${source})`);
     if (enableOtel) {
       console.log(`  OTEL: enabled (API key set, ingestion URL: ${INGESTION_URL})`);
     }
-    console.log('\nDone. The hook will fire automatically after each Claude Code session.');
+    console.log('\nDone. The hook will fire automatically after each Claude Code turn.');
+    console.log('By default only metadata is sent (no prompts, answers, tool output or files).');
+    console.log('To send full content, accept the data-collection policy: anosys-sdk-claude-code privacy full');
   } else {
     console.log('\n================================================================');
     console.log('Add the following to your ~/.claude/settings.json file options:');
@@ -184,7 +185,6 @@ async function cmdStatus() {
     const env = settings.env || {};
     const hasLogsKey = 'ANOSYS_HOOK_APIKEY' in env;
     const hasOtelKey = 'OTEL_EXPORTER_OTLP_HEADERS' in env;
-    const redaction = env.REDACTION || 'false';
     console.log(`  Ingestion URL: ${INGESTION_URL}`);
 
     if (hasLogsKey) {
@@ -218,7 +218,8 @@ async function cmdStatus() {
       console.log('  OTEL API key: not set');
     }
 
-    console.log(`  Redaction: ${redaction}`);
+    const { level, source } = effectiveLevel();
+    console.log(`  Collecting: ${level} (from ${source})`);
   } else {
     console.log('AnoSys hook is NOT installed.');
     console.log("  Run 'npx anosys-sdk-claude-code install' to set it up.");
@@ -226,8 +227,11 @@ async function cmdStatus() {
 }
 
 async function cmdRun() {
-  const { main } = require('./hookRunner');
-  await main();
+  // The hook must never break Claude Code: any failure is swallowed (logged by type)
+  await runHookSafely(async () => {
+    const { main } = require('./hookRunner');
+    await main();
+  });
 }
 
 async function main() {
@@ -240,6 +244,9 @@ async function main() {
     console.log('  install    Register the AnoSys Stop hook');
     console.log('  uninstall  Remove the AnoSys Stop hook');
     console.log('  status     Show hook registration status');
+    console.log('  privacy    Show or change what is collected (off | metadata | full)');
+    console.log('  doctor     Show the active hook and local files');
+    console.log('  purge      Delete local queued records and logs');
     console.log('  run        Execute the hook (called by Claude Code)');
     process.exit(1);
   }
@@ -280,6 +287,24 @@ async function main() {
       case 'status':
         await cmdStatus();
         break;
+      case 'privacy':
+        process.exit(await cmdPrivacy('anosys-sdk-claude-code', argv.slice(1)));
+        break;
+      case 'purge': {
+        const h = require('./hookRunner');
+        const { UNHANDLED_LOG_PATH } = require('./mapper');
+        process.exit(await cmdPurge(
+          [h.PENDING_RECORDS_FILE, h.LOG_FILE, `${h.LOG_FILE}.1`, `${h.LOG_FILE}.2`, h.PAUSE_FILE, UNHANDLED_LOG_PATH],
+          argv.slice(1)));
+        break;
+      }
+      case 'doctor': {
+        const h = require('./hookRunner');
+        printDoctor('anosys-sdk-claude-code', ['anosys-sdk-claude-code', 'anosys-claude-code'],
+          getAnosysHookCommand(loadSettings()),
+          { settings: SETTINGS_PATH, state: h.STATE_FILE, 'pending queue': h.PENDING_RECORDS_FILE, log: h.LOG_FILE });
+        break;
+      }
       case 'run':
         await cmdRun();
         break;

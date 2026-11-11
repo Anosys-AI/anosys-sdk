@@ -5,6 +5,9 @@ Commands:
   install    Register the AnoSys Stop hook in ~/.claude/settings.json
   uninstall  Remove the AnoSys Stop hook from ~/.claude/settings.json
   status     Show current hook registration status
+  privacy    Show or change what is collected (off | metadata | full)
+  doctor     Show installed copies, the active hook and local files
+  purge      Delete local queued records and logs
   run        Execute the hook (invoked by Claude Code on every Stop event)
 """
 
@@ -12,8 +15,12 @@ import argparse
 import asyncio
 import sys
 
+from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
+from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
+
 from anosys_sdk_claude_code.installer import (
     SETTINGS_PATH,
+    hook_command,
     backup,
     get_anosys_hook_command,
     has_anosys_hook,
@@ -26,7 +33,6 @@ from anosys_sdk_claude_code.installer import (
     validate_api_key,
 )
 
-HOOK_COMMAND = "anosys-claude-code run"
 INGESTION_URL = "https://api.anosys.ai/ingestion"
 
 
@@ -43,11 +49,6 @@ def cmd_install(args: argparse.Namespace) -> None:
     print("\nAnoSys Claude Code Hook Installer")
     print("=" * 40)
 
-    redaction = args.redaction
-    if not redaction and not args.no_redaction:
-        choice = _prompt("Enable content redaction? (y/N): ", "n").lower()
-        redaction = choice == 'y'
-
     api_key = args.api_key
     if not api_key:
         api_key = _prompt("AnoSys API key for logs (leave blank to skip): ")
@@ -58,10 +59,9 @@ def cmd_install(args: argparse.Namespace) -> None:
         else:
             print("✅ Logs API key is valid.")
 
-    # OTEL setup
+    # Claude Code's own OTel export is a separate opt-in (--otel-key): it tags
+    # every event with your account email and organization ids.
     otel_api_key = args.otel_key
-    if otel_api_key is None:
-        otel_api_key = _prompt("Enter your AnoSys API Key (OTEL type, leave blank to skip OTEL): ")
     if otel_api_key:
         print("Validating OTEL API key...")
         if not validate_api_key(otel_api_key, "otel"):
@@ -80,8 +80,6 @@ def cmd_install(args: argparse.Namespace) -> None:
     }
     if api_key:
         new_env["ANOSYS_HOOK_APIKEY"] = api_key
-    if redaction:
-        new_env["REDACTION"] = "true"
     if enable_otel:
         new_env["CLAUDE_CODE_ENABLE_TELEMETRY"] = "1"
         new_env["OTEL_SERVICE_NAME"] = "claude-code"
@@ -91,24 +89,33 @@ def cmd_install(args: argparse.Namespace) -> None:
         new_env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf"
         new_env["OTEL_EXPORTER_OTLP_ENDPOINT"] = INGESTION_URL
         new_env["OTEL_EXPORTER_OTLP_HEADERS"] = f"anosys-apikey={otel_api_key}"
+        new_env["OTEL_METRICS_INCLUDE_ACCOUNT_UUID"] = "false"
+        # Prompts and tool details stay out of Claude Code's telemetry: we never set
+        # OTEL_LOG_USER_PROMPTS or OTEL_LOG_TOOL_DETAILS.
+
+    if getattr(args, "redaction", False):
+        write_consent(METADATA, method="install --redaction")
 
     if auto_update:
         print(f"\nUpdating {SETTINGS_PATH} ...")
         settings = load_settings()
         backup_path = backup()
         settings = update_env(settings, new_env)
-        settings = update_stop_hooks(settings, HOOK_COMMAND)
+        settings = update_stop_hooks(settings, hook_command())
         write_atomic(SETTINGS_PATH, settings)
 
         if backup_path:
             print(f"  Backed up original settings -> {backup_path}")
-        print(f"  Hook command registered: {HOOK_COMMAND}")
+        print(f"  Hook command registered: {hook_command()}")
         print(f"  Ingestion URL: {INGESTION_URL}")
         if api_key:
             print(f"  Logs API key: {'*' * (len(api_key) - 4)}{api_key[-4:]}")
-        print(f"  Redaction: {'enabled' if redaction else 'disabled'}")
+        level, source = effective_level()
+        print(f"  Collecting: {level} (from {source})")
         if enable_otel:
-            print(f"  OTEL: enabled (API key set, ingestion URL: {INGESTION_URL})")
+            print(f"  Claude Code OTel export: enabled ({INGESTION_URL}); events include your account email")
+        print("\nBy default only metadata is sent (no prompts, answers, tool output or files).")
+        print("To send full content, accept the data-collection policy: anosys-claude-code privacy full")
         print("\nDone. The hook will fire automatically after each Claude Code session.")
     else:
         print("\n================================================================")
@@ -124,7 +131,7 @@ def cmd_install(args: argparse.Namespace) -> None:
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": HOOK_COMMAND,
+                                "command": hook_command(),
                             }
                         ]
                     }
@@ -162,7 +169,6 @@ def cmd_status(args: argparse.Namespace) -> None:
         env = settings.get("env", {})
         has_logs_key = "ANOSYS_HOOK_APIKEY" in env
         has_otel_key = "OTEL_EXPORTER_OTLP_HEADERS" in env
-        redaction = env.get("REDACTION", "false")
         print(f"  Ingestion URL: {INGESTION_URL}")
 
         if has_logs_key:
@@ -191,15 +197,38 @@ def cmd_status(args: argparse.Namespace) -> None:
         else:
             print("  OTEL API key: not set")
 
-        print(f"  Redaction: {redaction}")
+        level, source = effective_level()
+        print(f"  Collecting: {level} (from {source})")
     else:
         print("AnoSys hook is NOT installed.")
         print("  Run 'anosys-claude-code install' to set it up.")
 
 
 def cmd_run(args: argparse.Namespace) -> None:
-    from anosys_sdk_claude_code.hook_runner import main
-    asyncio.run(main())
+    from anosys_sdk_core.hook_cli import run_hook_safely
+    from anosys_sdk_claude_code.hook_runner import log, main
+    run_hook_safely(lambda: asyncio.run(main()), log)
+
+
+def _purge_paths():
+    from anosys_sdk_claude_code import hook_runner as h
+    from anosys_sdk_claude_code.mapper import UNHANDLED_LOG_PATH
+    # hook_state.json is kept on purpose: deleting it would re-send this session
+    return [h.PENDING_RECORDS_FILE, h.LOG_FILE, h.LOG_FILE.with_name(h.LOG_FILE.name + ".1"),
+            h.LOG_FILE.with_name(h.LOG_FILE.name + ".2"), h.PAUSE_FILE, UNHANDLED_LOG_PATH]
+
+
+def _doctor() -> None:
+    from pathlib import Path
+    from anosys_sdk_claude_code import hook_runner as h
+    from anosys_sdk_claude_code.mapper import UNHANDLED_LOG_PATH
+    settings = load_settings()
+    print_doctor(
+        "anosys-claude-code", ["anosys-claude-code"], "anosys_sdk_claude_code.cli",
+        get_anosys_hook_command(settings) if has_anosys_hook(settings) else None,
+        {"settings": Path(SETTINGS_PATH), "state": h.STATE_FILE, "pending queue": h.PENDING_RECORDS_FILE,
+         "log": h.LOG_FILE, "legacy dump": UNHANDLED_LOG_PATH},
+    )
 
 
 def main() -> None:
@@ -221,9 +250,11 @@ def main() -> None:
 
     p_install = sub.add_parser("install", help="Register the AnoSys Stop hook")
     p_install.add_argument("--api-key", metavar="KEY", help="AnoSys API key for logs")
-    p_install.add_argument("--redaction", action="store_true", help="Enable content redaction")
-    p_install.add_argument("--no-redaction", action="store_true", help="Skip redaction prompt")
-    p_install.add_argument("--otel-key", metavar="KEY", help="AnoSys OTEL API key")
+    # Kept so old install commands still work; collection is set with `privacy`
+    p_install.add_argument("--redaction", action="store_true", help=argparse.SUPPRESS)
+    p_install.add_argument("--no-redaction", action="store_true", help=argparse.SUPPRESS)
+    p_install.add_argument("--otel-key", metavar="KEY",
+                           help="Also enable Claude Code's own OTel export (includes your account email)")
     p_install.add_argument("--auto-update", action="store_true", default=None, help="Automatically update settings.json")
     p_install.add_argument("--no-auto-update", action="store_false", dest="auto_update", help="Do not automatically update settings.json")
     p_install.set_defaults(func=cmd_install)
@@ -233,6 +264,9 @@ def main() -> None:
 
     p_status = sub.add_parser("status", help="Show hook registration status")
     p_status.set_defaults(func=cmd_status)
+
+    add_privacy_parser(sub, "anosys-claude-code")
+    add_maintenance_parsers(sub, _purge_paths, _doctor)
 
     p_run = sub.add_parser("run", help="Execute the hook (called by Claude Code)")
     p_run.set_defaults(func=cmd_run)

@@ -16,7 +16,16 @@ const CLIENT_TIME_RE = /The current local time is:\s*([^\r\n.]+)/i;
 const CREATED_AT_RE = /^Created At:\s*(\S+)/m;
 const COMPLETED_AT_RE = /^Completed At:\s*(\S+)/m;
 
-const NON_TOOL_TYPES = new Set(['USER_INPUT', 'PLANNER_RESPONSE', 'CONVERSATION_HISTORY']);
+const NON_TOOL_TYPES = new Set([
+  'USER_INPUT',
+  'PLANNER_RESPONSE',
+  'CONVERSATION_HISTORY',
+  'SYSTEM',
+  'THOUGHT',
+  'MEMORY',
+  'CHECKPOINT',
+  'SUMMARY',
+]);
 
 function isoToMs(value) {
   if (!value) return 0;

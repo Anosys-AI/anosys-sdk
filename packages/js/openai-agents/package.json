@@ -1,7 +1,7 @@
 {
   "name": "anosys-sdk-openai-agents",
-  "version": "1.0.12",
-  "description": "AnoSys SDK for OpenAI Agents — automatic instrumentation and logging for OpenAI Agents SDK",
+  "version": "1.1.0",
+  "description": "AnoSys SDK for OpenAI Agents \u2014 automatic instrumentation and logging for OpenAI Agents SDK",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
   "homepage": "https://anosys.ai",
@@ -14,6 +14,9 @@
   "exports": {
     ".": "./src/index.js"
   },
+  "files": [
+    "src/"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },
@@ -33,10 +36,10 @@
     "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@opentelemetry/instrumentation-openai": "^0.7.0",
-    "axios": "^1.7.0",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "anosys-sdk-core": "^2.0.0"
   },
   "scripts": {
-    "test": "node --test test/basic.test.js"
+    "test": "node --test test/basic.test.js test/package.test.js"
   }
 }

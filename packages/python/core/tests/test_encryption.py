@@ -1,196 +1,150 @@
 """
-Unit tests for AnoSys SDK client-side data encryption.
+Unit tests for AnoSys SDK client-side encryption (format enc2).
+
+The sample vector below is shared with the JS packages and the console, so
+all three must produce and read the same ciphertext.
 """
 
-import os
-from unittest.mock import patch
+import json
 
 import pytest
 
+from anosys_sdk_core import encryption
 from anosys_sdk_core.encryption import (
     ANOSYS_ENCRYPTION_PREFIX,
     DEFAULT_ENCRYPTED_COLUMNS,
-    derive_256_bit_key,
-    encrypt,
+    JSON_COLUMNS,
     decrypt,
+    derive_keys,
+    encrypt,
+    encrypt_payload,
     get_encryption_key,
     get_target_columns,
-    encrypt_payload,
 )
 
-
-def test_derive_256_bit_key_length():
-    key = derive_256_bit_key("my-secret-key")
-    assert isinstance(key, bytes)
-    assert len(key) == 32
-
-
-def test_encryption_sample_vector():
-    passphrase = "YOUR_SECRET_KEY_HERE"
-    text = "Hello from AnoSys Technologies!"
-    derived_key = derive_256_bit_key(passphrase)
-    encrypted = encrypt(text, derived_key)
-    # Must match the sample vector
-    assert encrypted == "J+0Ntn9F5hhtKSBGTFZPce61f8zwRKwrp7bNpwp2Cw4="
+PASSPHRASE = "YOUR_SECRET_KEY_HERE"
+SALT = "workspace-123"
+SAMPLE_TEXT = "Hello from AnoSys Technologies!"
+SAMPLE_CIPHERTEXT = "enc2:QwYbSu12pZL4oSf17Bb5zJUkGjoRc3wL66HwlsbjlJ5sLJWIHWGlgz7f+PXh4yem/EvB20sQjSg+R4A="
 
 
-def test_encryption_roundtrip():
-    passphrase = "passphrase_12345"
-    key = derive_256_bit_key(passphrase)
-    for text in [
-        "Simple ASCII text",
-        "Unicode characters: ελληνικά, 🚀, 日本語, español",
-        "A" * 16,  # Exact 16-byte boundary
-        "B" * 32,  # Exact 32-byte boundary
-        "C" * 15,
-        "C" * 17,
-        "",        # Empty string
-    ]:
-        cipher_b64 = encrypt(text, key)
-        # Prefixed roundtrip
-        decrypted = decrypt(f"{ANOSYS_ENCRYPTION_PREFIX}{cipher_b64}", key)
-        assert decrypted == text
-        # Raw roundtrip
-        decrypted_raw = decrypt(cipher_b64, key)
-        assert decrypted_raw == text
+@pytest.fixture
+def keys():
+    return derive_keys(PASSPHRASE, SALT)
 
 
-def test_get_encryption_key_handling():
-    with patch.dict(os.environ, {}, clear=True):
+def test_key_derivation_sample_vector(keys):
+    assert keys[0].hex() == "965524765751a794f7875a9204f50c7b2970260ecf1f280fed1f317f3ea19493"
+    assert keys[1].hex() == "b758d25c8ede925a56cd6af9c51967d453ae5152f9fab13c1fa9619ee1bfe55b"
+
+
+def test_encryption_sample_vector(keys):
+    assert encrypt(SAMPLE_TEXT, keys) == SAMPLE_CIPHERTEXT
+    assert decrypt(SAMPLE_CIPHERTEXT, keys) == SAMPLE_TEXT
+
+
+def test_deterministic_so_grouping_and_joins_work(keys):
+    assert encrypt("same prompt", keys) == encrypt("same prompt", keys)
+    assert encrypt("same prompt", keys) != encrypt("other prompt", keys)
+
+
+def test_salt_and_passphrase_change_the_ciphertext(keys):
+    assert encrypt(SAMPLE_TEXT, derive_keys(PASSPHRASE, "other-workspace")) != SAMPLE_CIPHERTEXT
+    assert encrypt(SAMPLE_TEXT, derive_keys("another passphrase", SALT)) != SAMPLE_CIPHERTEXT
+
+
+def test_roundtrip_unicode_and_empty(keys):
+    for text in ["", "ünïcödé ✓ 日本語", "x" * 10_000]:
+        assert decrypt(encrypt(text, keys), keys) == text
+
+
+def test_tampering_is_detected(keys):
+    raw = SAMPLE_CIPHERTEXT[:-6] + ("AAAA==" if not SAMPLE_CIPHERTEXT.endswith("AAAA==") else "BBBB==")
+    with pytest.raises(Exception):
+        decrypt(raw, keys)
+
+
+def test_get_encryption_key(monkeypatch):
+    monkeypatch.delenv("ANOSYS_ENCRYPTION_KEY", raising=False)
+    assert get_encryption_key() is None
+    for empty in ["", "  ", "null", "None", "undefined"]:
+        monkeypatch.setenv("ANOSYS_ENCRYPTION_KEY", empty)
         assert get_encryption_key() is None
-
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": ""}):
-        assert get_encryption_key() is None
-
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "null"}):
-        assert get_encryption_key() is None
-
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "none"}):
-        assert get_encryption_key() is None
-
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "  secret_key  "}):
-        assert get_encryption_key() == "secret_key"
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_KEY", " secret ")
+    assert get_encryption_key() == "secret"
 
 
-def test_get_target_columns_default_and_override():
-    with patch.dict(os.environ, {}, clear=True):
-        cols = get_target_columns()
-        assert "llm_input" in cols
-        assert "llm_output" in cols
-        assert "gen_ai_input_messages" in cols
-        assert "gen_ai_output_messages" in cols
-        assert "cvs199" in cols
-        assert "user_prompt" in cols
-        assert "cvs4" in cols
-
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTED_COLUMNS": "cvs1, cvs2, cvs199"}):
-        cols = get_target_columns()
-        assert cols == {"cvs1", "cvs2", "cvs199"}
-
-    # Typo alias support
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTES_COLUMNS": "cvs3,cvs4"}):
-        cols = get_target_columns()
-        assert cols == {"cvs3", "cvs4"}
+def test_target_columns_default_and_override(monkeypatch):
+    monkeypatch.delenv("ANOSYS_ENCRYPTED_COLUMNS", raising=False)
+    monkeypatch.delenv("ANOSYS_ENCRYPTES_COLUMNS", raising=False)
+    assert get_target_columns() == set(DEFAULT_ENCRYPTED_COLUMNS)
+    monkeypatch.setenv("ANOSYS_ENCRYPTED_COLUMNS", "a, b")
+    assert get_target_columns() == {"a", "b"}
 
 
-def test_encrypt_payload_when_disabled():
-    with patch.dict(os.environ, {}, clear=True):
-        data = {"llm_input": "hello", "cvs199": "raw", "other": 123}
-        result = encrypt_payload(data)
-        assert result == {"llm_input": "hello", "cvs199": "raw", "other": 123}
+def test_default_columns_cover_all_content():
+    for col in ["cvs18", "commands", "written_paths", "file_states", "ai_title",
+                "custom_title", "agent_description", "error_details", "tool_use_result", "cvs199"]:
+        assert col in DEFAULT_ENCRYPTED_COLUMNS
 
 
-def test_encrypt_payload_default_columns():
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "test-key"}):
-        data = {
-            "session_id": "sess-1",
-            "llm_input": "What is the capital of Greece?",
-            "llm_output": "The capital is Athens.",
-            "gen_ai_input_messages": '[{"role": "user", "content": "hi"}]',
-            "gen_ai_output_messages": '[{"role": "assistant", "content": "hello"}]',
-            "cvs199": '{"full": "context"}',
-            "user_prompt": "What is the capital?",
-            "cvs4": "What is the capital?",
-            "input_tokens": 15,
-        }
-        res = encrypt_payload(data)
-
-        # Encrypted fields have prefix
-        assert res["llm_input"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res["llm_output"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res["gen_ai_input_messages"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res["gen_ai_output_messages"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res["cvs199"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res["user_prompt"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res["cvs4"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-
-        # Non-encrypted fields stay as-is
-        assert res["session_id"] == "sess-1"
-        assert res["input_tokens"] == 15
-
-        # Verify decryption
-        key = derive_256_bit_key("test-key")
-        assert decrypt(res["llm_input"], key) == "What is the capital of Greece?"
-        assert decrypt(res["llm_output"], key) == "The capital is Athens."
+def test_encrypt_payload_off_without_key(monkeypatch):
+    monkeypatch.delenv("ANOSYS_ENCRYPTION_KEY", raising=False)
+    payload = {"user_prompt": "hello"}
+    assert encrypt_payload(payload) == {"user_prompt": "hello"}
 
 
-def test_encrypt_payload_override_columns():
-    with patch.dict(os.environ, {
-        "ANOSYS_ENCRYPTION_KEY": "test-key",
-        "ANOSYS_ENCRYPTED_COLUMNS": "custom_col1,custom_col2",
-    }):
-        data = {
-            "custom_col1": "val1",
-            "custom_col2": "val2",
-            "llm_input": "do not encrypt me",
-        }
-        res = encrypt_payload(data)
-        assert res["custom_col1"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res["custom_col2"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res["llm_input"] == "do not encrypt me"
+def test_encrypt_payload_strings_objects_and_json_columns(monkeypatch, keys):
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_KEY", PASSPHRASE)
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_SALT", SALT)
+    monkeypatch.delenv("ANOSYS_ENCRYPTED_COLUMNS", raising=False)
+    payload = {
+        "user_prompt": SAMPLE_TEXT,
+        "tool_use_result": '{"stdout":"secret output"}',
+        "commands": ["rm -rf build"],
+        "input_tokens": 12,
+        "session_id": "s1",
+    }
+    out = encrypt_payload(payload)
+    assert out["user_prompt"] == SAMPLE_CIPHERTEXT
+    # JSON-typed columns carry a JSON string, so BigQuery JSON columns accept them
+    assert out["tool_use_result"].startswith('"' + ANOSYS_ENCRYPTION_PREFIX)
+    assert "tool_use_result" in JSON_COLUMNS
+    assert json.loads(out["tool_use_result"]).startswith(ANOSYS_ENCRYPTION_PREFIX)
+    assert decrypt(out["tool_use_result"], keys) == '{"stdout":"secret output"}'
+    # arrays/objects are serialized, not skipped
+    assert decrypt(out["commands"], keys) == '["rm -rf build"]'
+    assert out["input_tokens"] == 12 and out["session_id"] == "s1"
 
 
-def test_encrypt_payload_non_string_warning(capsys):
-    with patch.dict(os.environ, {
-        "ANOSYS_ENCRYPTION_KEY": "test-key",
-        "ANOSYS_ENCRYPTED_COLUMNS": "num_col,bool_col,str_col",
-    }):
-        data = {
-            "num_col": 42,
-            "bool_col": True,
-            "str_col": "valid string",
-        }
-        res = encrypt_payload(data)
-        captured = capsys.readouterr()
-
-        assert "[ANOSYS] Warning: Column 'num_col' contains non-string data (type: int)" in captured.err
-        assert "[ANOSYS] Warning: Column 'bool_col' contains non-string data (type: bool)" in captured.err
-        assert res["num_col"] == 42
-        assert res["bool_col"] is True
-        assert res["str_col"].startswith(ANOSYS_ENCRYPTION_PREFIX)
+def test_encrypt_payload_is_idempotent(monkeypatch):
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_KEY", PASSPHRASE)
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_SALT", SALT)
+    once = encrypt_payload({"user_prompt": SAMPLE_TEXT, "commands": "[1]"})
+    twice = encrypt_payload(dict(once))
+    assert once == twice
 
 
-def test_encrypt_payload_idempotency():
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "test-key"}):
-        data = {"llm_input": "initial"}
-        res1 = encrypt_payload(data)
-        val1 = res1["llm_input"]
-        assert val1.startswith(ANOSYS_ENCRYPTION_PREFIX)
-
-        # Second call does not re-encrypt
-        res2 = encrypt_payload(res1)
-        assert res2["llm_input"] == val1
+def test_encrypt_payload_list(monkeypatch):
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_KEY", PASSPHRASE)
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_SALT", SALT)
+    out = encrypt_payload([{"llm_input": SAMPLE_TEXT}, {"llm_input": SAMPLE_TEXT}])
+    assert out[0]["llm_input"] == out[1]["llm_input"] == SAMPLE_CIPHERTEXT
 
 
-def test_encrypt_payload_list_of_dicts():
-    with patch.dict(os.environ, {"ANOSYS_ENCRYPTION_KEY": "test-key"}):
-        records = [
-            {"llm_input": "query 1", "session_id": "s1"},
-            {"llm_input": "query 2", "session_id": "s2"},
-        ]
-        res = encrypt_payload(records)
-        assert len(res) == 2
-        assert res[0]["llm_input"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res[1]["llm_input"].startswith(ANOSYS_ENCRYPTION_PREFIX)
-        assert res[0]["session_id"] == "s1"
-        assert res[1]["session_id"] == "s2"
+def test_fails_closed_without_cryptography(monkeypatch):
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_KEY", PASSPHRASE)
+    monkeypatch.setattr(encryption, "_HAS_CRYPTOGRAPHY", False)
+    out = encrypt_payload({"user_prompt": "plain secret", "session_id": "s1"})
+    assert out["user_prompt"] is None
+    assert out["session_id"] == "s1"
+
+
+def test_decrypt_accepts_every_key_form(monkeypatch):
+    """Audit 3.1: decrypt(x, derive_256_bit_key(k)) and decrypt(x, passphrase) work."""
+    from anosys_sdk_core.encryption import decrypt, derive_256_bit_key, derive_keys, encrypt
+    monkeypatch.setenv("ANOSYS_ENCRYPTION_SALT", "ws")
+    value = encrypt("hello", derive_keys("pass", "ws"))
+    assert decrypt(value, derive_keys("pass", "ws")) == "hello"
+    assert decrypt(value, derive_256_bit_key("pass", "ws")) == "hello"
+    assert decrypt(value, "pass") == "hello"

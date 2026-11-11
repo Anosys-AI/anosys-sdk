@@ -5,6 +5,8 @@ Provides functions to transform data into the CVS format expected by the AnoSys 
 """
 
 import json
+import logging
+import math
 from typing import Any, Dict, Optional, Union
 
 from anosys_sdk_core.models import (
@@ -12,6 +14,11 @@ from anosys_sdk_core.models import (
     OTEL_AI_VALID_TYPES,
     CLAUDE_VALID_TYPES
 )
+
+logger = logging.getLogger(__name__)
+
+# Attributes dropped because their type's columns were used up (warned once each)
+_DROPPED_KEYS: set = set()
 
 
 def _get_type_key(value: Any) -> str:
@@ -29,11 +36,34 @@ def _get_type_key(value: Any) -> str:
     elif isinstance(value, int) and not isinstance(value, bool):
         return "int"
     elif isinstance(value, float):
-        return "float"
+        return "float" if math.isfinite(value) else "string"
     elif isinstance(value, str):
         return "string"
     else:
         return "string"
+
+
+# Custom-variable columns that exist in every AnoSys schema
+SLOT_LIMITS = {"cvs": 200, "cvn": 200, "cvb": 100}
+# Fixed meaning (consent, raw record, source tag): never handed to a dynamic key
+RESERVED_SLOTS = frozenset({"cvs198", "cvs199", "cvs200"})
+
+
+def _allocate_slot(prefix: str, start: int, used: set) -> Optional[str]:
+    """
+    The first free ``prefix<N>`` column from ``start``, or None when the type's
+    columns are used up. ``used`` holds every column already taken by a fixed
+    or earlier dynamic key and is updated.
+    """
+    index = max(1, int(start))
+    limit = SLOT_LIMITS.get(prefix, 200)
+    while index <= limit:
+        slot = f"{prefix}{index}"
+        if slot not in used and slot not in RESERVED_SLOTS:
+            used.add(slot)
+            return slot
+        index += 1
+    return None
 
 
 def _get_prefix_and_index(value_type: str) -> tuple:
@@ -139,12 +169,15 @@ def reassign(
     # Detect source and use appropriate valid types if not provided
     if valid_types is None:
         source = data.get("from_source") or data.get("source") or data.get("cvs200")
-        if source == "ClaudeCodeHook":
+        if source in ("ClaudeCodeHook", "CodexHook", "AntigravityHook"):
             valid_types = CLAUDE_VALID_TYPES
         else:
             valid_types = OTEL_AI_VALID_TYPES
     
     indices = (starting_indices or DEFAULT_STARTING_INDICES).copy()
+    # Columns already taken: a new key never shares a column with another key,
+    # whether that key is fixed, reserved, or was allocated in an earlier call.
+    used = set(key_to_cvs.values())
     
     for key, value in data.items():
         if value is None:
@@ -155,8 +188,14 @@ def reassign(
         
         # Get or assign CVS variable name
         if key not in key_to_cvs:
-            key_to_cvs[key] = f"{prefix}{indices[index_key]}"
-            indices[index_key] += 1
+            slot = _allocate_slot(prefix, indices[index_key], used)
+            if slot is None:
+                if key not in _DROPPED_KEYS:
+                    _DROPPED_KEYS.add(key)
+                    logger.warning("No free %s column for attribute %r; it is not sent", prefix, key)
+                continue
+            key_to_cvs[key] = slot
+            indices[index_key] = int(slot[3:]) + 1
         
         cvs_var = key_to_cvs[key]
         
@@ -169,7 +208,8 @@ def reassign(
                 if value is None or (isinstance(value, str) and value.strip() == ""):
                     cvs_vars[cvs_var] = 0.0
                 else:
-                    cvs_vars[cvs_var] = float(value)
+                    f_val = float(value)
+                    cvs_vars[cvs_var] = f_val if math.isfinite(f_val) else 0.0
             except (ValueError, TypeError):
                 cvs_vars[cvs_var] = 0.0
         elif expected_type == "boolean":
@@ -197,8 +237,11 @@ def reassign(
                     cvs_vars[cvs_var] = 0
                 else:
                     f_val = float(str(value))
-                    cvs_vars[cvs_var] = int(f_val) if f_val == int(f_val) else f_val
-            except (ValueError, TypeError):
+                    if not math.isfinite(f_val):
+                        cvs_vars[cvs_var] = 0
+                    else:
+                        cvs_vars[cvs_var] = int(f_val) if f_val == int(f_val) else f_val
+            except (ValueError, TypeError, OverflowError):
                 cvs_vars[cvs_var] = 0
         elif cvs_var.startswith("cvb"):
             # Fallback for CVB prefix (Boolean)
@@ -212,5 +255,8 @@ def reassign(
                 cvs_vars[cvs_var] = json.dumps(value)
             else:
                 cvs_vars[cvs_var] = str(value)
-    
+
+    if "custom_mapping" in data and "otel_schema_url" in cvs_vars:
+        cvs_vars["otel_schema_url"] = json.dumps(key_to_cvs)
+
     return cvs_vars

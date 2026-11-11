@@ -53,7 +53,7 @@ jobs:
         run: pytest packages/python/anthropic/tests -v
 
       - name: Test codex
-        run: pytest packages/python/codex/tests -v
+        run: env -u CODEX_HOME pytest packages/python/codex/tests -v
 
       - name: Test antigravity
         run: pytest packages/python/antigravity/tests -v
@@ -79,6 +79,10 @@ jobs:
         working-directory: packages/js
         run: npm install
 
+      - name: Test core
+        working-directory: packages/js/core
+        run: npm test
+
       - name: Test openai
         working-directory: packages/js/openai
         run: npm test
@@ -93,7 +97,7 @@ jobs:
 
       - name: Test codex
         working-directory: packages/js/codex
-        run: REDACTION=false npm test
+        run: npm test
 
       - name: Test antigravity
         working-directory: packages/js/antigravity

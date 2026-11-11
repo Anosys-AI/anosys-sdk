@@ -5,18 +5,25 @@ Commands:
   install    Register the AnoSys notify hook in ~/.codex/config.toml
   uninstall  Remove the AnoSys notify hook from ~/.codex/config.toml
   status     Show current hook registration status
+  privacy    Show or change what is collected (off | metadata | full)
+  doctor     Show installed copies, the active hook and local files
+  purge      Delete local queued records and logs
   run        Execute the hook (invoked by Codex CLI on notify events)
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
+from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
+from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
+
 from anosys_sdk_codex.installer import (
-    HOOK_COMMAND,
     INGESTION_URL,
+    hook_command,
     backup,
     get_config_path,
     get_env_path,
@@ -45,14 +52,6 @@ def cmd_install(args: argparse.Namespace) -> None:
 
     yes = getattr(args, "yes", False)
 
-    redaction = args.redaction
-    if not redaction and not args.no_redaction:
-        if yes:
-            redaction = False
-        else:
-            choice = _prompt("Enable content redaction? (y/N): ", "n").lower()
-            redaction = choice == "y"
-
     api_key = args.api_key or os.environ.get("ANOSYS_API_KEY") or os.environ.get("ANOSYS_HOOK_APIKEY") or ""
     if not api_key and not yes:
         api_key = _prompt("AnoSys API key for logs (leave blank to skip): ")
@@ -75,32 +74,37 @@ def cmd_install(args: argparse.Namespace) -> None:
     config_path = get_config_path()
     env_path = get_env_path()
 
+    if getattr(args, "redaction", False):
+        write_consent(METADATA, method="install --redaction")
+
     if auto_update:
         print(f"\nUpdating {config_path} ...")
         backup_path = backup(config_path)
-        update_codex_config(HOOK_COMMAND, path=config_path)
-        update_codex_env(api_key=api_key, redaction=redaction, path=env_path)
+        update_codex_config(path=config_path)
+        update_codex_env(api_key=api_key, path=env_path)
 
         if backup_path:
             print(f"  Backed up original settings -> {backup_path}")
-        print('  Hook command registered in notify: ["anosys-codex", "run"]')
+        print(f"  Hook command registered in notify: {hook_command()}")
         print(f"  Ingestion URL: {INGESTION_URL}")
         if api_key:
             masked = ("*" * (len(api_key) - 4)) + api_key[-4:] if len(api_key) > 4 else "****"
             print(f"  Logs API key: {masked}")
-        print(f"  Redaction: {'enabled' if redaction else 'disabled'}")
+        level, source = effective_level()
+        print(f"  Collecting: {level} (from {source})")
         print("\n✅ Codex hook installed successfully.")
+        print("\nBy default only metadata is sent (no prompts, answers, commands or files).")
+        print("To send full content, accept the data-collection policy: anosys-codex privacy full")
         print("\nRestart Codex CLI to load the notification command.")
         print("   The notify callback is separate from lifecycle hooks listed by /hooks.")
         print("   Verify callback execution and delivery in ~/.codex/state/anosys_hook.log.\n")
     else:
         print("\n================================================================")
         print("Add the following to your ~/.codex/config.toml file:")
-        print('\nnotify = ["anosys-codex", "run"]\n')
+        print(f"\nnotify = {json.dumps(hook_command())}\n")
         print("And create ~/.codex/anosys-env.sh with:")
         print(f'export ANOSYS_HOOK_APIKEY="{api_key}"')
         print(f'export ANOSYS_HOOK_ENDPOINT_URL="{INGESTION_URL}"')
-        print(f'export REDACTION="{"true" if redaction else "false"}"')
         print("================================================================\n")
 
 
@@ -144,8 +148,10 @@ def cmd_status(args: argparse.Namespace) -> None:
     data = load_toml(config_path)
     installed = has_anosys_hook(data)
 
+    level, source = effective_level()
     if installed:
         print("\nStatus: ✅ Installed and active in config.toml")
+        print(f"Collecting: {level} (from {source})")
         notify_list = data.get("notify", [])
         print(f"Notify hooks: {notify_list}")
     else:
@@ -160,7 +166,24 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 def cmd_run(args: argparse.Namespace) -> None:
     from anosys_sdk_codex.hook_runner import run
-    run()
+    run(sys.argv[2:])
+
+
+def _purge_paths():
+    from anosys_sdk_codex import hook_runner as h
+    return [h.PENDING_FILE, h.LOG_FILE, h.LOG_FILE.with_name(h.LOG_FILE.name + ".1"),
+            h.LOG_FILE.with_name(h.LOG_FILE.name + ".2"), h.PAUSE_FILE]
+
+
+def _doctor() -> None:
+    from anosys_sdk_codex import hook_runner as h
+    data = load_toml(get_config_path())
+    print_doctor(
+        "anosys-codex", ["anosys-codex"], "anosys_sdk_codex.hook_runner",
+        json.dumps(data.get("notify")) if has_anosys_hook(data) else None,
+        {"config": get_config_path(), "env file": get_env_path(), "state": h.STATE_FILE,
+         "pending queue": h.PENDING_FILE, "log": h.LOG_FILE},
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -173,8 +196,9 @@ def main(argv: list[str] | None = None) -> None:
     p_install = subparsers.add_parser("install", help="Install AnoSys hook into ~/.codex/config.toml")
     p_install.add_argument("--api-key", help="AnoSys logs API key")
     p_install.add_argument("-y", "--yes", action="store_true", default=False, help="Automatic yes to prompts (non-interactive)")
-    p_install.add_argument("--redaction", action="store_true", default=False, help="Enable content redaction")
-    p_install.add_argument("--no-redaction", action="store_true", default=False, help="Disable content redaction")
+    # Kept so old install commands still work; collection is set with `privacy`
+    p_install.add_argument("--redaction", action="store_true", default=False, help=argparse.SUPPRESS)
+    p_install.add_argument("--no-redaction", action="store_true", default=False, help=argparse.SUPPRESS)
     p_install.add_argument("--auto-update", dest="auto_update", action="store_true", default=None)
     p_install.add_argument("--no-auto-update", dest="auto_update", action="store_false")
     p_install.set_defaults(func=cmd_install)
@@ -185,8 +209,11 @@ def main(argv: list[str] | None = None) -> None:
     p_status = subparsers.add_parser("status", help="Check hook installation status")
     p_status.set_defaults(func=cmd_status)
 
+    add_privacy_parser(subparsers, "anosys-codex")
+    add_maintenance_parsers(subparsers, _purge_paths, _doctor)
+
     p_run = subparsers.add_parser("run", help="Run the hook (invoked by Codex notify)")
-    p_run.add_argument("notification", nargs="?", help="Codex notification JSON")
+    p_run.add_argument("rest", nargs=argparse.REMAINDER, help="Codex notification JSON")
     p_run.set_defaults(func=cmd_run)
 
     args = parser.parse_args(argv)

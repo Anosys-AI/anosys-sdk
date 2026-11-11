@@ -9,6 +9,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { hookCliCommandString } = require('anosys-sdk-core');
 
 const ANOSYS_ENV_KEYS = new Set([
   'ANOSYS_HOOK_ENDPOINT_URL',
@@ -25,7 +26,17 @@ const ANOSYS_ENV_KEYS = new Set([
   'OTEL_EXPORTER_OTLP_ENDPOINT',
   'OTEL_EXPORTER_OTLP_HEADERS',
   'OTEL_EXPORTER_OTLP_ANOSYS_APIKEY', // legacy — kept for clean uninstall
+  'OTEL_METRICS_INCLUDE_ACCOUNT_UUID',
+  'REDACTION', // legacy — collection is set with `anosys-sdk-claude-code privacy`
 ]);
+
+// Markers of every Stop-hook form this package has ever written
+const HOOK_MARKERS = ['anosys-sdk-claude-code', 'anosys_sdk_claude_code'];
+
+/** The Stop-hook command: this Node and this CLI by absolute path (installed bin when run through npx). */
+function hookCommand() {
+  return hookCliCommandString({ cliPath: path.join(__dirname, 'cli.js'), binName: 'anosys-sdk-claude-code', packageName: 'anosys-sdk-claude-code' });
+}
 
 const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json');
 const BACKUP_PATH = SETTINGS_PATH + '.bak';
@@ -47,6 +58,7 @@ function backup(filePath = SETTINGS_PATH) {
     const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
     const backupPath = `${filePath}.${timestamp}.bak`;
     fs.copyFileSync(filePath, backupPath);
+    try { fs.chmodSync(backupPath, 0o600); } catch { /* backups can hold the API key */ }
     return backupPath;
   }
   return null;
@@ -57,7 +69,7 @@ function writeAtomic(filePath, data) {
   fs.mkdirSync(dir, { recursive: true });
   const tmpPath = filePath + '.tmp.' + process.pid;
   try {
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmpPath, filePath);
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch (_) { }
@@ -86,7 +98,9 @@ function removeEnv(settings) {
 
 function isAnosysHookEntry(entry) {
   if (!entry || typeof entry !== 'object') return false;
-  return String(entry.owner || '').toLowerCase() === 'anosys';
+  if (String(entry.owner || '').toLowerCase() === 'anosys') return true;
+  const command = String(entry.command || '');
+  return HOOK_MARKERS.some(m => command.includes(m)) || command.includes(path.join(__dirname, 'cli.js'));
 }
 
 function stripAnosysFromGroup(group) {
@@ -211,6 +225,10 @@ async function validateApiKey(apiKey, type) {
 }
 
 module.exports = {
+  ANOSYS_ENV_KEYS,
+  HOOK_MARKERS,
+  hookCommand,
+  isAnosysHookEntry,
   SETTINGS_PATH,
   BACKUP_PATH,
   loadSettings,

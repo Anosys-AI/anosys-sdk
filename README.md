@@ -28,26 +28,27 @@ Python packages require Python 3.10 or later. JavaScript packages declare Node.j
 
 | Package | Version | Install |
 | --- | --- | --- |
-| [anosys-sdk-core](packages/python/core/) | 1.1.0 | `pip install anosys-sdk-core` |
-| [anosys-sdk-openai](packages/python/openai/) | 1.0.14 | `pip install anosys-sdk-openai` |
-| [anosys-sdk-openai-agents](packages/python/openai_agents/) | 1.0.13 | `pip install anosys-sdk-openai-agents` |
-| [anosys-sdk-anthropic](packages/python/anthropic/) | 1.0.0 | `pip install anosys-sdk-anthropic` |
-| [anosys-sdk-claude-agents](packages/python/claude_agents/) | 1.0.0 | `pip install anosys-sdk-claude-agents` |
-| [anosys-claude-code](packages/python/claude_code/) | 0.2.9 | `pip install anosys-claude-code` |
-| [anosys-codex](packages/python/codex/) | 0.1.1 | `pip install anosys-codex` |
-| [anosys-antigravity](packages/python/antigravity/) | 0.1.0 | `pip install anosys-antigravity` |
+| [anosys-sdk-core](packages/python/core/) | 2.0.0 | `pip install anosys-sdk-core` |
+| [anosys-sdk-openai](packages/python/openai/) | 1.1.0 | `pip install anosys-sdk-openai` |
+| [anosys-sdk-openai-agents](packages/python/openai_agents/) | 1.1.0 | `pip install anosys-sdk-openai-agents` |
+| [anosys-sdk-anthropic](packages/python/anthropic/) | 1.1.0 | `pip install anosys-sdk-anthropic` |
+| [anosys-sdk-claude-agents](packages/python/claude_agents/) | 1.1.0 | `pip install anosys-sdk-claude-agents` |
+| [anosys-claude-code](packages/python/claude_code/) | 0.3.0 | `pip install anosys-claude-code` |
+| [anosys-codex](packages/python/codex/) | 0.2.0 | `pip install anosys-codex` |
+| [anosys-antigravity](packages/python/antigravity/) | 0.2.0 | `pip install anosys-antigravity` |
 
 ### JavaScript
 
 | Package | Version | Install |
 | --- | --- | --- |
-| [anosys-sdk-openai](packages/js/openai/) | 1.0.12 | `npm install anosys-sdk-openai openai` |
-| [anosys-sdk-openai-agents](packages/js/openai-agents/) | 1.0.12 | `npm install anosys-sdk-openai-agents @openai/agents` |
-| [anosys-sdk-anthropic](packages/js/anthropic/) | 1.0.0 | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` |
-| [anosys-sdk-claude-agents](packages/js/claude-agents/) | 1.0.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
-| [anosys-sdk-claude-code](packages/js/claude-code/) | 0.2.6 | `npx -y anosys-sdk-claude-code install` |
-| [anosys-sdk-codex](packages/js/codex/) | 0.1.0 | `npm install -g anosys-sdk-codex` |
-| [anosys-sdk-antigravity](packages/js/antigravity/) | 0.1.0 | `npm install -g anosys-sdk-antigravity` |
+| [anosys-sdk-core](packages/js/core/) | 2.0.0 | `npm install anosys-sdk-core` |
+| [anosys-sdk-openai](packages/js/openai/) | 1.1.0 | `npm install anosys-sdk-openai openai` |
+| [anosys-sdk-openai-agents](packages/js/openai-agents/) | 1.1.0 | `npm install anosys-sdk-openai-agents @openai/agents` |
+| [anosys-sdk-anthropic](packages/js/anthropic/) | 1.1.0 | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` |
+| [anosys-sdk-claude-agents](packages/js/claude-agents/) | 1.1.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
+| [anosys-sdk-claude-code](packages/js/claude-code/) | 0.3.0 | `npx -y anosys-sdk-claude-code install` |
+| [anosys-sdk-codex](packages/js/codex/) | 0.2.0 | `npm install -g anosys-sdk-codex` |
+| [anosys-sdk-antigravity](packages/js/antigravity/) | 0.2.0 | `npm install -g anosys-sdk-antigravity` |
 
 ## Getting started
 
@@ -165,23 +166,30 @@ npm install -g anosys-sdk-antigravity
 anosys-antigravity install
 ```
 
-Choose one language implementation per tool to avoid duplicate collection. Python Codex 0.1.1 accepts the turn-completion notification argument and applies the saved redaction setting. Users of 0.1.0 should upgrade. Codex notify callbacks are separate from lifecycle hooks listed by /hooks. Restart each coding tool after changing its configuration.
+Choose one language implementation per tool to avoid duplicate collection. Codex notify callbacks are separate from lifecycle hooks listed by /hooks. Restart each coding tool after changing its configuration.
 
 ## Content controls and encryption
 
-Content capture is enabled by default in the Anthropic and Claude Agent SDK integrations. Set capture_content=False in Python or captureContent: false in JavaScript to omit conversation and tool content from those integrations. Coding-tool installers offer --redaction to replace supported content fields; this is field masking, not automatic detection of every kind of personal data.
+Every package collects at one of three levels: `off`, `metadata` or `full`.
 
-The OpenAI, Anthropic, Claude Agents, Claude Code, and Codex integrations support opt-in encryption of selected string fields before telemetry is sent:
+- **Application SDKs** (OpenAI, OpenAI Agents, Anthropic, Claude Agent SDK, decorators) default to `full`. Use `capture_content=False` in Python, `captureContent: false` in JavaScript, or `ANOSYS_COLLECTION_LEVEL=metadata` to send metadata only.
+- **Coding-tool hooks** (Claude Code, Codex, Antigravity) default to `metadata`. Full content requires accepting the [data collection policy](PRIVACY.md) with `<tool> privacy full`, and `<tool> privacy off` stops collection.
+- `ANOSYS_DISABLE=1` turns everything off, and a project `.anosys` file with `level=metadata` or `level=off` lowers the level for that folder. Nothing can raise a level the user lowered.
+
+Each record says which level applied in `cvs198`. Every package keeps requests under 10 MB (`ANOSYS_MAX_BATCH_BYTES`).
+
+All integrations can encrypt content before it is sent:
 
 ```bash
 export ANOSYS_ENCRYPTION_KEY="your-secret-passphrase"
+export ANOSYS_ENCRYPTION_SALT="your-workspace-salt"
 # Optional: replaces the default field selection
 export ANOSYS_ENCRYPTED_COLUMNS="llm_input,llm_output,cvs199"
 ```
 
-The implementation uses SHA-256 key derivation, AES-256-CBC, a fixed zero IV, PKCS#7 padding, and Base64 ciphertext prefixed with enc:. It encrypts selected strings, not the complete record. Non-string values are skipped, and untargeted fields remain visible. This format is deterministic and does not authenticate ciphertext. Keep the passphrase outside source control and configure browser decryption separately.
+With a key set, every column outside the metadata allowlist is encrypted; ids, timing, models and token counts stay readable. The `enc2` format uses PBKDF2-SHA256 key derivation with a workspace salt and deterministic AES-256-GCM, so dashboards can still group and join on encrypted values. Keep the passphrase outside source control.
 
-See [content controls](DATA_CONTROLS.md) for coverage, default columns, environment configuration, and limitations. Antigravity 0.1.0 supports content redaction but does not implement selected-field encryption.
+See [content controls](DATA_CONTROLS.md) for coverage, default columns, size limits and the format, and [PRIVACY.md](PRIVACY.md) for what the hooks collect.
 
 ## Examples and references
 
@@ -192,6 +200,15 @@ See [content controls](DATA_CONTROLS.md) for coverage, default columns, environm
 | Support copilot | [Notebook](examples/anosys_openai_support_copilot_demo.ipynb) | [Notebook](examples/anosys_anthropic_support_copilot_demo.ipynb) |
 | Research pipeline | [Notebook](examples/anosys_openai_research_pipeline_demo.ipynb) | [Notebook](examples/anosys_claude_agents_research_pipeline_demo.ipynb) |
 
+Other examples:
+
+- [Decorators](examples/anosys_core_decorators_poc.ipynb): trace your own functions with `@anosys_logger`, including async functions, generators and errors.
+- [LangChain](examples/anosys_langchain_agentic_poc.ipynb): a LangChain tool-calling loop on OpenAI, traced through `AnosysOpenAILogger`.
+- [OpenRouter](examples/anosys_openrouter_agentic_poc.ipynb): the same loop against models served by OpenRouter.
+
+References:
+
+- [Release notes](RELEASE_NOTES.md)
 - [Telemetry variables](TELEMETRY_VARIABLES.md)
 - [Claude Code variables](CLAUDE_CODE_VARIABLES.md)
 - [Column mappings](MAPPINGS.md)
@@ -204,11 +221,10 @@ See [content controls](DATA_CONTROLS.md) for coverage, default columns, environm
 ```bash
 make install-dev
 make test
-make lint
-make build-py
+make healthcheck   # before every release
 ```
 
-The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run npm pack --dry-run from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. Provider-dependent notebooks require credentials and are not integration tests of a live model service.
+`make healthcheck` runs the [release health check](testcases/README.md): content leaks at every level, the privacy settings, the real hooks and SDK clients end to end against a local fake server, and package contents. The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run `npm pack --dry-run` from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. The example notebooks need provider and AnoSys keys.
 
 ## Releases
 
@@ -218,7 +234,7 @@ scripts/release.sh <component> <new-version>
 
 | Component | Package | Registry |
 | --- | --- | --- |
-| core | anosys-sdk-core | PyPI |
+| core / core-js | anosys-sdk-core | PyPI / npm |
 | openai-py / openai-js | anosys-sdk-openai | PyPI / npm |
 | openai-agents-py / openai-agents-js | anosys-sdk-openai-agents | PyPI / npm |
 | anthropic-py / anthropic-js | anosys-sdk-anthropic | PyPI / npm |
@@ -230,7 +246,7 @@ scripts/release.sh <component> <new-version>
 | antigravity | anosys-antigravity | PyPI |
 | antigravity-js | anosys-sdk-antigravity | npm |
 
-The script updates the manifest and asks before committing, tagging, and pushing. Tags use <component>-v<version> and trigger the corresponding GitHub Actions workflow. Review package guides and this version table when publishing a release.
+The script updates the manifest and asks before committing, tagging and pushing. Tags use `<component>-v<version>` and trigger the matching GitHub Actions workflow. Release `core` and `core-js` first, since every other package depends on them, and update [RELEASE_NOTES.md](RELEASE_NOTES.md) and the version table above.
 
 ## License
 

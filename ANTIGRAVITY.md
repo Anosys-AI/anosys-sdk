@@ -33,7 +33,7 @@ Use an AnoSys **Claude Code & Codex CLI (CC)** endpoint key from [integration op
 ## Configuration
 
 ```bash
-anosys-antigravity install --api-key "your-cc-endpoint-key" --redaction --yes
+anosys-antigravity install --api-key "your-cc-endpoint-key" --yes
 ```
 
 For project-specific installation, add --workspace. The installer writes hooks and credentials to:
@@ -43,9 +43,9 @@ For project-specific installation, add --workspace. The installer writes hooks a
 | Global | ~/.gemini/config/hooks.json | ~/.gemini/config/anosys-env.json |
 | Workspace | .agents/hooks.json | .agents/anosys-env.json |
 
-The runner searches the current working directory and its parents for the nearest workspace configuration, then fills missing values from the global configuration. Explicit ANOSYS_HOOK_APIKEY, ANOSYS_HOOK_ENDPOINT_URL, and REDACTION environment variables take precedence over saved values.
+The runner searches the current working directory and its parents for the nearest workspace configuration, then fills missing values from the global configuration. Explicit ANOSYS_HOOK_APIKEY and ANOSYS_HOOK_ENDPOINT_URL environment variables take precedence over saved values.
 
-The command supports --endpoint-url, --redaction, --no-redaction, --auto-update, and --no-auto-update. For Python virtual environments or Node version managers, ensure the hook executable remains available to Antigravity or use an absolute path in the hook configuration.
+The command supports --endpoint-url, --auto-update, and --no-auto-update (--redaction is still accepted and means metadata). For Python virtual environments or Node version managers, ensure the hook executable remains available to Antigravity or use an absolute path in the hook configuration.
 
 ## Verify delivery
 
@@ -67,4 +67,4 @@ For workspace installations, pass --workspace to status and uninstall as well as
 
 The integration captures prompts, responses, available reasoning blocks, tool input/output, IDE context when present, settings changes, and execution duration. Token counters are not exposed in the hook inputs and transcripts handled by version 0.1.0. Emitted zero token fields mean **unavailable**, not zero consumption. Token spend and cost cannot be inferred from those fields.
 
-Content redaction is optional and disabled by default. Version 0.1.0 does not implement selected-field encryption. Read [content controls](DATA_CONTROLS.md) and the [Antigravity variables reference](ANTIGRAVITY_VARIABLES.md) before collecting sensitive data.
+By default only metadata is sent; full content needs `anosys-antigravity privacy full` and acceptance of the [data-collection policy](PRIVACY.md). Content fields are encrypted when ANOSYS_ENCRYPTION_KEY is set. Read [content controls](DATA_CONTROLS.md) and the [Antigravity variables reference](ANTIGRAVITY_VARIABLES.md) before collecting sensitive data.

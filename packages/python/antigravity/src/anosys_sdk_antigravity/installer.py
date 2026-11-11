@@ -19,7 +19,6 @@ from anosys_sdk_antigravity.constants import (
     EVENTS,
     GLOBAL_ENV_FILE,
     GLOBAL_HOOKS_FILE,
-    HOOK_COMMAND,
     HOOK_NAME,
     HOOK_TIMEOUT_SECONDS,
 )
@@ -84,6 +83,7 @@ def backup(path: Path) -> Optional[Path]:
         timestamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
         backup_path = path.with_name(f"{path.name}.{timestamp}.bak")
         shutil.copy2(path, backup_path)
+        os.chmod(backup_path, 0o600)  # backups can hold the API key
         return backup_path
     return None
 
@@ -99,11 +99,17 @@ def has_anosys_hook(data: Dict[str, Any]) -> bool:
     return any(ev in block for ev in EVENTS)
 
 
-def update_hooks_config(hooks_path: Path, command: str = HOOK_COMMAND) -> bool:
+def hook_command() -> str:
+    """The hook command: this interpreter by absolute path, never a bare PATH lookup."""
+    return f'"{sys.executable}" -m anosys_sdk_antigravity.cli run'
+
+
+def update_hooks_config(hooks_path: Path, command: Optional[str] = None) -> bool:
     """
     Idempotently register or update the anosys-tracing hook block in hooks.json.
     """
     data = load_json(hooks_path)
+    command = command or hook_command()
 
     hook_block: Dict[str, Any] = {}
     for ev in EVENTS:
@@ -145,14 +151,14 @@ def update_env_config(
     env_path: Path,
     api_key: str = "",
     endpoint_url: str = DEFAULT_INGESTION_URL,
-    redaction: bool = False,
 ) -> None:
     """Write or update anosys-env.json configuration file."""
-    config: Dict[str, Any] = {
-        "ANOSYS_HOOK_APIKEY": api_key,
-        "ANOSYS_HOOK_ENDPOINT_URL": endpoint_url,
-        "REDACTION": "true" if redaction else "false",
-    }
+    # What is collected is set with `anosys-antigravity privacy`. A custom
+    # endpoint is honoured only in the global file (workspace files are limited
+    # to the key, see hook_runner.WORKSPACE_ALLOWED_KEYS).
+    config: Dict[str, Any] = {"ANOSYS_HOOK_APIKEY": api_key}
+    if endpoint_url and endpoint_url != DEFAULT_INGESTION_URL:
+        config["ANOSYS_HOOK_ENDPOINT_URL"] = endpoint_url
     write_json_atomic(env_path, config)
     try:
         os.chmod(env_path, 0o600)
