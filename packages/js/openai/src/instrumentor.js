@@ -111,15 +111,6 @@ class BridgeLoggerProvider {
   }
 }
 
-function installBridgeLogger() {
-  if (!_instrumentation) return;
-  try {
-    _instrumentation.setLoggerProvider(new BridgeLoggerProvider());
-  } catch (err) {
-    log.warn('Could not register AnoSys BridgeLoggerProvider on instrumentation:', err);
-  }
-}
-
 // ── OpenAI patching (works with ESM imports and already-loaded instances) ─────────
 
 let defaultOpenAI = null;
@@ -281,12 +272,11 @@ export function setupTracing(apiUrl, useBatchProcessor = false, getUserContext =
 
   if (!_instrumentation) {
     _instrumentation = new OpenAIInstrumentation({ enrichTokens: true, captureMessageContent });
+    _instrumentation.setLoggerProvider(new BridgeLoggerProvider());
     _instrumentation.setTracerProvider(provider);
-    installBridgeLogger();
     _instrumentation.enable();
   } else {
     _instrumentation.setConfig({ enrichTokens: true, captureMessageContent });
-    installBridgeLogger();
   }
 
   // Ensure default and loaded OpenAI classes are patched
