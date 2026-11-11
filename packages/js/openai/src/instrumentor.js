@@ -1,5 +1,4 @@
 import { trace, SpanStatusCode } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { BatchSpanProcessor, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { OpenAIInstrumentation } from '@opentelemetry/instrumentation-openai';
@@ -23,11 +22,11 @@ let _bridgeInstalled = false;
 let _activeExporter = null;
 
 // ── Bridge Logger: connects @opentelemetry/instrumentation-openai logs to spans ──
+// The instrumentation emits prompts and answers as log records only because AnoSys
+// turned on captureMessageContent. They are copied onto the span for AnoSys and go
+// nowhere else: never to the app's global logger provider or its log exporters.
 
 class BridgeLogger {
-  constructor(delegate = null) {
-    this._delegate = delegate;
-  }
 
   emit(record) {
     try {
@@ -86,28 +85,13 @@ class BridgeLogger {
     } catch {
       // Logger bridge must never crash instrumented execution
     }
-
-    if (this._delegate && typeof this._delegate.emit === 'function') {
-      try {
-        this._delegate.emit(record);
-      } catch {
-        // Delegate errors ignored
-      }
-    }
   }
 }
 
+/** Given only to the OpenAI instrumentation (setLoggerProvider); the global provider is never touched. */
 class BridgeLoggerProvider {
-  constructor(delegateProvider = null) {
-    this._delegateProvider = delegateProvider;
-  }
-
-  getLogger(name, version, options) {
-    const provider = this._delegateProvider || logs.getLoggerProvider();
-    const delegate = provider && typeof provider.getLogger === 'function' && !(provider instanceof BridgeLoggerProvider)
-      ? provider.getLogger(name, version, options)
-      : null;
-    return new BridgeLogger(delegate);
+  getLogger() {
+    return new BridgeLogger();
   }
 }
 

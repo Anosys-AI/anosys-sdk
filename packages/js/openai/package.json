@@ -1,7 +1,7 @@
 {
   "name": "anosys-sdk-openai",
   "version": "1.1.0",
-  "description": "AnoSys SDK for OpenAI \u2014 automatic instrumentation and logging for OpenAI API calls",
+  "description": "AnoSys SDK for OpenAI — automatic instrumentation and logging for OpenAI API calls",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
   "homepage": "https://anosys.ai",
@@ -32,7 +32,6 @@
   ],
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/api-logs": ">=0.51.0 <1.0.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@opentelemetry/instrumentation-openai": "^0.7.0",
@@ -41,5 +40,8 @@
   },
   "scripts": {
     "test": "node --test test/basic.test.js test/slots.test.js test/instrumentor.test.js"
+  },
+  "devDependencies": {
+    "@opentelemetry/api-logs": ">=0.51.0 <1.0.0"
   }
 }
