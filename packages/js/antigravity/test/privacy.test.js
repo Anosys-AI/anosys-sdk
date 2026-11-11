@@ -65,6 +65,8 @@ test('the hook log never holds prompt text', async () => {
   await hookRunner.processTurns('stop', { transcriptPath: transcript, conversationId: 's2' }, hookRunner.getConfig(), METADATA);
   if (fs.existsSync(hookRunner.LOG_FILE)) {
     assert.ok(!fs.readFileSync(hookRunner.LOG_FILE, 'utf8').includes(transcript));
-    assert.equal(fs.statSync(hookRunner.LOG_FILE).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') {
+      assert.equal(fs.statSync(hookRunner.LOG_FILE).mode & 0o777, 0o600);
+    }
   }
 });

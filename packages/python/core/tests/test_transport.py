@@ -88,7 +88,8 @@ def test_queue_bounds(tmp_path):
     queue.save(PendingQueue.entries_for([{"n": i, "pad": "x" * 100} for i in range(50)]))
     entries = queue.load()
     assert 0 < len(entries) < 50 and entries[-1]["record"]["n"] == 49   # newest kept
-    assert stat.S_IMODE(os.stat(tmp_path / "q.jsonl").st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(os.stat(tmp_path / "q.jsonl").st_mode) == 0o600
     old = [{"record": {"n": 1}, "first_failed": time.time() - 3600, "attempts": 1},
            {"record": {"n": 2}, "first_failed": time.time(), "attempts": 2},
            {"record": {"n": 3}, "first_failed": time.time(), "attempts": 1}]

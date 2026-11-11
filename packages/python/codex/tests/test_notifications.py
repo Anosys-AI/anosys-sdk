@@ -34,7 +34,8 @@ def test_cli_accepts_codex_notification_argument(tmp_path):
     assert "[DRY RUN]" in log and "at 'metadata'" in log
     # the log never contains the notification content
     assert "synthetic test" not in log and "synthetic result" not in log
-    assert (log_file.stat().st_mode & 0o777) == 0o600
+    if os.name != "nt":
+        assert (log_file.stat().st_mode & 0o777) == 0o600
 
 
 def test_saved_redaction_means_metadata(tmp_path):

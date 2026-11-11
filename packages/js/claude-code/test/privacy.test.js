@@ -120,7 +120,9 @@ describe('transcripts', () => {
     const log = fs.readFileSync(hookRunner.LOG_FILE, 'utf8');
     assert.ok(log.includes('[DRY RUN]') && log.includes("at 'metadata'"));
     assert.ok(!log.includes('sk-ant') && !log.includes('Use key'));
-    assert.equal(fs.statSync(hookRunner.LOG_FILE).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') {
+      assert.equal(fs.statSync(hookRunner.LOG_FILE).mode & 0o777, 0o600);
+    }
   });
 
   it('advances watermark when collection level is off (B3 fix)', async () => {

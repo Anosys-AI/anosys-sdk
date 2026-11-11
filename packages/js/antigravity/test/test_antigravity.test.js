@@ -297,7 +297,9 @@ test('installer manages anosys-env.json lifecycle', () => {
   assert.equal(data.ANOSYS_HOOK_APIKEY, 'key-123');
   assert.equal(data.ANOSYS_HOOK_ENDPOINT_URL, 'https://test/ingest');
   assert.equal(data.REDACTION, undefined);
-  assert.equal(fs.statSync(envFile).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(envFile).mode & 0o777, 0o600);
+  }
 
   assert.equal(removeEnvConfig(envFile), true);
   assert.equal(fs.existsSync(envFile), false);

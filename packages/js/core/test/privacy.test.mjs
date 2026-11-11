@@ -28,7 +28,9 @@ describe('effectiveLevel', () => {
     assert.throws(() => writeConsent(FULL, 'test'));
     writeConsent(FULL, 'test', POLICY_VERSION);
     assert.equal(effectiveLevel(null, dir).level, FULL);
-    assert.equal(fs.statSync(process.env.ANOSYS_CONSENT_FILE).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') {
+      assert.equal(fs.statSync(process.env.ANOSYS_CONSENT_FILE).mode & 0o777, 0o600);
+    }
     assert.equal(readConsent().policy_version, POLICY_VERSION);
   });
 

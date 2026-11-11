@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -185,7 +186,8 @@ def test_installer_config_lifecycle():
         env_content = env_path.read_text(encoding="utf-8")
         assert "test-api-key" in env_content
         assert "REDACTION" not in env_content
-        assert (env_path.stat().st_mode & 0o777) == 0o600
+        if os.name != "nt":
+            assert (env_path.stat().st_mode & 0o777) == 0o600
 
         # 5. Remove config
         removed = remove_codex_config(config_path)

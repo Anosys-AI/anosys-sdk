@@ -139,7 +139,9 @@ test('the log never contains the notification content', async () => {
   await hookRunner.run(['run', event('l1')], { post: fakePost(200) });
   const text = fs.readFileSync(hookRunner.LOG_FILE, 'utf8');
   assert.ok(!text.includes('hello') && !text.includes('last-assistant-message'));
-  assert.equal(fs.statSync(hookRunner.LOG_FILE).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(hookRunner.LOG_FILE).mode & 0o777, 0o600);
+  }
 });
 
 test('parseArgv separates a chained notify command', () => {

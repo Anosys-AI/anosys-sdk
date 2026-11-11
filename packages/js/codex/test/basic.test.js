@@ -195,7 +195,9 @@ test('installer manages config.toml lifecycle idempotently and preserves existin
   const envText = fs.readFileSync(envPath, 'utf8');
   assert.ok(envText.includes('key-123'));
   assert.ok(!envText.includes('REDACTION'));
-  assert.equal(fs.statSync(envPath).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(envPath).mode & 0o777, 0o600);
+  }
 
   // 5. Remove config
   const removed = removeCodexConfig(configPath);

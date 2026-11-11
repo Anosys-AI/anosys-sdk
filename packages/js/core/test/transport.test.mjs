@@ -79,7 +79,9 @@ describe('failure handling', () => {
         assert.equal(await deliver('u', [{ turn }], queue, marker, { post: fakePost(failure, failure) }), 0);
       }
       assert.equal(queue.load().length, 3);
-      assert.equal(fs.statSync(path.join(d, 'q.jsonl')).mode & 0o777, 0o600);
+      if (process.platform !== 'win32') {
+        assert.equal(fs.statSync(path.join(d, 'q.jsonl')).mode & 0o777, 0o600);
+      }
       assert.equal(await deliver('u', [{ turn: 3 }], queue, marker, { post: fakePost(200, 200) }), 4);
       assert.ok(!fs.existsSync(path.join(d, 'q.jsonl')));
     });

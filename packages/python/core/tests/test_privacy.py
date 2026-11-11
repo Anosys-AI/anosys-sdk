@@ -44,8 +44,9 @@ def test_old_policy_consent_falls_back(isolated):
 def test_consent_file_is_private_and_readable(isolated):
     write_consent(OFF, method="test")
     assert read_consent()["level"] == OFF
-    mode = stat.S_IMODE(os.stat(isolated / "consent.json").st_mode)
-    assert mode == 0o600
+    if os.name != "nt":
+        mode = stat.S_IMODE(os.stat(isolated / "consent.json").st_mode)
+        assert mode == 0o600
 
 
 def test_precedence(monkeypatch, isolated):
