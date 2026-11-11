@@ -15,12 +15,13 @@ import {
   scrubSecrets,
 } from '../src/index.js';
 
+import { isAnthropicSpan } from '../../anthropic/src/hooks.js';
+import { extractGenAiSpanInfo } from '../../anthropic/src/genai.js';
+
 const { anosysLogger } = createDecorators();
 
 const require = createRequire(import.meta.url);
 const { calculateCost: codexCalculateCost } = require('../../codex/src/mapper.js');
-const { isAnthropicSpan } = require('../../anthropic/src/hooks.js');
-const { extractGenAiSpanInfo } = require('../../anthropic/src/genai.js');
 const { extractToolDetails, transformAntigravityTurn } = require('../../antigravity/src/mapper.js');
 const { buildTurn } = require('../../antigravity/src/transcript.js');
 
