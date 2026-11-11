@@ -13,6 +13,7 @@ AnoSys employs a **Dual Schema Architecture** across all SDK packages (Python an
 1. **Top-Level Named Columns & Protobuf Schema**: Human-readable columns defined by OpenTelemetry GenAI semantic conventions and AnoSys extensions (e.g. `gen_ai_usage_input_tokens`, `gen_ai_request_model`, `llm_input`).
 2. **Physical Custom Variable (CV) Columns**: Indexed database columns (`cvs1`–`cvs200` for strings, `cvn1`–`cvn43` for numbers, `cvb1`–`cvb10` for booleans) used for zero-schema migration and fast aggregation.
 3. **Full Raw Payload (`cvs199`)**: Complete JSON snapshot of the span, turn, or agent event.
+4. **Reserved System Slots (`cvs198`–`cvs200`)**: Present on every record across all schemas: `cvs198` carries the collection consent/policy label, `cvs199` holds the full raw JSON payload, and `cvs200` identifies the emitter telemetry source tag.
 
 ### The UI Hybrid Resolution Flow
 
@@ -148,7 +149,7 @@ These fields are nested under `attributes.gen_ai.request.*`, `attributes.gen_ai.
 | **Agent ID** | `gen_ai_agent_id` | `cvs20` | `string` | 1. `attributes["gen_ai.agent.id"]`<br>2. `attributes.gen_ai.agent.id`<br>3. `agent_id`<br>4. `raw.agent_id` |
 | **Agent Name** | `gen_ai_agent_name` | `otel_name` / `cvs40` | `string` | 1. `attributes["gen_ai.agent.name"]`<br>2. `attributes.gen_ai.agent.name`<br>3. `data.span_data.name`<br>4. `agent_map_name` |
 | **Agent Description / Role** | `gen_ai_agent_description`| `cvs35` | `string` | 1. `attributes["gen_ai.agent.description"]`<br>2. `attributes.gen_ai.agent.description`<br>3. `agent_description` |
-| **Conversation / Session ID** | `gen_ai_conversation_id` | `cvs1` (`session_id`) | `string` | 1. `attributes["gen_ai.conversation.id"]`<br>2. `attributes.gen_ai.conversation.id`<br>3. `session_id`<br>4. `sessionId`<br>5. `data.trace_id`<br>*(In App SDKs, promoted from `user_context.session_id` at `metadata` level)* |
+| **Conversation / Session ID** | `gen_ai_conversation_id` | `cvs1` (`session_id`) | `string` | 1. `attributes["gen_ai.conversation.id"]`<br>2. `attributes.gen_ai.conversation.id`<br>3. `session_id`<br>4. `sessionId`<br>5. `data.trace_id`<br>*(Note: `user_context.session_id` is protected strictly in `cvs5` and is **never** copied into `gen_ai_conversation_id`)* |
 | **Agent Handoffs** | `agent_handoffs` | `cvs62` | `string` | 1. `data.span_data.handoffs`<br>2. Comma-separated handoffs list |
 | **From Agent (Handoff Source)**| `agent_from` | `cvs78` | `string` | 1. `data.span_data.from_agent` |
 | **To Agent (Handoff Target)** | `agent_to` | `cvs79` | `string` | 1. `data.span_data.to_agent` |
@@ -187,7 +188,7 @@ These fields are nested under `attributes.gen_ai.request.*`, `attributes.gen_ai.
 | **Git Branch** | `git_branch` | `cvs3` | `string` | 1. `git_branch`<br>2. `raw.git_branch` |
 | **Operating System User** | `os_user` | `cvs33` | `string` | 1. `os_user`<br>2. `raw.os_user` |
 | **Integration SDK Version** | `integration_version` | `cvs32` | `string` | 1. `integration_version`<br>2. `raw.integration_version` |
-| **User Context Payload** | `user_context` | `cvs5` / `cvs3` | `json` / `string` | 1. `user_context`<br>2. `attributes.user_context`<br>3. `attributes.anosys.user_context` |
+| **User Context Payload** | `user_context` | `cvs5` / `cvs3` | `json` / `string` | 1. `user_context`<br>2. `attributes.user_context`<br>3. `attributes.anosys.user_context`<br>*(Treated as content: stripped at `metadata` level; encrypted with `enc2:` at `full` level when encryption key is active)* |
 | **Active Document Path** | `active_document` | `cvs70` | `string` | 1. `active_document`<br>2. `raw.active_document`<br>3. IDE editor context |
 | **Active Document Language** | `active_document_language`| `cvs71` | `string` | 1. `active_document_language`<br>2. `raw.active_document_language` |
 | **User Settings Change** | `user_settings_change` | `cvs75` | `string` | 1. `user_settings_change`<br>2. `raw.user_settings_change` |
@@ -195,6 +196,7 @@ These fields are nested under `attributes.gen_ai.request.*`, `attributes.gen_ai.
 | **Artifact Storage Directory**| `artifact_dir` | `cvs89` | `string` | 1. `artifact_dir`<br>2. `raw.artifact_dir` |
 | **Workspace Roots** | `workspace_paths` | `cvs93` | `json` / `string` | 1. `workspace_paths`<br>2. `raw.workspace_paths` |
 | **IDE Idle State** | `fully_idle` | `cvb3` | `boolean` | 1. `fully_idle`<br>2. `raw.fully_idle` |
+| **Consent & Policy Stamp** | `consent` / `consent_level` | `cvs198` | `string` | 1. `cvs198`<br>2. `consent`<br>3. `consent_level`<br>*(Collection level label: `full;<policy_version>` or `metadata;none` in hooks; `full;app` or `metadata;app` in app SDKs)* |
 | **Source Tag Identifier** | `from_source` | `cvs200` | `string` | 1. `from_source`<br>2. `source`<br>3. Top-level envelope tag |
 
 ---

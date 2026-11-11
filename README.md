@@ -205,13 +205,9 @@ See [content controls](DATA_CONTROLS.md) for coverage, default columns, size lim
 
 ```bash
 make install-dev
-make test
-make healthcheck      # release health check: leaks, privacy settings, end-to-end runs
 ```
 
-Run `make healthcheck` (or `testcases/run_all.sh`) before every release. See [testcases/README.md](testcases/README.md).
-
-The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run npm pack --dry-run from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. Provider-dependent notebooks require credentials and are not integration tests of a live model service.
+The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run `npm pack --dry-run` from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. Provider-dependent notebooks require credentials.
 
 ## Releases
 

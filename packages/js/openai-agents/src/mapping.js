@@ -86,7 +86,6 @@ export function span2json(span) {
     otel_duration_ms:         (startTs != null && endTs != null) ? endTs - startTs : null,
     otel_exception_message:   toStr(data.error),
     cvs5:                     toStr(userCtx),
-    gen_ai_conversation_id:   userCtx?.session_id ? String(userCtx.session_id) : null,
     cvs60:                    toStr(data.object),
     cvs61:                    toStr(source),
   };

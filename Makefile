@@ -1,6 +1,22 @@
-.PHONY: install install-dev test lint build clean healthcheck healthcheck-quick \
-        install-py install-py-dev test-py lint-py build-py \
-        install-js test-js build-js
+.PHONY: help install install-dev install-py install-py-dev install-js \
+        test test-py test-js test-all lint lint-py format-py build build-py build-js \
+        clean healthcheck healthcheck-quick
+
+# Default target: display help
+help:
+	@echo "================================================================================"
+	@echo "                   AnoSys SDK Developer Shortcuts                               "
+	@echo "================================================================================"
+	@echo "  make install-dev       - Install all Python & JS packages for local development"
+	@echo "  make test              - Run Python and JS unit test suites"
+	@echo "  make test-all          - Run all 7 SDK verification suites (test/run_all_tests.sh)"
+	@echo "  make healthcheck       - Run release healthcheck suite (test/healthcheck)"
+	@echo "  make healthcheck-quick - Run quick healthcheck (static, leaks, levels)"
+	@echo "  make lint              - Lint Python packages with ruff"
+	@echo "  make format-py         - Auto-format Python packages with ruff"
+	@echo "  make build             - Build distribution wheels/tarballs for Python and JS"
+	@echo "  make clean             - Remove all build artifacts, cache, and temp files"
+	@echo "================================================================================"
 
 # ── Python ────────────────────────────────────────────────────────────────────
 
@@ -11,21 +27,14 @@ install-py:
 	pip install -e packages/python/claude_code
 	pip install -e packages/python/codex
 	pip install -e packages/python/anthropic
-	pip install -e packages/python/claude_agents
+	pip install --no-deps -e packages/python/claude_agents 2>/dev/null || pip install -e packages/python/claude_agents
 	pip install -e packages/python/antigravity
 
 install-py-dev: install-py
-	pip install pytest pytest-asyncio ruff mypy
+	pip install pytest pytest-asyncio pytest-cov ruff mypy cryptography requests python-dotenv opentelemetry-api opentelemetry-sdk
 
 test-py:
-	pytest packages/python/core/tests -v
-	pytest packages/python/openai/tests -v
-	pytest packages/python/openai_agents/tests -v
-	pytest packages/python/claude_code/tests -v
-	pytest packages/python/codex/tests -v
-	pytest packages/python/anthropic/tests -v
-	pytest packages/python/claude_agents/tests -v
-	pytest packages/python/antigravity/tests -v
+	env -u ANOSYS_ENCRYPTION_KEY -u ANOSYS_ENCRYPTION_SALT -u CODEX_HOME pytest packages/python -v
 
 lint-py:
 	ruff check packages/python/
@@ -35,14 +44,12 @@ format-py:
 	ruff format packages/python/
 
 build-py:
-	(cd packages/python/core && python -m build)
-	(cd packages/python/openai && python -m build)
-	(cd packages/python/openai_agents && python -m build)
-	(cd packages/python/claude_code && python -m build)
-	(cd packages/python/codex && python -m build)
-	(cd packages/python/anthropic && python -m build)
-	(cd packages/python/claude_agents && python -m build)
-	(cd packages/python/antigravity && python -m build)
+	@for pkg in packages/python/*; do \
+		if [ -f "$$pkg/pyproject.toml" ]; then \
+			echo "Building $$pkg..."; \
+			(cd "$$pkg" && python -m build) || exit 1; \
+		fi \
+	done
 
 # ── JavaScript ────────────────────────────────────────────────────────────────
 
@@ -50,19 +57,20 @@ install-js:
 	npm install --prefix packages/js
 
 test-js:
-	npm test --workspaces --prefix packages/js
+	env -u ANOSYS_ENCRYPTION_KEY -u ANOSYS_ENCRYPTION_SALT npm test --workspaces --prefix packages/js
 
 build-js:
 	npm run build --workspaces --if-present --prefix packages/js
 
-# ── Combined shortcuts ────────────────────────────────────────────────────────
+# ── Combined Shortcuts ────────────────────────────────────────────────────────
 
 install: install-py install-js
 install-dev: install-py-dev install-js
 test: test-py test-js
 lint: lint-py
+build: build-py build-js
 
-# Clean build artifacts
+# Clean build artifacts, temporary caches, and test outputs
 clean:
 	rm -rf packages/python/*/dist
 	rm -rf packages/python/*/build
@@ -70,12 +78,19 @@ clean:
 	rm -rf packages/python/*/src/*.egg-info
 	rm -rf packages/js/*/node_modules
 	rm -rf packages/js/node_modules
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type d -name .pytest_cache -exec rm -rf {} +
+	rm -rf test/healthcheck/.results
+	rm -rf .coverage htmlcov
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
 
-# Release health check (see testcases/README.md)
+# ── Release Verification & Healthchecks (in test/) ────────────────────────────
+
 healthcheck:
-	testcases/run_all.sh
+	bash test/healthcheck/run_healthcheck.sh
 
 healthcheck-quick:
-	testcases/run_all.sh --quick
+	bash test/healthcheck/run_healthcheck.sh --quick
+
+test-all:
+	bash test/run_all_tests.sh
