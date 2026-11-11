@@ -1,61 +1,98 @@
-# AnoSys SDK 2.0 Release Notes
+# Release notes
 
-## Privacy-First Observability & Secure Consent Architecture
+## AnoSys SDK 2.0 — November 2026
 
-AnoSys SDK 2.0 introduces a revamped privacy core, unified data controls, non-intrusive OpenTelemetry coexistence, and comprehensive client-side encryption across all Python and JavaScript packages.
+This release changes what the SDKs collect by default and gives users and developers more control over it. The coding-tool hooks now send metadata only until the user opts in. Every package shares one collection-level setting, and encryption covers all content fields. Read the upgrade notes before rolling it out.
 
----
+### Upgrade notes
 
-### Key Highlights
+- **The coding-tool hooks send metadata only by default.** This applies to Claude Code, Codex and Antigravity. After upgrading, records keep ids, timing, models, tokens and cost, but no prompts, answers, tool input or output, commands or file contents. To keep collecting content, each user runs `<tool> privacy full` and accepts the [data collection policy](PRIVACY.md). Dashboards built on hook content will be empty until they do.
+- **Every package needs `anosys-sdk-core` 2.0.0.** On PyPI it is an upgrade; on npm it is a new package that all JavaScript packages now depend on. Publish core first.
+- **Run `install` again for each coding tool after upgrading.** The hook command now uses absolute paths. The old command forms are still recognised, so uninstall keeps working.
+- **`ANOSYS_API_URL` now overrides the key.** When it is set, records go to that URL and the key is not resolved. Leave it unset unless you run your own ingestion endpoint.
+- **Encryption covers more columns.** With `ANOSYS_ENCRYPTION_KEY` set, every column outside the metadata allowlist is encrypted, not just a fixed list. Queries that read content columns need the passphrase to decrypt them. `ANOSYS_ENCRYPTED_COLUMNS` still replaces the selection.
+- **Claude Code columns changed.** `cvs90` now holds the commands run and `cvs91` the files written, as in Codex and Antigravity.
+- **Python reads less from `.env`.** Only `ANOSYS_API_KEY`, `ANOSYS_API_URL` and `ANOSYS_RESOLVER_URL` are read, and they never overwrite variables already set.
+- **Old redaction settings now mean `metadata`.** `REDACTION=true` and the installers' `--redaction` flag still work.
 
-#### 1. Coding Agent Hooks Default to Metadata
-- **Claude Code, Codex, and Antigravity hooks default to `metadata` collection.**
-- At the default `metadata` level, only identifiers, execution timing, model names, token counts, and operational status are transmitted. No prompts, assistant messages, tool inputs/outputs, file contents, or shell commands are collected.
-- Capturing `full` conversation content requires explicit user acceptance of the [AnoSys Data Collection Policy](PRIVACY.md) via CLI (`<tool> privacy full`).
-- Every record explicitly carries its consent and policy state in `cvs198` (e.g., `full;2026-11-09` or `metadata;none`).
-- Collection can be disabled at any time with `<tool> privacy off` or `ANOSYS_DISABLE=1`.
+### Collection levels
 
-#### 2. Strict Privacy Ceilings
-- Project `.anosys` files and workspace settings files (`.agents/anosys-env.json`) can **only lower** the collection level (e.g. from `full` to `metadata` or `off`), **never raise it**.
-- An untrusted repository cannot escalate collection or override the user's consent.
-- User global credentials and environment keys take precedence over repository workspace files, preventing credential hijacking.
+There are three levels: `off`, `metadata` and `full`. Every record says which one applied, in `cvs198`:
 
-#### 3. Application SDKs (OpenAI, Anthropic, Agents)
-- Application SDKs instrument developer applications and default to `full` capture with consent label `<level>;app`.
-- Developers can configure `capture_content=False` (Python) or `captureContent: false` (JS) to restrict collection to `metadata` only.
-- Strict allowlisting ensures no prompt, completion, tool arguments, or message content reaches the output when collecting at `metadata`.
-- **OpenTelemetry Logger Bridge Coexistence (Fixes N2 & N3)**:
-  - In JavaScript OpenAI instrumentation, AnoSys delegates through `_instrumentation.setLoggerProvider(new BridgeLoggerProvider())` on the instrumentation instance instead of registering a process-wide global logger provider (`logs.setGlobalLoggerProvider()`).
-  - This guarantees full compatibility with existing host application logging pipelines (e.g. `@opentelemetry/sdk-node` NodeSDK, Datadog, Grafana, Pino, Winston OTel transports), regardless of whether the host application initializes its logging before or after AnoSys.
-  - The bridge forwards OpenAI instrumentation log records to the application's active logger provider while enabling AnoSys to capture token and prompt/completion content at `full` collection level without dropping host logs.
-- **User Context Plaintext Leak Prevention (Fix N4)**:
-  - Discontinued automatic copying/promotion of `user_context.session_id` into `gen_ai_conversation_id` across Anthropic (Python/JS) and OpenAI Agents integrations.
-  - Because `gen_ai_conversation_id` is an allowlisted metadata column, previously copying user session IDs (which often contain emails or user identifiers) bypassed metadata filtering.
-  - Developer `user_context` is now placed strictly into `cvs5`, ensuring it is dropped at `metadata` level and encrypted with `enc2:` at `full` level when encryption is configured.
-- **Core API Surface (Fix N1)**:
-  - Explicitly exported `RANK` collection level hierarchy in `@anosys/core` JavaScript package.
+| Record | `cvs198` |
+| --- | --- |
+| Hook record at `full`, policy accepted | `full;2026-11-09` (the policy version) |
+| Hook record at `metadata` | `metadata;none` |
+| Application SDK record | `full;app` or `metadata;app` |
 
-#### 4. End-to-End Client-Side Encryption
-- When `ANOSYS_ENCRYPTION_KEY` is configured, all content fields (prompts, completions, tool inputs/outputs, code snippets, execution results, errors, raw spans, and dynamic attributes) are encrypted client-side using AES-256-GCM with Argon2id/PBKDF2 key derivation before transmission.
-- Encrypted payloads carry the `enc2:<base64>` format, preserving valid JSON strings in structured columns for columnar databases (BigQuery, ClickHouse).
-- Only allowlisted metadata columns remain unencrypted for indexing and operational analytics.
+- **Coding-tool hooks.** Set the level per user with `<tool> privacy off|metadata|full`, for example `anosys-claude-code privacy full`. `full` requires accepting the policy.
+- **Application SDKs** (OpenAI, OpenAI Agents, Anthropic, Claude Agent SDK and the decorators). These default to `full`, because the developer chooses what their own application sends. Lower it with `capture_content=False` / `captureContent: false` or `ANOSYS_COLLECTION_LEVEL=metadata`.
+- **What can lower the level.** `ANOSYS_DISABLE=1` turns everything off. A project `.anosys` file with `level=off` or `level=metadata` applies to that folder and its subfolders. `ANOSYS_COLLECTION_LEVEL` and `REDACTION=true` can also lower it. None of these can raise the level.
+- **Antigravity workspace files** (`.agents/anosys-env.json`). These can lower the level too. They cannot change the endpoint, and they cannot replace the user's own API key.
+- **What `metadata` sends.** Only numbers, booleans and an allowlist of descriptive columns. A new field stays out until someone adds it to the list.
+- **Secret scrubbing at `full`.** Strings that look like credentials are replaced with `[SECRET]`, for example API keys, GitHub and GitLab tokens, private keys, JWTs and passwords in URLs.
+- **User context.** The context passed with `get_user_context` is stored only in `cvs5`. It is dropped at `metadata` and encrypted at `full` when a key is set.
+- **Turning collection back on.** Claude Code never sends turns written while collection was off.
 
-#### 5. Safe Ingestion Resolution
-- Endpoint resolution automatically connects using customer API keys (`ANOSYS_API_KEY`).
-- `ANOSYS_API_URL` is reserved for explicit overrides in self-hosted deployments.
-- Default configuration prevents accidental data leakage to marketing or documentation endpoints.
+### Encryption
 
-#### 6. Package Distribution Hygiene
-- Standardized package manifests across all published npm packages (`@anosys/core`, `@anosys/openai`, `@anosys/anthropic`, `@anosys/openai-agents`, `@anosys/claude-code`, `@anosys/codex`, `@anosys/antigravity`) with explicit `"files": ["src/"]` whitelist.
-- Prevents local tests, fixtures, and internal development artifacts from leaking into published production tarballs.
+- **Format.** `enc2:` values use PBKDF2-HMAC-SHA256 (600,000 iterations) and deterministic AES-256-GCM. The same value always encrypts the same way within a workspace, so `GROUP BY` and joins still work.
+- **JSON columns.** Encrypted values are stored as a JSON string, so the column stays valid JSON.
+- **Failures.** If encryption fails, the column is dropped rather than sent in clear.
 
-#### 7. Unified Verification & Regression Test Suite
-- Consolidated all tests into a single, self-contained `test/` directory.
-- Root test runner (`test/run_all_tests.sh`) coordinates 7 comprehensive validation stages:
-  1. Python pytest unit tests (350+ tests)
-  2. JavaScript package workspaces test runner (335+ tests)
-  3. Integration tests across application SDKs and coding hooks
-  4. Cross-language schema mapping & fixture compliance
-  5. Dedicated release regression suites (`test/core-js/tests/04-release-regressions.test.js`, `test/test_release_regressions.py`) locking in protections against B1–B3, S1–S5, and N1–N4
-  6. Release healthcheck & leak detector (`test/healthcheck/run_healthcheck.sh`, `make healthcheck`)
-  7. Live LLM end-to-end integration scenarios
+Details and a test vector are in [DATA_CONTROLS.md](DATA_CONTROLS.md).
+
+### Reliability
+
+**Application SDKs**
+- **Non-blocking sends.** Records go out in the background, so an instrumented call never waits on AnoSys. When the queue is full, records are dropped with a single warning.
+- **No key, no traffic.** Without an API key nothing is sent. There is no fallback endpoint.
+
+**Coding-tool hooks**
+- **Retries.** Hooks retry only timeouts, connection errors, 408, 429 and 5xx. Retries come from a local queue capped at 24 hours, 5 attempts and 50 MB. A 401 or 403 pauses collection for 6 hours.
+- **Bounded run time.** A hook run spends at most `ANOSYS_HOOK_TIME_BUDGET` seconds sending (default 20).
+- **Level changes apply to the queue.** Queued records are filtered again to the level in force when they are retried.
+- **The coding tool never fails.** Errors are logged by type only and the hook exits normally.
+
+**Both**
+- **Request size.** Requests stay under 10 MB (`ANOSYS_MAX_BATCH_BYTES`). Oversized records have their largest content fields cut, with a marker showing the original size.
+
+### Integrations
+
+- **OpenAI (JavaScript).**
+  - Prompts and answers are now captured at `full`, including in apps that load `openai` with ESM `import`.
+  - AnoSys no longer registers a process-wide OpenTelemetry logger, so the app's own logging is unaffected, and prompts are never copied into the app's logs.
+  - `patchOpenAI(client)` covers clients created before the logger.
+- **Exporters.** Each exporter now handles only its own spans. Other spans on a shared tracer provider are left alone.
+- **Codex installer.** A `notify` setting written over several lines is now handled. An existing notifier is kept and called after AnoSys.
+- **Installers.** Hooks now use absolute paths. When the installer runs from the npx cache, the hook falls back to the installed command or `npx -y <package>`. Backups and state files are readable only by the user.
+- **Claude Code on Windows.** The JavaScript hook now reads its input correctly on Windows.
+- **Decorators (Python).** `@anosys_logger` now supports generator functions as well as sync, async and async-generator functions.
+
+### Examples
+
+New notebooks:
+- [Core decorators](examples/anosys_core_decorators_poc.ipynb)
+- [LangChain with OpenAI tools](examples/anosys_langchain_agentic_poc.ipynb)
+- [OpenRouter through LangChain](examples/anosys_openrouter_agentic_poc.ipynb)
+
+The OpenAI, Anthropic and Claude Agent SDK notebooks were updated for this release.
+
+### For maintainers
+
+Run `make healthcheck` (or `testcases/run_all.sh`) before tagging. It checks for content leaks at every level, the precedence of every privacy setting, the real hooks and SDK clients end to end, and the package contents, all against a local fake server. It takes about two minutes. See [testcases/README.md](testcases/README.md).
+
+### Versions
+
+| Package | Python | JavaScript | Previous (Py / JS) |
+| --- | --- | --- | --- |
+| Core | `anosys-sdk-core` 2.0.0 | `anosys-sdk-core` 2.0.0 (new on npm) | 1.1.0 / — |
+| OpenAI | `anosys-sdk-openai` 1.1.0 | `anosys-sdk-openai` 1.1.0 | 1.0.14 / 1.0.12 |
+| OpenAI Agents | `anosys-sdk-openai-agents` 1.1.0 | `anosys-sdk-openai-agents` 1.1.0 | 1.0.13 / 1.0.12 |
+| Anthropic | `anosys-sdk-anthropic` 1.1.0 | `anosys-sdk-anthropic` 1.1.0 | 1.0.0 / 1.0.0 |
+| Claude Agent SDK | `anosys-sdk-claude-agents` 1.1.0 | `anosys-sdk-claude-agents` 1.1.0 | 1.0.0 / 1.0.0 |
+| Claude Code | `anosys-claude-code` 0.3.0 | `anosys-sdk-claude-code` 0.3.0 | 0.2.9 / 0.2.6 |
+| Codex | `anosys-codex` 0.2.0 | `anosys-sdk-codex` 0.2.0 | 0.1.1 / 0.1.0 |
+| Antigravity | `anosys-antigravity` 0.2.0 | `anosys-sdk-antigravity` 0.2.0 | 0.1.0 / 0.1.0 |
+
+Release order: `core` and `core-js` first, then the rest with `scripts/release.sh <component> <version>`.

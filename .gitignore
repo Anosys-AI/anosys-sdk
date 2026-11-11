@@ -90,3 +90,4 @@ dmypy.json
 /local-tests/
 /test/
 
+testcases/.results/

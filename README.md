@@ -170,9 +170,15 @@ Choose one language implementation per tool to avoid duplicate collection. Codex
 
 ## Content controls and encryption
 
-Content capture is enabled by default in the Anthropic and Claude Agent SDK integrations. Set capture_content=False in Python or captureContent: false in JavaScript to omit conversation and tool content from those integrations. The coding-agent hooks (Claude Code, Codex, Antigravity) send metadata only by default. Full content requires accepting the [data-collection policy](PRIVACY.md) with `<tool> privacy full`, and `<tool> privacy off` stops collection. Every package keeps requests under 10 MB (`ANOSYS_MAX_BATCH_BYTES`).
+Every package collects at one of three levels: `off`, `metadata` or `full`.
 
-All integrations support opt-in encryption of selected string fields before telemetry is sent:
+- **Application SDKs** (OpenAI, OpenAI Agents, Anthropic, Claude Agent SDK, decorators) default to `full`. Use `capture_content=False` in Python, `captureContent: false` in JavaScript, or `ANOSYS_COLLECTION_LEVEL=metadata` to send metadata only.
+- **Coding-tool hooks** (Claude Code, Codex, Antigravity) default to `metadata`. Full content requires accepting the [data collection policy](PRIVACY.md) with `<tool> privacy full`, and `<tool> privacy off` stops collection.
+- `ANOSYS_DISABLE=1` turns everything off, and a project `.anosys` file with `level=metadata` or `level=off` lowers the level for that folder. Nothing can raise a level the user lowered.
+
+Each record says which level applied in `cvs198`. Every package keeps requests under 10 MB (`ANOSYS_MAX_BATCH_BYTES`).
+
+All integrations can encrypt content before it is sent:
 
 ```bash
 export ANOSYS_ENCRYPTION_KEY="your-secret-passphrase"
@@ -181,13 +187,12 @@ export ANOSYS_ENCRYPTION_SALT="your-workspace-salt"
 export ANOSYS_ENCRYPTED_COLUMNS="llm_input,llm_output,cvs199"
 ```
 
-The `enc2` format uses PBKDF2-SHA256 key derivation with a workspace salt and deterministic AES-256-GCM, so dashboards can still group and join on encrypted values. It encrypts selected fields, not the complete record; untargeted fields remain visible. Keep the passphrase outside source control.
+With a key set, every column outside the metadata allowlist is encrypted; ids, timing, models and token counts stay readable. The `enc2` format uses PBKDF2-SHA256 key derivation with a workspace salt and deterministic AES-256-GCM, so dashboards can still group and join on encrypted values. Keep the passphrase outside source control.
 
 See [content controls](DATA_CONTROLS.md) for coverage, default columns, size limits and the format, and [PRIVACY.md](PRIVACY.md) for what the hooks collect.
 
 ## Examples and references
 
-### Production & Interactive Demos
 | Workflow | OpenAI | Anthropic / Claude Agents |
 | --- | --- | --- |
 | Chat calls | [Notebook](examples/anosys_openai_chat_poc.ipynb) | [Notebook](examples/anosys_anthropic_chat_poc.ipynb) |
@@ -195,11 +200,15 @@ See [content controls](DATA_CONTROLS.md) for coverage, default columns, size lim
 | Support copilot | [Notebook](examples/anosys_openai_support_copilot_demo.ipynb) | [Notebook](examples/anosys_anthropic_support_copilot_demo.ipynb) |
 | Research pipeline | [Notebook](examples/anosys_openai_research_pipeline_demo.ipynb) | [Notebook](examples/anosys_claude_agents_research_pipeline_demo.ipynb) |
 
-### Frameworks & Custom Pipeline Decorators
-- [Core Decorators & Custom Functions](examples/anosys_core_decorators_poc.ipynb): Function and pipeline observability with `@anosys_logger` and `@anosys_raw_logger`.
-- [LangChain with OpenAI Tools](examples/anosys_langchain_agentic_poc.ipynb): Observability for LangChain tool calling and multi-step reasoning.
-- [OpenRouter with LangChain](examples/anosys_openrouter_agentic_poc.ipynb): Observability across multi-vendor models via OpenRouter.
+Other examples:
 
+- [Decorators](examples/anosys_core_decorators_poc.ipynb): trace your own functions with `@anosys_logger`, including async functions, generators and errors.
+- [LangChain](examples/anosys_langchain_agentic_poc.ipynb): a LangChain tool-calling loop on OpenAI, traced through `AnosysOpenAILogger`.
+- [OpenRouter](examples/anosys_openrouter_agentic_poc.ipynb): the same loop against models served by OpenRouter.
+
+References:
+
+- [Release notes](RELEASE_NOTES.md)
 - [Telemetry variables](TELEMETRY_VARIABLES.md)
 - [Claude Code variables](CLAUDE_CODE_VARIABLES.md)
 - [Column mappings](MAPPINGS.md)
@@ -211,9 +220,11 @@ See [content controls](DATA_CONTROLS.md) for coverage, default columns, size lim
 
 ```bash
 make install-dev
+make test
+make healthcheck   # before every release
 ```
 
-The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run `npm pack --dry-run` from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. Provider-dependent notebooks require credentials.
+`make healthcheck` runs the [release health check](testcases/README.md): content leaks at every level, the privacy settings, the real hooks and SDK clients end to end against a local fake server, and package contents. The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run `npm pack --dry-run` from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. The example notebooks need provider and AnoSys keys.
 
 ## Releases
 
@@ -235,7 +246,7 @@ scripts/release.sh <component> <new-version>
 | antigravity | anosys-antigravity | PyPI |
 | antigravity-js | anosys-sdk-antigravity | npm |
 
-The script updates the manifest and asks before committing, tagging, and pushing. Tags use <component>-v<version> and trigger the corresponding GitHub Actions workflow. Review package guides and this version table when publishing a release.
+The script updates the manifest and asks before committing, tagging and pushing. Tags use `<component>-v<version>` and trigger the matching GitHub Actions workflow. Release `core` and `core-js` first, since every other package depends on them, and update [RELEASE_NOTES.md](RELEASE_NOTES.md) and the version table above.
 
 ## License
 

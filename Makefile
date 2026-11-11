@@ -10,8 +10,8 @@ help:
 	@echo "  make install-dev       - Install all Python & JS packages for local development"
 	@echo "  make test              - Run Python and JS unit test suites"
 	@echo "  make test-all          - Run all 7 SDK verification suites (test/run_all_tests.sh)"
-	@echo "  make healthcheck       - Run release healthcheck suite (test/healthcheck)"
-	@echo "  make healthcheck-quick - Run quick healthcheck (static, leaks, levels)"
+	@echo "  make healthcheck       - Run the release health check (testcases/run_all.sh)"
+	@echo "  make healthcheck-quick - Quick health check: lint, static, leaks, levels"
 	@echo "  make lint              - Lint Python packages with ruff"
 	@echo "  make format-py         - Auto-format Python packages with ruff"
 	@echo "  make build             - Build distribution wheels/tarballs for Python and JS"
@@ -78,19 +78,19 @@ clean:
 	rm -rf packages/python/*/src/*.egg-info
 	rm -rf packages/js/*/node_modules
 	rm -rf packages/js/node_modules
-	rm -rf test/healthcheck/.results
+	rm -rf testcases/.results
 	rm -rf .coverage htmlcov
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
 
-# ── Release Verification & Healthchecks (in test/) ────────────────────────────
+# ── Release health check (testcases/) ─────────────────────────────────────────
 
 healthcheck:
-	bash test/healthcheck/run_healthcheck.sh
+	testcases/run_all.sh
 
 healthcheck-quick:
-	bash test/healthcheck/run_healthcheck.sh --quick
+	testcases/run_all.sh --quick
 
 test-all:
 	bash test/run_all_tests.sh
