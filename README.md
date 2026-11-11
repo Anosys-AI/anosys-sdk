@@ -1,8 +1,8 @@
-# AnoSys SDK
+# Anosys.ai SDK
 
-Python and JavaScript integrations for [AnoSys](https://anosys.ai), the AI Operational Intelligence Platform.
+Python and JavaScript integrations for [Anosys.ai](https://anosys.ai), the AI Operational Intelligence Platform.
 
-Capture model calls, agent runs, tool activity, token usage, estimated cost, and application context. AnoSys connects these signals with evaluations, user behavior, and business outcomes to help teams investigate regressions, understand their impact, and verify fixes.
+Capture model calls, agent runs, tool activity, token usage, estimated cost, and application context. Anosys.ai connects these signals with evaluations, user behavior, and business outcomes to help teams investigate regressions, understand their impact, and verify fixes.
 
 [Documentation](https://docs.anosys.ai) · [Console](https://console.anosys.ai) · [Integration options](https://console.anosys.ai/collect/integrationoptions) · [Support](mailto:support@anosys.ai)
 
@@ -52,7 +52,7 @@ Python packages require Python 3.10 or later. JavaScript packages declare Node.j
 
 ## Getting started
 
-Create an AnoSys account and obtain a key from [integration options](https://console.anosys.ai/collect/integrationoptions). Use a telemetry endpoint for API and agent SDK instrumentation, and a **Claude Code & Codex CLI (CC)** endpoint for coding-tool hooks. Provider credentials are separate from the AnoSys ingestion key.
+Create an Anosys.ai account and obtain a key from [integration options](https://console.anosys.ai/collect/integrationoptions). Use a telemetry endpoint for API and agent SDK instrumentation, and a **Claude Code & Codex CLI (CC)** endpoint for coding-tool hooks. Provider credentials are separate from the Anosys.ai ingestion key.
 
 ```bash
 export ANOSYS_API_KEY="your-anosys-key"
@@ -224,7 +224,7 @@ make test
 make healthcheck   # before every release
 ```
 
-`make healthcheck` runs the [release health check](testcases/README.md): content leaks at every level, the privacy settings, the real hooks and SDK clients end to end against a local fake server, and package contents. The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run `npm pack --dry-run` from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. The example notebooks need provider and AnoSys keys.
+`make healthcheck` runs the [release health check](testcases/README.md): content leaks at every level, the privacy settings, the real hooks and SDK clients end to end against a local fake server, and package contents. The JavaScript packages ship source modules and do not require compilation. To inspect a distribution, run `npm pack --dry-run` from its package directory. CI covers Python 3.10, 3.11, and 3.12 and Node.js 18, 20, and 22. The example notebooks need provider and Anosys.ai keys.
 
 ## Releases
 
