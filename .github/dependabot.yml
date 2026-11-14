@@ -1,0 +1,11 @@
+# Security updates for Python and npm dependencies are on in the repository settings.
+# This keeps the GitHub Actions used by CI and the release workflows current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
