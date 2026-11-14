@@ -149,6 +149,8 @@ Details: [content controls and encryption](DATA_CONTROLS.md). Column reference: 
 - **Bugs and feature requests:** [open an issue](https://github.com/Anosys-AI/anosys-sdk/issues).
 - **Security issues:** please report them privately, as described in [SECURITY.md](SECURITY.md).
 
+⭐ **Star [anosys-sdk](https://github.com/Anosys-AI/anosys-sdk)** to follow new integrations, [subscribe to the newsletter](https://anosys.ai/newsletter.html) for product updates, and follow us on [LinkedIn](https://www.linkedin.com/company/anosys-ai/) and [X](https://x.com/AnosysAI).
+
 ## Packages
 
 <details>
