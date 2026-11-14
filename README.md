@@ -98,7 +98,7 @@ See tokens and cost for Claude Code, Codex and Antigravity by developer, project
 | Codex CLI | `pip install anosys-codex && anosys-codex install` | `npm install -g anosys-sdk-codex && anosys-codex install` |
 | Antigravity | `pip install anosys-antigravity && anosys-antigravity install` | `npm install -g anosys-sdk-antigravity && anosys-antigravity install` |
 
-Use either the Python or the JavaScript version of a tool, not both. By default only metadata (tokens, cost, models, timing) is sent; see [Privacy and data controls](#privacy-and-data-controls). Antigravity reports activity but not tokens or cost, and has a few extra steps: see the [Antigravity setup guide](ANTIGRAVITY.md).
+Use either the Python or the JavaScript version of a tool, not both. By default only metadata (tokens, cost, models, timing) is sent; see [Privacy and data controls](#privacy-and-data-controls). Antigravity reports activity but not tokens or cost, and has a few extra steps: see the [Antigravity setup guide](docs/ANTIGRAVITY.md).
 
 ### Website and product analytics
 
@@ -135,7 +135,7 @@ More notebooks: [decorators](examples/anosys_core_decorators_poc.ipynb) for your
 - **Anyone can turn collection down:** `ANOSYS_DISABLE=1` turns it off, and a `.anosys` file with `level=metadata` or `level=off` lowers it for a project.
 - **Encryption:** set `ANOSYS_ENCRYPTION_KEY` and `ANOSYS_ENCRYPTION_SALT` (shown in the Console) and every content field is encrypted before it leaves your machine. Keep the passphrase out of source control.
 
-Details: [content controls and encryption](DATA_CONTROLS.md). Column reference: [telemetry variables](TELEMETRY_VARIABLES.md), [Claude Code variables](CLAUDE_CODE_VARIABLES.md), [Antigravity variables](ANTIGRAVITY_VARIABLES.md), [column mappings](MAPPINGS.md).
+Details: [content controls and encryption](docs/DATA_CONTROLS.md). Column reference: [telemetry variables](docs/TELEMETRY_VARIABLES.md), [Claude Code variables](docs/CLAUDE_CODE_VARIABLES.md), [Antigravity variables](docs/ANTIGRAVITY_VARIABLES.md), [column mappings](docs/MAPPINGS.md).
 
 ## Troubleshooting
 
@@ -160,27 +160,27 @@ Details: [content controls and encryption](DATA_CONTROLS.md). Column reference: 
 
 | Package | Version | Install |
 | --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-core](packages/python/core/) | 2.0.0 | `pip install anosys-sdk-core` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai](packages/python/openai/) | 1.1.0 | `pip install anosys-sdk-openai` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai-agents](packages/python/openai_agents/) | 1.1.0 | `pip install anosys-sdk-openai-agents` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-anthropic](packages/python/anthropic/) | 1.1.0 | `pip install anosys-sdk-anthropic` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-agents](packages/python/claude_agents/) | 1.1.0 | `pip install anosys-sdk-claude-agents` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-claude-code](packages/python/claude_code/) | 0.3.0 | `pip install anosys-claude-code` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-codex](packages/python/codex/) | 0.2.0 | `pip install anosys-codex` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> [anosys-antigravity](packages/python/antigravity/) | 0.2.0 | `pip install anosys-antigravity` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-core](packages/python/core) | 2.0.0 | `pip install anosys-sdk-core` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai](packages/python/openai) | 1.1.0 | `pip install anosys-sdk-openai` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai-agents](packages/python/openai_agents) | 1.1.0 | `pip install anosys-sdk-openai-agents` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-anthropic](packages/python/anthropic) | 1.1.0 | `pip install anosys-sdk-anthropic` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-agents](packages/python/claude_agents) | 1.1.0 | `pip install anosys-sdk-claude-agents` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-claude-code](packages/python/claude_code) | 0.3.0 | `pip install anosys-claude-code` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-codex](packages/python/codex) | 0.2.0 | `pip install anosys-codex` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> [anosys-antigravity](packages/python/antigravity) | 0.2.0 | `pip install anosys-antigravity` |
 
 ### JavaScript (Node.js 18 or later)
 
 | Package | Version | Install |
 | --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-core](packages/js/core/) | 2.0.0 | `npm install anosys-sdk-core` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai](packages/js/openai/) | 1.1.0 | `npm install anosys-sdk-openai openai` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai-agents](packages/js/openai-agents/) | 1.1.0 | `npm install anosys-sdk-openai-agents @openai/agents` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-anthropic](packages/js/anthropic/) | 1.1.0 | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-agents](packages/js/claude-agents/) | 1.1.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-code](packages/js/claude-code/) | 0.3.0 | `npx -y anosys-sdk-claude-code install` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-codex](packages/js/codex/) | 0.2.0 | `npm install -g anosys-sdk-codex` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-antigravity](packages/js/antigravity/) | 0.2.0 | `npm install -g anosys-sdk-antigravity` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-core](packages/js/core) | 2.0.0 | `npm install anosys-sdk-core` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai](packages/js/openai) | 1.1.0 | `npm install anosys-sdk-openai openai` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai-agents](packages/js/openai-agents) | 1.1.0 | `npm install anosys-sdk-openai-agents @openai/agents` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-anthropic](packages/js/anthropic) | 1.1.0 | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-agents](packages/js/claude-agents) | 1.1.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-code](packages/js/claude-code) | 0.3.0 | `npx -y anosys-sdk-claude-code install` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-codex](packages/js/codex) | 0.2.0 | `npm install -g anosys-sdk-codex` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-antigravity](packages/js/antigravity) | 0.2.0 | `npm install -g anosys-sdk-antigravity` |
 
 </details>
 

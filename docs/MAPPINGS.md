@@ -1,8 +1,8 @@
 <p align="center">
   <a href="https://anosys.ai">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
-      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/anosys-new-white-darkmode.svg">
+      <img src="../assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
     </picture>
   </a>
 </p>
@@ -12,7 +12,7 @@
 > Auto-generated from source code scan on 2026-05-13.
 > Covers all Python and JS packages.
 > 
-> **Detailed Named & CV Variables Map**: For a complete field-by-field description of all named payload variables and physical CV columns, see [TELEMETRY_VARIABLES.md](./TELEMETRY_VARIABLES.md) and [CLAUDE_CODE_VARIABLES.md](./CLAUDE_CODE_VARIABLES.md).
+> **Detailed Named & CV Variables Map**: For a complete field-by-field description of all named payload variables and physical CV columns, see [TELEMETRY_VARIABLES.md](TELEMETRY_VARIABLES.md) and [CLAUDE_CODE_VARIABLES.md](CLAUDE_CODE_VARIABLES.md).
 
 ---
 
@@ -519,7 +519,7 @@ It captures agent turns, planner LLM steps (including Gemini reasoning/thinking)
 |---|---|---|---|
 | `consent` | `cvs198` | string | Collection level and accepted policy version: `full;2026-11-09` (only with accepted consent), or `metadata;none`. Set on every hook record, in `cvs198` only. |
 
-At `metadata` the hooks send only allow-listed fields (`BASE_METADATA_FIELDS` in `anosys-sdk-core` plus each integration's own list); everything else in the tables above is sent only at `full`. Encrypted values start with `enc2:`; in JSON columns they are stored as the JSON string `"enc2:..."`. See [PRIVACY.md](PRIVACY.md) and [DATA_CONTROLS.md](DATA_CONTROLS.md).
+At `metadata` the hooks send only allow-listed fields (`BASE_METADATA_FIELDS` in `anosys-sdk-core` plus each integration's own list); everything else in the tables above is sent only at `full`. Encrypted values start with `enc2:`; in JSON columns they are stored as the JSON string `"enc2:..."`. See [PRIVACY.md](../PRIVACY.md) and [DATA_CONTROLS.md](DATA_CONTROLS.md).
 
 ---
 
@@ -534,19 +534,19 @@ attribute is dropped with one warning.
 
 | Package | Path | `cvs200` value |
 |---|---|---|
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Python OpenAI (hooks) | `extract_span_info()` | `openAI_Python_Telemetry` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Python OpenAI (decorators) | via `reassign()` | Uses `source` key from caller |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Python OpenAI (hooks) | `extract_span_info()` | `openAI_Python_Telemetry` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Python OpenAI (decorators) | via `reassign()` | Uses `source` key from caller |
 | Python Agents (span2json) | `span2json()` | `openAI_Agents_Traces` |
 | Python Agents (OTel) | `extract_otel_span_info()` | `openAI_Agents_Telemetry` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> JS OpenAI (hooks) | `extractSpanInfo()` | `openAI_Traces` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> JS OpenAI (decorators) | via `reassign()` | Uses `source` key from caller |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> JS OpenAI (hooks) | `extractSpanInfo()` | `openAI_Traces` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> JS OpenAI (decorators) | via `reassign()` | Uses `source` key from caller |
 | JS Agents (span2json) | `span2json()` | `openAI_Agents_Traces` |
 | JS Agents (OTel) | `extractOtelSpanInfo()` | `openAI_Agents_Telemetry` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Code | `transform_record()` | `ClaudeCodeHook` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Codex CLI | `transform_codex_turn()` | `CodexHook` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Python / JS Anthropic | `extract_span_info()` / `extractSpanInfo()` | `AnthropicTelemetry` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Python / JS Claude Agents | `extract_span_info()` / `extractSpanInfo()` | `ClaudeAgentsTelemetry` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Antigravity CLI / IDE | `transform_antigravity_turn()` | `AntigravityHook` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/claude-dark.svg"><img src="../assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Code | `transform_record()` | `ClaudeCodeHook` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Codex CLI | `transform_codex_turn()` | `CodexHook` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/anthropic-dark.svg"><img src="../assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Python / JS Anthropic | `extract_span_info()` / `extractSpanInfo()` | `AnthropicTelemetry` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/claude-dark.svg"><img src="../assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Python / JS Claude Agents | `extract_span_info()` / `extractSpanInfo()` | `ClaudeAgentsTelemetry` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/google-dark.svg"><img src="../assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Antigravity CLI / IDE | `transform_antigravity_turn()` | `AntigravityHook` |
 
 ---
 

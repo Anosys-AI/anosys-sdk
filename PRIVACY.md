@@ -97,7 +97,7 @@ the current conversation in Antigravity).
 
 `<tool>` is `anosys-claude-code`, `anosys-codex` or `anosys-antigravity` (Python),
 or `anosys-sdk-claude-code`, `anosys-codex`, `anosys-antigravity` (JavaScript).
-Full precedence rules are in [DATA_CONTROLS.md](DATA_CONTROLS.md).
+Full precedence rules are in [DATA_CONTROLS.md](docs/DATA_CONTROLS.md).
 
 ## 4. Acceptance record and withdrawal
 

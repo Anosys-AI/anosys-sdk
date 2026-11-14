@@ -1,8 +1,8 @@
 <p align="center">
   <a href="https://anosys.ai">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
-      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/anosys-new-white-darkmode.svg">
+      <img src="../assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
     </picture>
   </a>
 </p>
@@ -209,4 +209,4 @@ Because Codex and Claude Code both use the **`CC`** pixel format, their metrics 
 `BASE_KEY_MAPPING` (same `otel_*`, `gen_ai_*` and `llm_*` columns as OpenAI). Their Anthropic-only fields reuse
 the Claude Code slots above: `gen_ai.usage.cache_read.input_tokens` → `cvn4`,
 `gen_ai.usage.cache_creation.input_tokens` → `cvn5`, `gen_ai.usage.cost` → `cvn7`, and `has_thinking` → `cvb3`.
-See [MAPPINGS.md §4c](./MAPPINGS.md) for the full field mapping.
+See [MAPPINGS.md §4c](MAPPINGS.md) for the full field mapping.

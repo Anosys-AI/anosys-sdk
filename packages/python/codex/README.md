@@ -56,7 +56,7 @@ anosys-codex doctor           # installed copies, the active hook and local file
 anosys-codex purge            # delete the local queue and logs
 ```
 
-The hook reads only the session that just ended, never earlier history, and its log holds ids and sizes only. The old `--redaction` flag and `REDACTION=true` still work and mean `metadata`. See [content controls](../../../DATA_CONTROLS.md) for the 10 MB request limit, retries and encryption.
+The hook reads only the session that just ended, never earlier history, and its log holds ids and sizes only. The old `--redaction` flag and `REDACTION=true` still work and mean `metadata`. See [content controls](../../../docs/DATA_CONTROLS.md) for the 10 MB request limit, retries and encryption.
 
 ## Runtime behavior
 
@@ -80,7 +80,7 @@ Token usage and cost depend on the transcript fields and the package's embedded 
 | ANOSYS_HOOK_DRY_RUN | true to skip network submission |
 | CODEX_HOME | Codex configuration, session, and state directory |
 
-See [content controls](../../../DATA_CONTROLS.md) for encryption details. Dry-run mode is a network diagnostic; it does not confirm server ingestion.
+See [content controls](../../../docs/DATA_CONTROLS.md) for encryption details. Dry-run mode is a network diagnostic; it does not confirm server ingestion.
 
 ## Commands
 

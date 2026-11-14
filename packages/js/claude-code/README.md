@@ -75,7 +75,7 @@ anosys-sdk-claude-code doctor           # installed copies, the active hook and 
 anosys-sdk-claude-code purge            # delete the local queue and logs
 ```
 
-The hook reads only the session that just ended, never earlier history, and its log holds ids and sizes only. The old `--redaction` flag and `REDACTION=true` still work and mean `metadata`. See [content controls](../../../DATA_CONTROLS.md) for the 10 MB request limit, retries and encryption.
+The hook reads only the session that just ended, never earlier history, and its log holds ids and sizes only. The old `--redaction` flag and `REDACTION=true` still work and mean `metadata`. See [content controls](../../../docs/DATA_CONTROLS.md) for the 10 MB request limit, retries and encryption.
 
 ## How it works
 
@@ -83,4 +83,4 @@ When installed, this package registers a `Stop` hook in `~/.claude/settings.json
 
 ## Content controls
 
-See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, size limits, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.
+See the [content-controls reference](../../../docs/DATA_CONTROLS.md) for encryption coverage, default columns, size limits, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://anosys.ai/docs/
+    about: Setup guides for every integration, the Console and the platform.
+  - name: Setup help
+    url: mailto:support@anosys.ai
+    about: Questions about your account, keys or setup.
+  - name: Report a security problem
+    url: https://github.com/Anosys-AI/anosys-sdk/blob/main/SECURITY.md
+    about: Please report vulnerabilities privately, not in a public issue.

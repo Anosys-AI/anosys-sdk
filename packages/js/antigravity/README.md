@@ -47,9 +47,9 @@ anosys-antigravity doctor           # installed copies, the active hook and loca
 anosys-antigravity purge            # delete the local queue and logs
 ```
 
-The hook reads only the session that just ended, never earlier history, and its log holds ids and sizes only. The old `--redaction` flag and `REDACTION=true` still work and mean `metadata`. See [content controls](../../../DATA_CONTROLS.md) for the 10 MB request limit, retries and encryption.
+The hook reads only the session that just ended, never earlier history, and its log holds ids and sizes only. The old `--redaction` flag and `REDACTION=true` still work and mean `metadata`. See [content controls](../../../docs/DATA_CONTROLS.md) for the 10 MB request limit, retries and encryption.
 
-See the [complete setup guide](../../../ANTIGRAVITY.md), [variables reference](../../../ANTIGRAVITY_VARIABLES.md), and [content controls](../../../DATA_CONTROLS.md) for configuration paths, environment precedence, diagnostics, and limitations.
+See the [complete setup guide](../../../docs/ANTIGRAVITY.md), [variables reference](../../../docs/ANTIGRAVITY_VARIABLES.md), and [content controls](../../../docs/DATA_CONTROLS.md) for configuration paths, environment precedence, diagnostics, and limitations.
 
 ## License
 

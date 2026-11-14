@@ -1,8 +1,8 @@
 <p align="center">
   <a href="https://anosys.ai">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
-      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/anosys-new-white-darkmode.svg">
+      <img src="../assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
     </picture>
   </a>
 </p>
@@ -13,13 +13,13 @@
 
 | Integration | Content control | Encryption |
 | --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Claude Code, Codex, Antigravity hooks | Collection levels `off` / `metadata` (default) / `full` after accepting [PRIVACY.md](PRIVACY.md): `<tool> privacy` | Content fields, before sending |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> OpenAI (including OpenRouter through the OpenAI SDK) and OpenAI Agents | One collection level (below); `capture_content` / `captureContent`, OpenAI Agents `capture_inputs` / `capture_outputs` / `capture_parameters` | Selected fields, before sending |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Anthropic API | Same level; `capture_content=False` / `captureContent: false`; pass the supplied OpenTelemetry options helper to clients | Selected fields, before sending |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Agent SDK | Same level; `capture_content=False` / `captureContent: false` | Selected fields, before sending |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/claude-dark.svg"><img src="../assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/google-dark.svg"><img src="../assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Claude Code, Codex, Antigravity hooks | Collection levels `off` / `metadata` (default) / `full` after accepting [PRIVACY.md](../PRIVACY.md): `<tool> privacy` | Content fields, before sending |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> OpenAI (including OpenRouter through the OpenAI SDK) and OpenAI Agents | One collection level (below); `capture_content` / `captureContent`, OpenAI Agents `capture_inputs` / `capture_outputs` / `capture_parameters` | Selected fields, before sending |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/anthropic-dark.svg"><img src="../assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Anthropic API | Same level; `capture_content=False` / `captureContent: false`; pass the supplied OpenTelemetry options helper to clients | Selected fields, before sending |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/claude-dark.svg"><img src="../assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Agent SDK | Same level; `capture_content=False` / `captureContent: false` | Selected fields, before sending |
 | Decorators and `AnosysClient` | Same level | Selected fields, before sending |
 
-[PRIVACY.md](PRIVACY.md) is the policy; this page is the technical reference.
+[PRIVACY.md](../PRIVACY.md) is the policy; this page is the technical reference.
 
 The old `REDACTION=true` setting and the installers' `--redaction` flags still
 work: they mean `metadata`.

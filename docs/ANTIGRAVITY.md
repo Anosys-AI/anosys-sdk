@@ -1,8 +1,8 @@
 <p align="center">
   <a href="https://anosys.ai">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
-      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/anosys-new-white-darkmode.svg">
+      <img src="../assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
     </picture>
   </a>
 </p>
@@ -76,4 +76,4 @@ For workspace installations, pass --workspace to status and uninstall as well as
 
 The integration captures prompts, responses, available reasoning blocks, tool input/output, IDE context when present, settings changes, and execution duration. Token counters are not exposed in the hook inputs and transcripts handled by version 0.1.0. Emitted zero token fields mean **unavailable**, not zero consumption. Token spend and cost cannot be inferred from those fields.
 
-By default only metadata is sent; full content needs `anosys-antigravity privacy full` and acceptance of the [data-collection policy](PRIVACY.md). Content fields are encrypted when ANOSYS_ENCRYPTION_KEY is set. Read [content controls](DATA_CONTROLS.md) and the [Antigravity variables reference](ANTIGRAVITY_VARIABLES.md) before collecting sensitive data.
+By default only metadata is sent; full content needs `anosys-antigravity privacy full` and acceptance of the [data-collection policy](../PRIVACY.md). Content fields are encrypted when ANOSYS_ENCRYPTION_KEY is set. Read [content controls](DATA_CONTROLS.md) and the [Antigravity variables reference](ANTIGRAVITY_VARIABLES.md) before collecting sensitive data.

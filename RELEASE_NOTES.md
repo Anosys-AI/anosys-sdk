@@ -9,7 +9,7 @@
 
 # Release notes
 
-## AnoSys SDK 2.0 — November 2026
+## Anosys.ai SDK 2.0 — November 2026
 
 This release changes what the SDKs collect by default and gives users and developers more control over it. The coding-tool hooks now send metadata only until the user opts in. Every package shares one collection-level setting, and encryption covers all content fields. Read the upgrade notes before rolling it out.
 
@@ -49,7 +49,7 @@ There are three levels: `off`, `metadata` and `full`. Every record says which on
 - **JSON columns.** Encrypted values are stored as a JSON string, so the column stays valid JSON.
 - **Failures.** If encryption fails, the column is dropped rather than sent in clear.
 
-Details and a test vector are in [DATA_CONTROLS.md](DATA_CONTROLS.md).
+Details and a test vector are in [DATA_CONTROLS.md](docs/DATA_CONTROLS.md).
 
 ### Reliability
 

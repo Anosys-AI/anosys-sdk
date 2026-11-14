@@ -1,0 +1,58 @@
+name: Bug report
+description: Something in an Anosys.ai SDK or hook doesn't work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please don't include API keys, prompts or customer data.
+        Security problems go to support@anosys.ai instead; see SECURITY.md.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - anosys-sdk-openai
+        - anosys-sdk-openai-agents
+        - anosys-sdk-anthropic
+        - anosys-sdk-claude-agents
+        - anosys-claude-code / anosys-sdk-claude-code
+        - anosys-codex / anosys-sdk-codex
+        - anosys-antigravity / anosys-sdk-antigravity
+        - anosys-sdk-core
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options: [Python, JavaScript]
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Package version, Python or Node.js version, and the provider SDK version (for example openai 1.54.0).
+      placeholder: anosys-sdk-openai 1.1.0, Python 3.12, openai 1.54.0
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The smallest code or command that shows the problem.
+      render: python
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log lines, with keys and content removed. For coding-tool hooks, `<tool> doctor` output helps.
+      render: text

@@ -25,4 +25,4 @@ Security fixes go into the latest release of each package. Upgrade to the newest
 
 ## How the SDKs handle your data
 
-What each integration sends, the collection levels and client-side encryption are described in [PRIVACY.md](PRIVACY.md) and [DATA_CONTROLS.md](DATA_CONTROLS.md).
+What each integration sends, the collection levels and client-side encryption are described in [PRIVACY.md](PRIVACY.md) and [DATA_CONTROLS.md](docs/DATA_CONTROLS.md).

@@ -76,7 +76,7 @@ Token and cost totals live on the agent span. When `emit_llm_spans` is on, chat 
 
 The run span is the active span while the SDK works, so the Claude Code subprocess inherits the trace context (`TRACEPARENT`).
 
-Records are tagged `cvs200 = "ClaudeAgentsTelemetry"` and use the same columns as `anosys-sdk-anthropic`. See [MAPPINGS.md](../../../MAPPINGS.md).
+Records are tagged `cvs200 = "ClaudeAgentsTelemetry"` and use the same columns as `anosys-sdk-anthropic`. See [MAPPINGS.md](../../../docs/MAPPINGS.md).
 
 ## Environment Variables
 
@@ -91,6 +91,6 @@ Apache 2.0
 
 ## Content controls
 
-See the [content-controls reference](../../../DATA_CONTROLS.md) for encryption coverage, default columns, size limits, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.
+See the [content-controls reference](../../../docs/DATA_CONTROLS.md) for encryption coverage, default columns, size limits, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.
 
 Collection follows one level for every AnoSys SDK: `ANOSYS_COLLECTION_LEVEL=full` (default), `metadata` (no prompts, completions or tool data) or `off`, a project `.anosys` file can only lower it, and `ANOSYS_DISABLE=1` stops all sending. Without an API key nothing is sent. Telemetry is sent in the background and never delays your calls. See the [data-collection policy](../../../PRIVACY.md).

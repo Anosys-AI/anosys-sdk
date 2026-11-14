@@ -1,6 +1,6 @@
 """
 Settings check (Python): the level the hooks and the app SDKs collect at always
-respects the user's choices. Each case is a rule from PRIVACY.md / DATA_CONTROLS.md.
+respects the user's choices. Each case is a rule from PRIVACY.md / docs/DATA_CONTROLS.md.
 """
 
 import json

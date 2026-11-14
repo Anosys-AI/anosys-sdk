@@ -16,6 +16,7 @@ Thanks for helping improve the Anosys.ai SDK. Bug reports, fixes and new integra
 - For a bug, [open an issue](https://github.com/Anosys-AI/anosys-sdk/issues) with the package, its version, what you expected and what happened.
 - For a larger change, such as a new integration, open an issue first so we can agree on the approach.
 - Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+- Everyone taking part follows our [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Set up
 

@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest an improvement or a new integration
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The problem or use case, not the solution yet.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help?
+      description: The API, integration or behaviour you'd like to see.
+  - type: input
+    id: integration
+    attributes:
+      label: Related integration
+      placeholder: OpenAI, Anthropic, LangChain, a coding tool, a new framework...
