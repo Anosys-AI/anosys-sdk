@@ -1,8 +1,8 @@
 <p align="center">
   <a href="https://anosys.ai">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
-      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="360">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-banner-dark.png">
+      <img src="assets/anosys-banner.png" alt="Anosys.ai: understand, monitor and optimize agentic AI end to end" width="100%">
     </picture>
   </a>
 </p>
@@ -20,6 +20,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-111111" alt="License: Apache 2.0"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-111111" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/node-18%2B-111111" alt="Node.js 18+">
+  <a href="https://github.com/Anosys-AI/anosys-sdk"><img src="https://img.shields.io/badge/Star_on_GitHub-%E2%98%85-111111?logo=github&logoColor=white" alt="Star on GitHub"></a>
+  <a href="https://discord.gg/JhcCfgvmaQ"><img src="https://img.shields.io/badge/Discord-Join_us-5865F2?logo=discord&logoColor=white" alt="Join our Discord"></a>
 </p>
 
 <p align="center">
@@ -27,7 +29,12 @@
   <a href="https://console.anosys.ai"><b>Console</b></a> ·
   <a href="https://console.anosys.ai/collect/integrationoptions"><b>Get a key</b></a> ·
   <a href="RELEASE_NOTES.md"><b>Release notes</b></a> ·
-  <a href="https://github.com/Anosys-AI/anosys-sdk/issues"><b>Report an issue</b></a>
+  <a href="https://github.com/Anosys-AI/anosys-sdk/issues"><b>Report an issue</b></a> ·
+  <a href="https://discord.gg/JhcCfgvmaQ"><b>Discord</b></a>
+</p>
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=GUwJ9sK9gD4"><img src="assets/anosys-demo-video.png" alt="Watch the Anosys.ai demo on YouTube" width="720"></a>
 </p>
 
 <p align="center">
@@ -149,7 +156,7 @@ Details: [content controls and encryption](docs/DATA_CONTROLS.md). Column refere
 - **Bugs and feature requests:** [open an issue](https://github.com/Anosys-AI/anosys-sdk/issues).
 - **Security issues:** please report them privately, as described in [SECURITY.md](SECURITY.md).
 
-⭐ **Star [anosys-sdk](https://github.com/Anosys-AI/anosys-sdk)** to follow new integrations, [subscribe to the newsletter](https://anosys.ai/newsletter.html) for product updates, and follow us on [LinkedIn](https://www.linkedin.com/company/anosys-ai/) and [X](https://x.com/AnosysAI).
+⭐ **Star [anosys-sdk](https://github.com/Anosys-AI/anosys-sdk)** to follow new integrations, [subscribe to the newsletter](https://anosys.ai/newsletter.html) for product updates, and join us on [Discord](https://discord.gg/JhcCfgvmaQ), and follow us on [LinkedIn](https://www.linkedin.com/company/anosys-ai/) and [X](https://x.com/AnosysAI).
 
 ## Packages
 
@@ -191,3 +198,5 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set
 ## License
 
 [Apache License 2.0](LICENSE).
+
+<img src="https://api.anosys.ai/trafficpixel/925fb3f78b04d5b9d5aded56b44410c9/a/ea8a7985c8f3/anosys.gif?cvs198=https://github.com/Anosys-AI/anosys-sdk" width="1" height="1" alt=""/>
