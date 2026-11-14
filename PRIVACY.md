@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
+      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # AnoSys SDK data-collection policy
 
 **Version 2026-11-09** · Draft for legal review

@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/anosys-new-white-darkmode.svg">
+      <img src="../assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # RFC: Unified Data Capture & Privacy Control Architecture
 
 **Document Version:** 1.0.0  
@@ -23,11 +32,11 @@ Currently, developers must navigate a fragmented configuration matrix across dif
 
 | Provider / Tool | Environment Variable(s) | Constructor / Setup Parameters | Scope Controlled |
 | :--- | :--- | :--- | :--- |
-| **Anthropic Claude** | `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=metadata_only` | `AnosysAnthropicLogger(capture_content=False)`<br>`anthropic.Anthropic(open_telemetry=get_anthropic_open_telemetry_options())` | Client OpenTelemetry emission & exporter capture |
-| **OpenAI Agents SDK** | `OPENAI_AGENTS_DONT_LOG_MODEL_DATA=True`<br>`OPENAI_AGENTS_DONT_LOG_TOOL_DATA=True` | `AnosysOpenAIAgentsLogger(capture_inputs=False, capture_outputs=False, capture_parameters=False)` | Agent callback processor & internal agent engine |
-| **OpenAI (Standard SDK)** | `ANOSYS_COLLECTION_LEVEL=metadata` | `AnosysOpenAILogger()` | OTel span wrapper |
-| **Claude Agent SDK** | None (SDK-specific) | `AnosysClaudeAgentsLogger(capture_content=False)` | Agent & tool span export |
-| **Coding Hooks (Codex / Claude Code / Antigravity)** | `ANOSYS_COLLECTION_LEVEL=metadata`<br>`ANOSYS_DISABLE=1` | CLI commands: `<tool> privacy metadata`<br>Config file: `~/.anosys/consent.json` | Background transcript / session file processing |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/anthropic-dark.svg"><img src="../assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> **Anthropic Claude** | `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE=metadata_only` | `AnosysAnthropicLogger(capture_content=False)`<br>`anthropic.Anthropic(open_telemetry=get_anthropic_open_telemetry_options())` | Client OpenTelemetry emission & exporter capture |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> **OpenAI Agents SDK** | `OPENAI_AGENTS_DONT_LOG_MODEL_DATA=True`<br>`OPENAI_AGENTS_DONT_LOG_TOOL_DATA=True` | `AnosysOpenAIAgentsLogger(capture_inputs=False, capture_outputs=False, capture_parameters=False)` | Agent callback processor & internal agent engine |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> **OpenAI (Standard SDK)** | `ANOSYS_COLLECTION_LEVEL=metadata` | `AnosysOpenAILogger()` | OTel span wrapper |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/claude-dark.svg"><img src="../assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> **Claude Agent SDK** | None (SDK-specific) | `AnosysClaudeAgentsLogger(capture_content=False)` | Agent & tool span export |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/openai-dark.svg"><img src="../assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/claude-dark.svg"><img src="../assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/logos/google-dark.svg"><img src="../assets/logos/google-light.svg" width="16" height="16" alt=""></picture> **Coding Hooks (Codex / Claude Code / Antigravity)** | `ANOSYS_COLLECTION_LEVEL=metadata`<br>`ANOSYS_DISABLE=1` | CLI commands: `<tool> privacy metadata`<br>Config file: `~/.anosys/consent.json` | Background transcript / session file processing |
 
 ### Why This Fragmentation Arose
 1. **Upstream Source Architecture**:

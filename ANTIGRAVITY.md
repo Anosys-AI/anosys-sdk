@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
+      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # Antigravity integration
 
 Collect Google Antigravity agent turns, tool calls, commands, changed files, model activity, and duration. The integration uses PreInvocation and Stop hooks and reads the local transcript identified by the hook event.

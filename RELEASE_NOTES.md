@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
+      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # Release notes
 
 ## AnoSys SDK 2.0 — November 2026
@@ -7,7 +16,7 @@ This release changes what the SDKs collect by default and gives users and develo
 ### Upgrade notes
 
 - **The coding-tool hooks send metadata only by default.** This applies to Claude Code, Codex and Antigravity. After upgrading, records keep ids, timing, models, tokens and cost, but no prompts, answers, tool input or output, commands or file contents. To keep collecting content, each user runs `<tool> privacy full` and accepts the [data collection policy](PRIVACY.md). Dashboards built on hook content will be empty until they do.
-- **Every package needs `anosys-sdk-core` 2.0.0.** On PyPI it is an upgrade; on npm it is a new package that all JavaScript packages now depend on. Publish core first.
+- **Every package needs `anosys-sdk-core` 2.0.0.** Upgrade it together with the other packages; on npm it is a new package that every JavaScript package now depends on.
 - **Run `install` again for each coding tool after upgrading.** The hook command now uses absolute paths. The old command forms are still recognised, so uninstall keeps working.
 - **`ANOSYS_API_URL` now overrides the key.** When it is set, records go to that URL and the key is not resolved. Leave it unset unless you run your own ingestion endpoint.
 - **Encryption covers more columns.** With `ANOSYS_ENCRYPTION_KEY` set, every column outside the metadata allowlist is encrypted, not just a fixed list. Queries that read content columns need the passphrase to decrypt them. `ANOSYS_ENCRYPTED_COLUMNS` still replaces the selection.
@@ -78,21 +87,15 @@ New notebooks:
 
 The OpenAI, Anthropic and Claude Agent SDK notebooks were updated for this release.
 
-### For maintainers
-
-Run `make healthcheck` (or `testcases/run_all.sh`) before tagging. It checks for content leaks at every level, the precedence of every privacy setting, the real hooks and SDK clients end to end, and the package contents, all against a local fake server. It takes about two minutes. See [testcases/README.md](testcases/README.md).
-
 ### Versions
 
 | Package | Python | JavaScript | Previous (Py / JS) |
 | --- | --- | --- | --- |
-| Core | `anosys-sdk-core` 2.0.0 | `anosys-sdk-core` 2.0.0 (new on npm) | 1.1.0 / — |
-| OpenAI | `anosys-sdk-openai` 1.1.0 | `anosys-sdk-openai` 1.1.0 | 1.0.14 / 1.0.12 |
-| OpenAI Agents | `anosys-sdk-openai-agents` 1.1.0 | `anosys-sdk-openai-agents` 1.1.0 | 1.0.13 / 1.0.12 |
-| Anthropic | `anosys-sdk-anthropic` 1.1.0 | `anosys-sdk-anthropic` 1.1.0 | 1.0.0 / 1.0.0 |
-| Claude Agent SDK | `anosys-sdk-claude-agents` 1.1.0 | `anosys-sdk-claude-agents` 1.1.0 | 1.0.0 / 1.0.0 |
-| Claude Code | `anosys-claude-code` 0.3.0 | `anosys-sdk-claude-code` 0.3.0 | 0.2.9 / 0.2.6 |
-| Codex | `anosys-codex` 0.2.0 | `anosys-sdk-codex` 0.2.0 | 0.1.1 / 0.1.0 |
-| Antigravity | `anosys-antigravity` 0.2.0 | `anosys-sdk-antigravity` 0.2.0 | 0.1.0 / 0.1.0 |
-
-Release order: `core` and `core-js` first, then the rest with `scripts/release.sh <component> <version>`.
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture> Core | `anosys-sdk-core` 2.0.0 | `anosys-sdk-core` 2.0.0 (new on npm) | 1.1.0 / — |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> OpenAI | `anosys-sdk-openai` 1.1.0 | `anosys-sdk-openai` 1.1.0 | 1.0.14 / 1.0.12 |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> OpenAI Agents | `anosys-sdk-openai-agents` 1.1.0 | `anosys-sdk-openai-agents` 1.1.0 | 1.0.13 / 1.0.12 |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Anthropic | `anosys-sdk-anthropic` 1.1.0 | `anosys-sdk-anthropic` 1.1.0 | 1.0.0 / 1.0.0 |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Agent SDK | `anosys-sdk-claude-agents` 1.1.0 | `anosys-sdk-claude-agents` 1.1.0 | 1.0.0 / 1.0.0 |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Code | `anosys-claude-code` 0.3.0 | `anosys-sdk-claude-code` 0.3.0 | 0.2.9 / 0.2.6 |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Codex | `anosys-codex` 0.2.0 | `anosys-sdk-codex` 0.2.0 | 0.1.1 / 0.1.0 |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Antigravity | `anosys-antigravity` 0.2.0 | `anosys-sdk-antigravity` 0.2.0 | 0.1.0 / 0.1.0 |

@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/anosys-ai/anosys-sdk/main/assets/anosys-new-white-darkmode.svg">
+      <img src="https://raw.githubusercontent.com/anosys-ai/anosys-sdk/main/assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # anosys-claude-code
 
 AnoSys observability and analytics hook for Anthropic's Claude Code.

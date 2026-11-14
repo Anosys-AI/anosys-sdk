@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
+      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # AnoSys Telemetry Variables Map
 
 This document provides the complete reference for all telemetry variables used across the AnoSys SDK, including **Named Variables** (used in JSON payloads and API ingestion) and **CV Variables** (**C**ustom **V**ariables — physical database columns `cvs*`, `cvn*`, `cvb*` used for indexed storage, BigQuery, dashboard widgets, and platform algorithms).

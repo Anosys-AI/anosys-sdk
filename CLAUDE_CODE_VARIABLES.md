@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
+      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # Claude Code Telemetry Variables Map
 
 This document provides the complete reference for all telemetry variables used by the **AnoSys Claude Code SDK** (`anosys-claude-code` in Python and JavaScript).

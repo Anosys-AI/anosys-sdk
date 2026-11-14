@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
+      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # LLM Telemetry Field Mapping Guide
 
 This document provides an exhaustive, field-by-field mapping between the raw telemetry JSON stored in the `cvs199` (raw data dump) column and the top-level database columns in AnoSys.

@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
+      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # CVS Variable Mappings — Full Reference
 
 > Auto-generated from source code scan on 2026-05-13.
@@ -525,19 +534,19 @@ attribute is dropped with one warning.
 
 | Package | Path | `cvs200` value |
 |---|---|---|
-| Python OpenAI (hooks) | `extract_span_info()` | `openAI_Python_Telemetry` |
-| Python OpenAI (decorators) | via `reassign()` | Uses `source` key from caller |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Python OpenAI (hooks) | `extract_span_info()` | `openAI_Python_Telemetry` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Python OpenAI (decorators) | via `reassign()` | Uses `source` key from caller |
 | Python Agents (span2json) | `span2json()` | `openAI_Agents_Traces` |
 | Python Agents (OTel) | `extract_otel_span_info()` | `openAI_Agents_Telemetry` |
-| JS OpenAI (hooks) | `extractSpanInfo()` | `openAI_Traces` |
-| JS OpenAI (decorators) | via `reassign()` | Uses `source` key from caller |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> JS OpenAI (hooks) | `extractSpanInfo()` | `openAI_Traces` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> JS OpenAI (decorators) | via `reassign()` | Uses `source` key from caller |
 | JS Agents (span2json) | `span2json()` | `openAI_Agents_Traces` |
 | JS Agents (OTel) | `extractOtelSpanInfo()` | `openAI_Agents_Telemetry` |
-| Claude Code | `transform_record()` | `ClaudeCodeHook` |
-| Codex CLI | `transform_codex_turn()` | `CodexHook` |
-| Python / JS Anthropic | `extract_span_info()` / `extractSpanInfo()` | `AnthropicTelemetry` |
-| Python / JS Claude Agents | `extract_span_info()` / `extractSpanInfo()` | `ClaudeAgentsTelemetry` |
-| Antigravity CLI / IDE | `transform_antigravity_turn()` | `AntigravityHook` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Code | `transform_record()` | `ClaudeCodeHook` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Codex CLI | `transform_codex_turn()` | `CodexHook` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Python / JS Anthropic | `extract_span_info()` / `extractSpanInfo()` | `AnthropicTelemetry` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Python / JS Claude Agents | `extract_span_info()` / `extractSpanInfo()` | `ClaudeAgentsTelemetry` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Antigravity CLI / IDE | `transform_antigravity_turn()` | `AntigravityHook` |
 
 ---
 

@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://anosys.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/anosys-new-white-darkmode.svg">
+      <img src="assets/anosys-new-black-lightmode.svg" alt="Anosys.ai" width="240">
+    </picture>
+  </a>
+</p>
+
 # Google Antigravity Telemetry Variables Map
 
 This document provides the complete, authoritative reference for all telemetry variables used by the **AnoSys Antigravity SDK** (`anosys-antigravity` in Python and JavaScript) when observing **Google Antigravity** (CLI, IDE, and Antigravity 2.0).
