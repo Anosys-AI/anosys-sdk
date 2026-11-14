@@ -34,7 +34,7 @@ anosys-claude-code = "anosys_sdk_claude_code.cli:main"
 
 [project.urls]
 Homepage = "https://anosys.ai"
-Documentation = "https://docs.anosys.ai"
+Documentation = "https://anosys.ai/docs/"
 Repository = "https://github.com/anosys-ai/anosys-sdk"
 
 [tool.setuptools.packages.find]

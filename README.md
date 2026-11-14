@@ -48,7 +48,7 @@ Create a free account in the [Anosys.ai Console](https://console.anosys.ai), the
 | See the LLM calls my app makes | **OpenTelemetry / AI Agents** | [Monitor LLM calls](#monitor-llm-calls-in-your-app) |
 | See what my AI agents do, step by step | **OpenTelemetry / AI Agents** | [Debug AI agents](#debug-ai-agents) |
 | Know what AI coding assistants cost my team | **Claude Code & Codex CLI** | [Track coding-assistant spend](#track-coding-assistant-spend) |
-| Understand visitors and users of my website or app | **Website Analytics Tracker** | [Website and product analytics](#website-and-product-analytics) |
+| Understand visitors and users of my website or app | **Website / Advertising Tracker** | [Website and product analytics](#website-and-product-analytics) |
 
 ### Monitor LLM calls in your app
 
