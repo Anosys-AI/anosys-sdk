@@ -46,6 +46,8 @@
 
 Python and JavaScript integrations for [Anosys.ai](https://anosys.ai), the AI Operational Intelligence Platform. They capture model calls, agent runs, tool activity, token usage, estimated cost and application context, and send them to Anosys.ai, where you debug agents, run evaluations, set alerts and track spend.
 
+**Contents:** [Get started](#get-started) · [All integrations](#all-integrations) · [AI coding agents](#use-anosysai-with-ai-coding-agents) · [Privacy and data controls](#privacy-and-data-controls) · [Troubleshooting](#troubleshooting) · [Community and support](#community-and-support) · [Packages](#packages) · [Contributing](#contributing)
+
 ## Get started
 
 Create a free account in the [Anosys.ai Console](https://console.anosys.ai), then pick what you want to do. Each path takes a few minutes, and each one uses its own type of key from [Integration options](https://console.anosys.ai/collect/integrationoptions).
@@ -59,12 +61,12 @@ Create a free account in the [Anosys.ai Console](https://console.anosys.ai), the
 
 ### Monitor LLM calls in your app
 
-Every call to OpenAI or Anthropic is traced with its prompt, response, latency, tokens and cost. Install the package for your provider and create the logger once, before your client:
+Every call to <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> OpenAI or <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Anthropic is traced with its prompt, response, latency, tokens and cost. Install the package for your provider and create the logger once, before your client:
 
 | Provider | Python 3.10+ | Node.js 18+ | Add at startup |
 | --- | --- | --- | --- |
-| OpenAI | `pip install anosys-sdk-openai openai` | `npm install anosys-sdk-openai openai` | `AnosysOpenAILogger()` |
-| Anthropic | `pip install anosys-sdk-anthropic anthropic` | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` | `AnosysAnthropicLogger()` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;OpenAI | `pip install anosys-sdk-openai openai` | `npm install anosys-sdk-openai openai` | `AnosysOpenAILogger()` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture>&nbsp;Anthropic | `pip install anosys-sdk-anthropic anthropic` | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` | `AnosysAnthropicLogger()` |
 
 ```bash
 export ANOSYS_API_KEY="your-anosys-key"
@@ -82,28 +84,28 @@ client.chat.completions.create(
 )
 ```
 
-For Anthropic, swap the import and the logger: `from anosys_sdk_anthropic import AnosysAnthropicLogger`, then `AnosysAnthropicLogger()` before `anthropic.Anthropic()`. In JavaScript it's `new AnosysOpenAILogger()` or `new AnosysAnthropicLogger()`. Open the [Console](https://console.anosys.ai) to see the call, its tokens and its cost. OpenRouter works through the OpenAI SDK.
+For <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Anthropic, swap the import and the logger: `from anosys_sdk_anthropic import AnosysAnthropicLogger`, then `AnosysAnthropicLogger()` before `anthropic.Anthropic()`. In JavaScript it's `new AnosysOpenAILogger()` or `new AnosysAnthropicLogger()`. Open the [Console](https://console.anosys.ai) to see the call, its tokens and its cost. <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openrouter-dark.svg"><img src="assets/logos/openrouter-light.svg" width="16" height="16" alt=""></picture> OpenRouter works through the OpenAI SDK.
 
 ### Debug AI agents
 
 See every agent run as a trace: model calls, tool calls, handoffs and subagents, with tokens and cost.
 
-| Framework | Install | Add at startup |
+| Framework&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Install | Add at startup |
 | --- | --- | --- |
-| OpenAI Agents SDK | `pip install anosys-sdk-openai-agents`<br>`npm install anosys-sdk-openai-agents @openai/agents` | Python: `add_trace_processor(AnosysOpenAIAgentsLogger())`<br>JS: `addTracingProcessor(new AnosysOpenAIAgentsLogger())` |
-| Claude Agent SDK | `pip install anosys-sdk-claude-agents`<br>`npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` | Python: `AnosysClaudeAgentsLogger()` before importing `query`<br>JS: `new AnosysClaudeAgentsLogger()`, then `wrapQuery(query)` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;OpenAI&nbsp;Agents&nbsp;SDK | `pip install anosys-sdk-openai-agents`<br>`npm install anosys-sdk-openai-agents @openai/agents` | Python: `add_trace_processor(AnosysOpenAIAgentsLogger())`<br>JS: `addTracingProcessor(new AnosysOpenAIAgentsLogger())` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture>&nbsp;Claude&nbsp;Agent&nbsp;SDK | `pip install anosys-sdk-claude-agents`<br>`npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` | Python: `AnosysClaudeAgentsLogger()` before importing `query`<br>JS: `new AnosysClaudeAgentsLogger()`, then `wrapQuery(query)` |
 
-The [OpenAI Agents](packages/python/openai_agents/README.md) and [Claude Agent SDK](packages/python/claude_agents/README.md) guides have complete examples.
+The <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [OpenAI Agents](packages/python/openai_agents/README.md) and <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [Claude Agent SDK](packages/python/claude_agents/README.md) guides have complete examples.
 
 ### Track coding-assistant spend
 
-See tokens and cost for Claude Code, Codex and Antigravity by developer, project, session and model, and spot the expensive ones. One command per tool; it asks for your key and installs the hook. Restart the tool afterwards.
+See tokens and cost for <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Code, <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Codex and <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Antigravity by developer, project, session and model, and spot the expensive ones. One command per tool; it asks for your key and installs the hook. Restart the tool afterwards.
 
-| Tool | Python | JavaScript |
+| Tool&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Python | JavaScript |
 | --- | --- | --- |
-| Claude Code | `pip install anosys-claude-code && anosys-claude-code install` | `npx -y anosys-sdk-claude-code install` |
-| Codex CLI | `pip install anosys-codex && anosys-codex install` | `npm install -g anosys-sdk-codex && anosys-codex install` |
-| Antigravity | `pip install anosys-antigravity && anosys-antigravity install` | `npm install -g anosys-sdk-antigravity && anosys-antigravity install` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture>&nbsp;Claude&nbsp;Code | `pip install anosys-claude-code && anosys-claude-code install` | `npx -y anosys-sdk-claude-code install` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;Codex&nbsp;CLI | `pip install anosys-codex && anosys-codex install` | `npm install -g anosys-sdk-codex && anosys-codex install` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture>&nbsp;Antigravity | `pip install anosys-antigravity && anosys-antigravity install` | `npm install -g anosys-sdk-antigravity && anosys-antigravity install` |
 
 Use either the Python or the JavaScript version of a tool, not both. By default only metadata (tokens, cost, models, timing) is sent; see [Privacy and data controls](#privacy-and-data-controls). Antigravity reports activity but not tokens or cost, and has a few extra steps: see the [Antigravity setup guide](docs/ANTIGRAVITY.md).
 
@@ -123,17 +125,32 @@ Page views, sessions, traffic sources, clicks, scroll depth and Web Vitals, and 
 
 ## All integrations
 
-| Integration | Python | JavaScript | Example Use Cases | Sample Notebooks |
+| Integration&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Python | JavaScript | Example Use Cases | Sample Notebooks |
 | --- | --- | --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> OpenAI API | [Guide](packages/python/openai/README.md) | [Guide](packages/js/openai/README.md) | <img src="assets/icons/pulse.svg" width="14" height="14" alt=""> Latency and errors<br><img src="assets/icons/graph.svg" width="14" height="14" alt=""> Tokens and cost per request<br><img src="assets/icons/bug.svg" width="14" height="14" alt=""> Debugging bad answers | [Chat](examples/anosys_openai_chat_poc.ipynb), [Support copilot](examples/anosys_openai_support_copilot_demo.ipynb) |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> OpenAI Agents SDK | [Guide](packages/python/openai_agents/README.md) | [Guide](packages/js/openai-agents/README.md) | <img src="assets/icons/workflow.svg" width="14" height="14" alt=""> Agent runs and delegation<br><img src="assets/icons/tools.svg" width="14" height="14" alt=""> Tool calls<br><img src="assets/icons/search.svg" width="14" height="14" alt=""> Finding the step that failed | [Agents](examples/anosys_openai_agentic_poc.ipynb), [Research pipeline](examples/anosys_openai_research_pipeline_demo.ipynb) |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> Anthropic API | [Guide](packages/python/anthropic/README.md) | [Guide](packages/js/anthropic/README.md) | <img src="assets/icons/pulse.svg" width="14" height="14" alt=""> Latency and errors<br><img src="assets/icons/graph.svg" width="14" height="14" alt=""> Tokens and cost per request<br><img src="assets/icons/bug.svg" width="14" height="14" alt=""> Debugging bad answers | [Chat](examples/anosys_anthropic_chat_poc.ipynb), [Support copilot](examples/anosys_anthropic_support_copilot_demo.ipynb) |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Agent SDK | [Guide](packages/python/claude_agents/README.md) | [Guide](packages/js/claude-agents/README.md) | <img src="assets/icons/workflow.svg" width="14" height="14" alt=""> Agent runs and delegation<br><img src="assets/icons/tools.svg" width="14" height="14" alt=""> Tool calls<br><img src="assets/icons/search.svg" width="14" height="14" alt=""> Finding the step that failed | [Agents](examples/anosys_claude_agents_agentic_poc.ipynb), [Research pipeline](examples/anosys_claude_agents_research_pipeline_demo.ipynb) |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Code | [Guide](packages/python/claude_code/README.md) | [Guide](packages/js/claude-code/README.md) | <img src="assets/icons/graph.svg" width="14" height="14" alt=""> Token and cost tracking and optimization<br><img src="assets/icons/person.svg" width="14" height="14" alt=""> Usage per developer, project and session<br><img src="assets/icons/search.svg" width="14" height="14" alt=""> Expensive sessions and models | — |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Codex CLI | [Guide](packages/python/codex/README.md) | [Guide](packages/js/codex/README.md) | <img src="assets/icons/graph.svg" width="14" height="14" alt=""> Token and cost tracking and optimization<br><img src="assets/icons/person.svg" width="14" height="14" alt=""> Usage per developer, project and session<br><img src="assets/icons/search.svg" width="14" height="14" alt=""> Expensive sessions and models | — |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Antigravity | [Guide](packages/python/antigravity/README.md) | [Guide](packages/js/antigravity/README.md) | <img src="assets/icons/workflow.svg" width="14" height="14" alt=""> Agent activity<br><img src="assets/icons/terminal.svg" width="14" height="14" alt=""> Tool calls and commands<br><img src="assets/icons/clock.svg" width="14" height="14" alt=""> Session time | — |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;OpenAI&nbsp;API | [Guide](packages/python/openai/README.md) | [Guide](packages/js/openai/README.md) | <img src="assets/icons/pulse.svg" width="14" height="14" alt=""> Latency and errors<br><img src="assets/icons/graph.svg" width="14" height="14" alt=""> Tokens and cost per request<br><img src="assets/icons/bug.svg" width="14" height="14" alt=""> Debugging bad answers | [Chat](examples/anosys_openai_chat_poc.ipynb), [Support copilot](examples/anosys_openai_support_copilot_demo.ipynb) |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;OpenAI&nbsp;Agents&nbsp;SDK | [Guide](packages/python/openai_agents/README.md) | [Guide](packages/js/openai-agents/README.md) | <img src="assets/icons/workflow.svg" width="14" height="14" alt=""> Agent runs and delegation<br><img src="assets/icons/tools.svg" width="14" height="14" alt=""> Tool calls<br><img src="assets/icons/search.svg" width="14" height="14" alt=""> Finding the step that failed | [Agents](examples/anosys_openai_agentic_poc.ipynb), [Research pipeline](examples/anosys_openai_research_pipeline_demo.ipynb) |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture>&nbsp;Anthropic&nbsp;API | [Guide](packages/python/anthropic/README.md) | [Guide](packages/js/anthropic/README.md) | <img src="assets/icons/pulse.svg" width="14" height="14" alt=""> Latency and errors<br><img src="assets/icons/graph.svg" width="14" height="14" alt=""> Tokens and cost per request<br><img src="assets/icons/bug.svg" width="14" height="14" alt=""> Debugging bad answers | [Chat](examples/anosys_anthropic_chat_poc.ipynb), [Support copilot](examples/anosys_anthropic_support_copilot_demo.ipynb) |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture>&nbsp;Claude&nbsp;Agent&nbsp;SDK | [Guide](packages/python/claude_agents/README.md) | [Guide](packages/js/claude-agents/README.md) | <img src="assets/icons/workflow.svg" width="14" height="14" alt=""> Agent runs and delegation<br><img src="assets/icons/tools.svg" width="14" height="14" alt=""> Tool calls<br><img src="assets/icons/search.svg" width="14" height="14" alt=""> Finding the step that failed | [Agents](examples/anosys_claude_agents_agentic_poc.ipynb), [Research pipeline](examples/anosys_claude_agents_research_pipeline_demo.ipynb) |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture>&nbsp;Claude&nbsp;Code | [Guide](packages/python/claude_code/README.md) | [Guide](packages/js/claude-code/README.md) | <img src="assets/icons/graph.svg" width="14" height="14" alt=""> Token and cost tracking and optimization<br><img src="assets/icons/person.svg" width="14" height="14" alt=""> Usage per developer, project and session<br><img src="assets/icons/search.svg" width="14" height="14" alt=""> Expensive sessions and models | — |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;Codex&nbsp;CLI | [Guide](packages/python/codex/README.md) | [Guide](packages/js/codex/README.md) | <img src="assets/icons/graph.svg" width="14" height="14" alt=""> Token and cost tracking and optimization<br><img src="assets/icons/person.svg" width="14" height="14" alt=""> Usage per developer, project and session<br><img src="assets/icons/search.svg" width="14" height="14" alt=""> Expensive sessions and models | — |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture>&nbsp;Antigravity | [Guide](packages/python/antigravity/README.md) | [Guide](packages/js/antigravity/README.md) | <img src="assets/icons/workflow.svg" width="14" height="14" alt=""> Agent activity<br><img src="assets/icons/terminal.svg" width="14" height="14" alt=""> Tool calls and commands<br><img src="assets/icons/clock.svg" width="14" height="14" alt=""> Session time | — |
 
-More notebooks: [decorators](examples/anosys_core_decorators_poc.ipynb) for your own functions, [LangChain](examples/anosys_langchain_agentic_poc.ipynb) and [OpenRouter](examples/anosys_openrouter_agentic_poc.ipynb). They run in Google Colab or locally.
+More notebooks: [decorators](examples/anosys_core_decorators_poc.ipynb) for your own functions, <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/langchain-dark.svg"><img src="assets/logos/langchain-light.svg" width="16" height="16" alt=""></picture> [LangChain](examples/anosys_langchain_agentic_poc.ipynb) and <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openrouter-dark.svg"><img src="assets/logos/openrouter-light.svg" width="16" height="16" alt=""></picture> [OpenRouter](examples/anosys_openrouter_agentic_poc.ipynb). They run in Google Colab or locally.
+
+## Use Anosys.ai with AI coding agents
+
+**Let your coding agent add Anosys.ai.** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Code, <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Codex, <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/cursor-dark.svg"><img src="assets/logos/cursor-light.svg" width="16" height="16" alt=""></picture> Cursor and other coding agents can add the SDK for you. This repository includes an [`AGENTS.md`](AGENTS.md) that tells them which package to install and where the one line goes. Paste a prompt like this into your agent:
+
+```text
+Add Anosys.ai tracing to this project. Use the anosys-sdk package for the LLM
+provider or agent framework this project uses, create the Anosys logger once at
+startup before any client is created, and read ANOSYS_API_KEY from the environment.
+Follow https://github.com/Anosys-AI/anosys-sdk/blob/main/AGENTS.md
+```
+
+**Track the agents themselves.** The [coding-assistant hooks](#track-coding-assistant-spend) record what <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> Claude Code, <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> Codex and <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> Antigravity do on every developer's machine: sessions, models, tool calls, tokens and cost.
+
+**Run the platform in plain language.** Once you sign in, the [AI Assistant](https://anosys.ai/docs/ai-assistant/) in the Console answers questions about your data ("why did Claude Code spend go up yesterday?") and builds dashboards, widgets, alerts, pipelines and reports from a description, so you can set up and change Anosys.ai without leaving the conversation.
 
 ## Privacy and data controls
 
@@ -150,13 +167,14 @@ Details: [content controls and encryption](docs/DATA_CONTROLS.md). Column refere
 - **Coding tool data is missing.** Run `<tool> doctor`, for example `anosys-claude-code doctor`, to see the active hook, the collection level and the local files. Restart the tool after installing.
 - **No prompts in coding tool data.** That is the default; run `<tool> privacy full` to include them.
 
-## Support
+## Community and support
 
-- **Questions and setup help:** email [support@anosys.ai](mailto:support@anosys.ai) or read the [documentation](https://anosys.ai/docs/).
+- **Chat with the team and other users** on [Discord](https://discord.gg/JhcCfgvmaQ), or start a thread in [GitHub Discussions](https://github.com/Anosys-AI/anosys-sdk/discussions).
 - **Bugs and feature requests:** [open an issue](https://github.com/Anosys-AI/anosys-sdk/issues).
-- **Security issues:** please report them privately, as described in [SECURITY.md](SECURITY.md).
-
-⭐ **Star [anosys-sdk](https://github.com/Anosys-AI/anosys-sdk)** to follow new integrations, [subscribe to the newsletter](https://anosys.ai/newsletter.html) for product updates, and join us on [Discord](https://discord.gg/JhcCfgvmaQ), and follow us on [LinkedIn](https://www.linkedin.com/company/anosys-ai/) and [X](https://x.com/AnosysAI).
+- **Questions and setup help:** email [support@anosys.ai](mailto:support@anosys.ai) or read the [documentation](https://anosys.ai/docs/).
+- **Security issues:** report them privately, as described in [SECURITY.md](SECURITY.md).
+- **Stay up to date:** ⭐ star this repository, [subscribe to the newsletter](https://anosys.ai/newsletter.html), and follow us on [LinkedIn](https://www.linkedin.com/company/anosys-ai/) and [X](https://x.com/AnosysAI).
+- **Contribute:** see [CONTRIBUTING.md](CONTRIBUTING.md) and our [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Packages
 
@@ -167,27 +185,27 @@ Details: [content controls and encryption](docs/DATA_CONTROLS.md). Column refere
 
 | Package | Version | Install |
 | --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-core](packages/python/core) | 2.0.0 | `pip install anosys-sdk-core` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai](packages/python/openai) | 1.1.0 | `pip install anosys-sdk-openai` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai-agents](packages/python/openai_agents) | 1.1.0 | `pip install anosys-sdk-openai-agents` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-anthropic](packages/python/anthropic) | 1.1.0 | `pip install anosys-sdk-anthropic` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-agents](packages/python/claude_agents) | 1.1.0 | `pip install anosys-sdk-claude-agents` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-claude-code](packages/python/claude_code) | 0.3.0 | `pip install anosys-claude-code` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-codex](packages/python/codex) | 0.2.0 | `pip install anosys-codex` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> [anosys-antigravity](packages/python/antigravity) | 0.2.0 | `pip install anosys-antigravity` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-core](packages/python/core) | 2.0.0 | `pip install anosys-sdk-core` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-openai](packages/python/openai) | 1.1.0 | `pip install anosys-sdk-openai` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-openai-agents](packages/python/openai_agents) | 1.1.0 | `pip install anosys-sdk-openai-agents` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-anthropic](packages/python/anthropic) | 1.1.0 | `pip install anosys-sdk-anthropic` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-claude-agents](packages/python/claude_agents) | 1.1.0 | `pip install anosys-sdk-claude-agents` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-claude-code](packages/python/claude_code) | 0.3.0 | `pip install anosys-claude-code` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-codex](packages/python/codex) | 0.2.0 | `pip install anosys-codex` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-antigravity](packages/python/antigravity) | 0.2.0 | `pip install anosys-antigravity` |
 
 ### JavaScript (Node.js 18 or later)
 
 | Package | Version | Install |
 | --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-core](packages/js/core) | 2.0.0 | `npm install anosys-sdk-core` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai](packages/js/openai) | 1.1.0 | `npm install anosys-sdk-openai openai` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-openai-agents](packages/js/openai-agents) | 1.1.0 | `npm install anosys-sdk-openai-agents @openai/agents` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-anthropic](packages/js/anthropic) | 1.1.0 | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-agents](packages/js/claude-agents) | 1.1.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-claude-code](packages/js/claude-code) | 0.3.0 | `npx -y anosys-sdk-claude-code install` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-codex](packages/js/codex) | 0.2.0 | `npm install -g anosys-sdk-codex` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture> [anosys-sdk-antigravity](packages/js/antigravity) | 0.2.0 | `npm install -g anosys-sdk-antigravity` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anosys-dark.svg"><img src="assets/logos/anosys-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-core](packages/js/core) | 2.0.0 | `npm install anosys-sdk-core` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-openai](packages/js/openai) | 1.1.0 | `npm install anosys-sdk-openai openai` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-openai-agents](packages/js/openai-agents) | 1.1.0 | `npm install anosys-sdk-openai-agents @openai/agents` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/anthropic-dark.svg"><img src="assets/logos/anthropic-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-anthropic](packages/js/anthropic) | 1.1.0 | `npm install anosys-sdk-anthropic @anthropic-ai/sdk` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-claude-agents](packages/js/claude-agents) | 1.1.0 | `npm install anosys-sdk-claude-agents @anthropic-ai/claude-agent-sdk` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/claude-dark.svg"><img src="assets/logos/claude-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-claude-code](packages/js/claude-code) | 0.3.0 | `npx -y anosys-sdk-claude-code install` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/openai-dark.svg"><img src="assets/logos/openai-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-codex](packages/js/codex) | 0.2.0 | `npm install -g anosys-sdk-codex` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/logos/google-dark.svg"><img src="assets/logos/google-light.svg" width="16" height="16" alt=""></picture>&nbsp;[anosys-sdk-antigravity](packages/js/antigravity) | 0.2.0 | `npm install -g anosys-sdk-antigravity` |
 
 </details>
 
