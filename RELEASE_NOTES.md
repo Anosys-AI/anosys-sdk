@@ -15,6 +15,8 @@ A fix for the coding-assistant hooks. Upgrade if you use Claude Code, Codex or A
 
 - **Large backlogs are no longer dropped.** Ingestion accepts at most 1,000 records per request, but the hooks only limited requests by size. A first run on a long session, or any run with more than 1,000 new records, was rejected with 413 and the records were dropped. Requests now hold at most 1,000 records (`ANOSYS_MAX_BATCH_RECORDS` changes it), and a request rejected with 413 is split in half and retried instead of dropped.
 
+- **Codex's own telemetry.** `anosys-codex install --otel-key KEY` now sets up Codex's OpenTelemetry export (logs, traces and metrics) the way `anosys-claude-code --otel-key` does for Claude Code, with prompt logging off. The `[otel]` section is checked before it is written, an existing `[otel]` of your own is never changed, and `uninstall` removes it.
+
 | Package | Python | JavaScript |
 | --- | --- | --- |
 | Core | `anosys-sdk-core` 2.1.1 | `anosys-sdk-core` 2.1.1 |

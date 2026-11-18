@@ -294,6 +294,126 @@ def remove_codex_env(path: Path | None = None) -> bool:
     return False
 
 
+
+# ── Codex's own OpenTelemetry export (opt-in, --otel-key) ─────────────────────
+#
+# Codex refuses to start when config.toml is invalid, so this block is only ever
+# written after the whole new file has been parsed and checked: the [otel] table
+# must come out exactly as intended and every other setting must be unchanged.
+# An [otel] table the user wrote themselves is never touched.
+
+OTEL_BEGIN = "# >>> anosys-codex otel (managed by anosys-codex; remove with: anosys-codex uninstall)"
+OTEL_END = "# <<< anosys-codex otel"
+OTEL_SIGNALS = (("exporter", "logs"), ("trace_exporter", "traces"), ("metrics_exporter", "metrics"))
+
+
+class OtelConfigError(RuntimeError):
+    """config.toml could not be updated safely; nothing was written."""
+
+
+def _toml_str(value: str) -> str:
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _otel_expected(otel_key: str, base_url: str) -> Dict[str, Any]:
+    expected: Dict[str, Any] = {"log_user_prompt": False}
+    for field, signal in OTEL_SIGNALS:
+        expected[field] = {"otlp-http": {
+            "endpoint": f"{base_url.rstrip('/')}/v1/{signal}",
+            "protocol": "binary",
+            "headers": {"anosys-apikey": otel_key},
+        }}
+    return expected
+
+
+def _otel_block(otel_key: str, base_url: str) -> str:
+    lines = [OTEL_BEGIN, "[otel]", "log_user_prompt = false"]
+    for field, signal in OTEL_SIGNALS:
+        endpoint = f"{base_url.rstrip('/')}/v1/{signal}"
+        lines.append(
+            f"{field} = {{ otlp-http = {{ endpoint = {_toml_str(endpoint)}, protocol = \"binary\", "
+            f"headers = {{ \"anosys-apikey\" = {_toml_str(otel_key)} }} }} }}"
+        )
+    lines.append(OTEL_END)
+    return "\n".join(lines) + "\n"
+
+
+def _strip_otel_block(content: str) -> str:
+    out: List[str] = []
+    inside = False
+    for line in content.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped == OTEL_BEGIN:
+            inside = True
+            continue
+        if inside:
+            if stripped == OTEL_END:
+                inside = False
+            continue
+        out.append(line)
+    if inside:
+        raise OtelConfigError("the Anosys [otel] block in config.toml has no end marker; fix it by hand")
+    text = "".join(out)
+    # Drop only the blank line we added before the block; leave the rest of the file as it was
+    return text[:-1] if text.endswith("\n\n") else text
+
+
+def _parse_strict(content: str) -> Dict[str, Any]:
+    if tomllib is None:
+        raise OtelConfigError("no TOML parser available (install tomli on Python 3.10)")
+    try:
+        return tomllib.loads(content)
+    except Exception as exc:
+        raise OtelConfigError(f"config.toml is not valid TOML ({exc})") from exc
+
+
+def has_anosys_otel(path: Path | None = None) -> bool:
+    path = path or get_config_path()
+    return path.is_file() and OTEL_BEGIN in path.read_text(encoding="utf-8")
+
+
+def update_codex_otel(otel_key: str, path: Path | None = None, base_url: str = INGESTION_URL) -> bool:
+    """
+    Enable Codex's own OTel export to Anosys.ai (logs, traces, metrics) with
+    prompt logging off. Raises OtelConfigError and writes nothing if the result
+    would not be exactly right. Returns True when the file changed.
+    """
+    path = path or get_config_path()
+    original = path.read_text(encoding="utf-8") if path.is_file() else ""
+    before = _parse_strict(original)
+    base = _strip_otel_block(original)
+    base_parsed = _parse_strict(base)
+    if "otel" in base_parsed:
+        raise OtelConfigError(
+            "config.toml already has an [otel] section that Anosys did not write; "
+            "it was left unchanged (remove it first, or point its exporters at Anosys.ai yourself)")
+    new = (base.rstrip("\n") + "\n\n" if base.strip() else "") + _otel_block(otel_key, base_url)
+    after = _parse_strict(new)
+    if after.get("otel") != _otel_expected(otel_key, base_url):
+        raise OtelConfigError("the generated [otel] section did not parse as expected; nothing was written")
+    if {k: v for k, v in after.items() if k != "otel"} != {k: v for k, v in before.items() if k != "otel"}:
+        raise OtelConfigError("writing [otel] would have changed other settings; nothing was written")
+    if new == original:
+        return False
+    _write_atomic(path, new)
+    return True
+
+
+def remove_codex_otel(path: Path | None = None) -> bool:
+    """Remove the Anosys [otel] block; any other [otel] settings are left alone."""
+    path = path or get_config_path()
+    if not has_anosys_otel(path):
+        return False
+    original = path.read_text(encoding="utf-8")
+    before = _parse_strict(original)
+    new = _strip_otel_block(original)
+    after = _parse_strict(new)
+    if after != {k: v for k, v in before.items() if k != "otel"}:
+        raise OtelConfigError("removing the Anosys [otel] block would have changed other settings; nothing was written")
+    _write_atomic(path, new)
+    return True
+
+
 def validate_api_key(api_key: str, key_type: str = "cc") -> bool:
     if not api_key:
         return False

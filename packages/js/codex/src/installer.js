@@ -277,6 +277,132 @@ function validateApiKey(apiKey, keyType = 'cc') {
   });
 }
 
+// ── Codex's own OpenTelemetry export (opt-in, --otel-key) ─────────────────────
+//
+// Codex refuses to start when config.toml is invalid, so this block is only ever
+// written after the whole new file has been parsed and checked: the [otel] table
+// must come out exactly as intended and every other setting must be unchanged.
+// An [otel] table the user wrote themselves is never touched.
+
+const OTEL_BEGIN = '# >>> anosys-codex otel (managed by anosys-codex; remove with: anosys-codex uninstall)';
+const OTEL_END = '# <<< anosys-codex otel';
+const OTEL_SIGNALS = [['exporter', 'logs'], ['trace_exporter', 'traces'], ['metrics_exporter', 'metrics']];
+
+class OtelConfigError extends Error {}
+
+const tomlStr = (value) => `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+
+function otelExpected(otelKey, baseUrl) {
+  const expected = { log_user_prompt: false };
+  for (const [field, signal] of OTEL_SIGNALS) {
+    expected[field] = { 'otlp-http': {
+      endpoint: `${baseUrl.replace(/\/+$/, '')}/v1/${signal}`,
+      protocol: 'binary',
+      headers: { 'anosys-apikey': otelKey },
+    } };
+  }
+  return expected;
+}
+
+function otelBlock(otelKey, baseUrl) {
+  const lines = [OTEL_BEGIN, '[otel]', 'log_user_prompt = false'];
+  for (const [field, signal] of OTEL_SIGNALS) {
+    const endpoint = `${baseUrl.replace(/\/+$/, '')}/v1/${signal}`;
+    lines.push(`${field} = { otlp-http = { endpoint = ${tomlStr(endpoint)}, protocol = "binary", `
+      + `headers = { "anosys-apikey" = ${tomlStr(otelKey)} } } }`);
+  }
+  lines.push(OTEL_END);
+  return lines.join('\n') + '\n';
+}
+
+function stripOtelBlock(content) {
+  const out = [];
+  let inside = false;
+  for (const line of content.split(/(?<=\n)/)) {
+    const trimmed = line.trim();
+    if (trimmed === OTEL_BEGIN) { inside = true; continue; }
+    if (inside) {
+      if (trimmed === OTEL_END) inside = false;
+      continue;
+    }
+    out.push(line);
+  }
+  if (inside) throw new OtelConfigError('the Anosys [otel] block in config.toml has no end marker; fix it by hand');
+  const text = out.join('');
+  // Drop only the blank line we added before the block; leave the rest of the file as it was
+  return text.endsWith('\n\n') ? text.slice(0, -1) : text;
+}
+
+function parseStrict(content) {
+  const { parse } = require('smol-toml');
+  try {
+    return parse(content);
+  } catch (err) {
+    throw new OtelConfigError(`config.toml is not valid TOML (${err.message.split('\n')[0]})`);
+  }
+}
+
+// Plain-data deep equality (TOML values: objects, arrays, strings, numbers, booleans, dates)
+function sameData(a, b) {
+  return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
+}
+function sortKeys(value) {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(Object.keys(value).sort().map((k) => [k, sortKeys(value[k])]));
+  }
+  return value;
+}
+const withoutOtel = (data) => Object.fromEntries(Object.entries(data).filter(([k]) => k !== 'otel'));
+
+function hasAnosysOtel(customPath = null) {
+  const filePath = customPath || getConfigPath();
+  return fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8').includes(OTEL_BEGIN);
+}
+
+/**
+ * Enable Codex's own OTel export to Anosys.ai (logs, traces, metrics) with prompt
+ * logging off. Throws OtelConfigError and writes nothing if the result would not be
+ * exactly right. Returns true when the file changed.
+ */
+function updateCodexOtel(otelKey, customPath = null, baseUrl = INGESTION_URL) {
+  const filePath = customPath || getConfigPath();
+  const original = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+  const before = parseStrict(original);
+  const base = stripOtelBlock(original);
+  const baseParsed = parseStrict(base);
+  if (Object.prototype.hasOwnProperty.call(baseParsed, 'otel')) {
+    throw new OtelConfigError('config.toml already has an [otel] section that Anosys did not write; '
+      + 'it was left unchanged (remove it first, or point its exporters at Anosys.ai yourself)');
+  }
+  const next = (base.trim() ? base.replace(/\n+$/, '') + '\n\n' : '') + otelBlock(otelKey, baseUrl);
+  const after = parseStrict(next);
+  if (!sameData(after.otel, otelExpected(otelKey, baseUrl))) {
+    throw new OtelConfigError('the generated [otel] section did not parse as expected; nothing was written');
+  }
+  if (!sameData(withoutOtel(after), withoutOtel(before))) {
+    throw new OtelConfigError('writing [otel] would have changed other settings; nothing was written');
+  }
+  if (next === original) return false;
+  writeAtomic(filePath, next);
+  return true;
+}
+
+/** Remove the Anosys [otel] block; any other [otel] settings are left alone. */
+function removeCodexOtel(customPath = null) {
+  const filePath = customPath || getConfigPath();
+  if (!hasAnosysOtel(filePath)) return false;
+  const original = fs.readFileSync(filePath, 'utf8');
+  const before = parseStrict(original);
+  const next = stripOtelBlock(original);
+  const after = parseStrict(next);
+  if (!sameData(after, withoutOtel(before))) {
+    throw new OtelConfigError('removing the Anosys [otel] block would have changed other settings; nothing was written');
+  }
+  writeAtomic(filePath, next);
+  return true;
+}
+
 module.exports = {
   HOOK_COMMAND,
   HOOK_MARKERS,
@@ -295,5 +421,9 @@ module.exports = {
   removeCodexConfig,
   updateCodexEnv,
   removeCodexEnv,
-  validateApiKey
+  validateApiKey,
+  OtelConfigError,
+  hasAnosysOtel,
+  updateCodexOtel,
+  removeCodexOtel,
 };

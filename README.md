@@ -109,6 +109,8 @@ See tokens and cost for <picture><source media="(prefers-color-scheme: dark)" sr
 
 Use either the Python or the JavaScript version of a tool, not both. By default only metadata (tokens, cost, models, timing) is sent; see [Privacy and data controls](#privacy-and-data-controls). Antigravity reports activity but not tokens or cost, and has a few extra steps: see the [Antigravity setup guide](docs/ANTIGRAVITY.md).
 
+**Optional: the tools' own telemetry.** Claude Code and Codex can also export their own OpenTelemetry data (for example lines of code, commits and active time for Claude Code). Add `--otel-key` with an **OpenTelemetry / AI Agents** key to the install command, for example `anosys-codex install --otel-key YOUR_OTEL_KEY`. Prompt text stays off. These events include the user's account email, so it is opt-in.
+
 ### Website and product analytics
 
 Page views, sessions, traffic sources, clicks, scroll depth and Web Vitals, and in product mode, signed-in users across sessions. Paste one script into the footer that renders on every page, just before `</body>`:

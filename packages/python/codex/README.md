@@ -89,6 +89,16 @@ See [content controls](../../../docs/DATA_CONTROLS.md) for encryption details. D
 - uninstall: remove the installer's recognized notification entry and environment file. Remove a manually configured module entry yourself.
 - run: receives the Codex notification JSON and executes the turn-completion handler.
 
+## Codex's own telemetry (optional)
+
+Codex can also export its own OpenTelemetry logs, traces and metrics. Add an **OpenTelemetry / AI Agents** key from [Integration options](https://console.anosys.ai/collect/integrationoptions) to the install command:
+
+```bash
+anosys-codex install --api-key YOUR_CODEX_KEY --otel-key YOUR_OTEL_KEY --auto-update
+```
+
+The installer adds an `[otel]` section to `~/.codex/config.toml` with prompt logging off (`log_user_prompt = false`), between `# >>> anosys-codex otel` markers. Codex's events include your account email. The new file is parsed and checked before it is written, so a bad edit can never stop Codex from starting; if `config.toml` already has an `[otel]` section of your own, it is left unchanged and the installer says so. `anosys-codex uninstall` removes the section again. This export comes from Codex itself, so `ANOSYS_DISABLE`, `.anosys` files and collection levels don't apply to it.
+
 ## Anosys.ai MCP server and skill
 
 Let Codex read your Anosys.ai workspace (architecture, problems, evals, traces and read-only SQL) through the Anosys.ai MCP server, and install the `anosys-platform-intelligence` skill. Create an MCP key (`ak_mcp_...`) in the [Console](https://console.anosys.ai) under **My Profile → MCP Keys**; your ingestion key does not work here.

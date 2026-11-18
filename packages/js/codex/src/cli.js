@@ -27,7 +27,11 @@ const {
   updateCodexEnv,
   removeCodexEnv,
   backup,
-  validateApiKey
+  validateApiKey,
+  OtelConfigError,
+  hasAnosysOtel,
+  updateCodexOtel,
+  removeCodexOtel,
 } = require('./installer');
 const hookRunner = require('./hookRunner');
 
@@ -69,6 +73,22 @@ async function cmdInstall(args) {
     }
   }
 
+  // Codex's own OTel export is a separate opt-in (--otel-key): its events carry
+  // your account email. Prompt text stays out (log_user_prompt = false).
+  let otelKey = '';
+  const otelIdx = args.indexOf('--otel-key');
+  if (otelIdx !== -1 && args[otelIdx + 1]) otelKey = args[otelIdx + 1].trim();
+  const otelEq = args.find((a) => a.startsWith('--otel-key='));
+  if (otelEq) otelKey = otelEq.slice('--otel-key='.length).trim();
+  if (otelKey) {
+    console.log('Validating OTEL API key...');
+    if (!(await validateApiKey(otelKey, 'otel'))) {
+      console.log('⚠️  Warning: OTEL API key validation failed (invalid key or incompatible type).');
+    } else {
+      console.log('✅ OTEL API key is valid.');
+    }
+  }
+
   let autoUpdate = true;
   if (args.includes('--no-auto-update')) {
     autoUpdate = false;
@@ -93,6 +113,16 @@ async function cmdInstall(args) {
     const backupPath = backup(configPath);
     updateCodexConfig(null, configPath);
     updateCodexEnv({ apiKey, customPath: envPath });
+    let otelNote = null;
+    if (otelKey) {
+      try {
+        updateCodexOtel(otelKey, configPath);
+        otelNote = `  Codex OTel export: enabled (${INGESTION_URL}/v1/...); events include your account email, prompts are not logged`;
+      } catch (err) {
+        if (!(err instanceof OtelConfigError)) throw err;
+        otelNote = `  ⚠️  Codex OTel export NOT enabled: ${err.message}`;
+      }
+    }
 
     if (backupPath) console.log(`  Backed up original settings -> ${backupPath}`);
     console.log(`  Hook command registered in notify: ${JSON.stringify(hookCommand())}`);
@@ -103,6 +133,7 @@ async function cmdInstall(args) {
     }
     const { level, source } = effectiveLevel();
     console.log(`  Collecting: ${level} (from ${source})`);
+    if (otelNote) console.log(otelNote);
     console.log('\n✅ Codex hook installed successfully.');
     console.log('\nBy default only metadata is sent (no prompts, answers, commands or files).');
     console.log('To send full content, accept the data-collection policy: anosys-codex privacy full\n');
@@ -132,12 +163,20 @@ async function cmdUninstall() {
   const backupPath = backup(configPath);
   const removedConfig = removeCodexConfig(configPath);
   const removedEnv = removeCodexEnv(envPath);
+  let removedOtel = false;
+  try {
+    removedOtel = removeCodexOtel(configPath);
+  } catch (err) {
+    if (!(err instanceof OtelConfigError)) throw err;
+    console.log(`  ⚠️  Could not remove the Anosys [otel] block: ${err.message}`);
+  }
 
   if (backupPath) console.log(`  Backed up settings -> ${backupPath}`);
   if (removedConfig) console.log(`  Removed hook entry from ${configPath}`);
   else console.log(`  No AnoSys hook entry found in ${configPath}`);
 
   if (removedEnv) console.log(`  Removed ${envPath}`);
+  if (removedOtel) console.log(`  Removed the Anosys [otel] export from ${configPath}`);
   console.log('\n✅ AnoSys Codex hook uninstalled successfully.\n');
 }
 
@@ -167,7 +206,8 @@ function cmdStatus() {
     console.log('\nStatus: ❌ Not registered in config.toml');
   }
 
-  console.log(`Env file exists: ${fs.existsSync(envPath) ? '✅ Yes' : '❌ No'}\n`);
+  console.log(`Env file exists: ${fs.existsSync(envPath) ? '✅ Yes' : '❌ No'}`);
+  console.log(`Codex OTel export: ${hasAnosysOtel(configPath) ? '✅ Anosys.ai' : '— not set up by Anosys'}\n`);
 }
 
 async function main() {
@@ -197,7 +237,7 @@ async function main() {
     await run(args.slice(1));
     process.exit(0);
   } else {
-    console.log('Usage: anosys-codex <install|uninstall|status|privacy|doctor|purge|mcp|run> [--api-key <key>] [-y|--yes] [--auto-update|--no-auto-update]');
+    console.log('Usage: anosys-codex <install|uninstall|status|privacy|doctor|purge|mcp|run> [--api-key <key>] [--otel-key <key>] [-y|--yes] [--auto-update|--no-auto-update]');
     process.exit(1);
   }
 }

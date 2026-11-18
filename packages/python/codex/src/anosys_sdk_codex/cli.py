@@ -25,16 +25,20 @@ from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
 
 from anosys_sdk_codex.installer import (
     INGESTION_URL,
+    OtelConfigError,
     hook_command,
     backup,
     get_config_path,
     get_env_path,
     has_anosys_hook,
+    has_anosys_otel,
     load_toml,
     remove_codex_config,
     remove_codex_env,
+    remove_codex_otel,
     update_codex_config,
     update_codex_env,
+    update_codex_otel,
     validate_api_key,
 )
 
@@ -65,6 +69,16 @@ def cmd_install(args: argparse.Namespace) -> None:
         else:
             print("✅ Logs API key is valid (CC pixel).")
 
+    # Codex's own OTel export is a separate opt-in (--otel-key): its events carry
+    # your account email. Prompt text stays out (log_user_prompt = false).
+    otel_key = (getattr(args, "otel_key", None) or "").strip()
+    if otel_key:
+        print("Validating OTEL API key...")
+        if not validate_api_key(otel_key, "otel"):
+            print("⚠️  Warning: OTEL API key validation failed (invalid key or incompatible type).")
+        else:
+            print("✅ OTEL API key is valid.")
+
     auto_update = args.auto_update
     if auto_update is None:
         if yes:
@@ -84,6 +98,14 @@ def cmd_install(args: argparse.Namespace) -> None:
         backup_path = backup(config_path)
         update_codex_config(path=config_path)
         update_codex_env(api_key=api_key, path=env_path)
+        otel_note = None
+        if otel_key:
+            try:
+                update_codex_otel(otel_key, path=config_path)
+                otel_note = (f"  Codex OTel export: enabled ({INGESTION_URL}/v1/...); "
+                             "events include your account email, prompts are not logged")
+            except OtelConfigError as exc:
+                otel_note = f"  ⚠️  Codex OTel export NOT enabled: {exc}"
 
         if backup_path:
             print(f"  Backed up original settings -> {backup_path}")
@@ -94,6 +116,8 @@ def cmd_install(args: argparse.Namespace) -> None:
             print(f"  Logs API key: {masked}")
         level, source = effective_level()
         print(f"  Collecting: {level} (from {source})")
+        if otel_note:
+            print(otel_note)
         print("\n✅ Codex hook installed successfully.")
         print("\nBy default only metadata is sent (no prompts, answers, commands or files).")
         print("To send full content, accept the data-collection policy: anosys-codex privacy full")
@@ -121,6 +145,11 @@ def cmd_uninstall(args: argparse.Namespace) -> None:
     backup_path = backup(config_path)
     removed_config = remove_codex_config(config_path)
     removed_env = remove_codex_env(env_path)
+    try:
+        removed_otel = remove_codex_otel(config_path)
+    except OtelConfigError as exc:
+        removed_otel = False
+        print(f"  ⚠️  Could not remove the Anosys [otel] block: {exc}")
 
     if backup_path:
         print(f"  Backed up settings -> {backup_path}")
@@ -131,6 +160,8 @@ def cmd_uninstall(args: argparse.Namespace) -> None:
 
     if removed_env:
         print(f"  Removed {env_path}")
+    if removed_otel:
+        print(f"  Removed the Anosys [otel] export from {config_path}")
 
     print("\n✅ AnoSys Codex hook uninstalled successfully.\n")
 
@@ -164,6 +195,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         print("Env file exists: ✅ Yes")
     else:
         print("Env file exists: ❌ No")
+    print(f"Codex OTel export: {'✅ Anosys.ai' if has_anosys_otel(config_path) else '— not set up by Anosys'}")
     print()
 
 
@@ -202,6 +234,8 @@ def main(argv: list[str] | None = None) -> None:
     # Kept so old install commands still work; collection is set with `privacy`
     p_install.add_argument("--redaction", action="store_true", default=False, help=argparse.SUPPRESS)
     p_install.add_argument("--no-redaction", action="store_true", default=False, help=argparse.SUPPRESS)
+    p_install.add_argument("--otel-key", metavar="KEY",
+                           help="Also enable Codex's own OTel export (includes your account email; no prompts)")
     p_install.add_argument("--auto-update", dest="auto_update", action="store_true", default=None)
     p_install.add_argument("--no-auto-update", dest="auto_update", action="store_false")
     add_mcp_install_flags(p_install)
