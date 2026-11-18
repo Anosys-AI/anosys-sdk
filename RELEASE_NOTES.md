@@ -9,6 +9,12 @@
 
 # Release notes
 
+## Codex 0.3.2 — November 2026
+
+`anosys-codex` 0.3.2 (Python) and `anosys-sdk-codex` 0.3.2 (JavaScript):
+
+- **No double notifications.** The Codex app's Computer Use notifier can wrap `notify` again after Anosys has chained it, so the same notifier sat both before and after the Anosys hook and ran twice per turn. The hook now skips a chained notifier that already called it, and `install` flattens such a chain to a single copy.
+
 ## Anosys.ai SDK 2.1.1 — November 2026
 
 A fix for the coding-assistant hooks. Upgrade if you use Claude Code, Codex or Antigravity tracking.

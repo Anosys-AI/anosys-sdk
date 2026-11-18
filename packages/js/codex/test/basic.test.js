@@ -326,3 +326,29 @@ test('validateApiKey returns true for CC pixel and false for non-CC pixel', asyn
   }
 });
 
+
+test('previous notify is not run again when it wraps us (Codex Computer Use re-wrap)', () => {
+  const { callPreviousNotify } = require('../src/hookRunner');
+  const inst = require('../src/installer');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-wrap-'));
+  const marker = path.join(dir, 'calls.txt');
+  const fake = path.join(dir, 'fake.sh');
+  fs.writeFileSync(fake, `#!/bin/sh\necho called >> ${marker}\n`, { mode: 0o755 });
+  const cu = [fake, 'turn-ended'];
+  const ours = inst.hookCommand();
+  const chained = [...ours, inst.PREVIOUS_NOTIFY_FLAG, JSON.stringify(cu)];
+  const prevHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = dir;
+  try {
+    const toml = (n) => `notify = [${n.map((x) => JSON.stringify(x)).join(', ')}]\n`;
+    fs.writeFileSync(path.join(dir, 'config.toml'), toml([...cu, inst.PREVIOUS_NOTIFY_FLAG, JSON.stringify(chained)]));
+    callPreviousNotify(cu, '{}');
+    assert.equal(fs.existsSync(marker), false);
+    fs.writeFileSync(path.join(dir, 'config.toml'), toml(chained));
+    callPreviousNotify(cu, '{}');
+    assert.equal((fs.readFileSync(marker, 'utf8').match(/called/g) || []).length, 1);
+    assert.deepEqual(inst.notifyWithoutOurs([...cu, inst.PREVIOUS_NOTIFY_FLAG, JSON.stringify(chained)]), cu);
+  } finally {
+    if (prevHome === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = prevHome;
+  }
+});

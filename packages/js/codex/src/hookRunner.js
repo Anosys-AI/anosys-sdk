@@ -69,7 +69,7 @@ function saveState(state) {
 }
 
 function headers() {
-  const h = { 'Content-Type': 'application/json', 'User-Agent': 'anosys-codex-hook/0.3.1' };
+  const h = { 'Content-Type': 'application/json', 'User-Agent': 'anosys-codex-hook/0.3.2' };
   if (API_KEY) {
     h['anosys-apikey'] = API_KEY;
     h['x-api-key'] = API_KEY;
@@ -478,9 +478,36 @@ function parseArgv(argv) {
   return { previous, raw: (raw || '{}').trim() };
 }
 
+/**
+ * Commands that wrap the AnoSys hook in the configured notify chain, outermost first.
+ * Another tool (e.g. Codex Computer Use) can wrap notify again after we chained it,
+ * so the same notifier ends up both before and after us.
+ */
+function wrappersAroundUs() {
+  try {
+    const { isOurs, notifyHead, getConfigPath, loadToml } = require('./installer');
+    let command = loadToml(getConfigPath()).notify;
+    const outer = [];
+    while (Array.isArray(command) && command.length) {
+      const items = command.map(String);
+      const head = notifyHead(items);
+      if (head.some(isOurs)) return outer;
+      outer.push(head);
+      const i = items.indexOf(PREVIOUS_NOTIFY_FLAG);
+      if (i === -1) return [];
+      command = JSON.parse(items[i + 1]);
+    }
+  } catch (_) { /* fall through */ }
+  return [];
+}
+
 /** Run the notify command that was configured before AnoSys, unchanged. */
 function callPreviousNotify(previous, raw) {
   if (!Array.isArray(previous) || !previous.length) return;
+  const { notifyHead } = require('./installer');
+  const head = JSON.stringify(notifyHead(previous.map(String)));
+  // That notifier already ran: it is the one that called us
+  if (wrappersAroundUs().some((w) => JSON.stringify(w) === head)) return;
   try {
     spawnSync(String(previous[0]), [...previous.slice(1).map(String), raw], { stdio: 'ignore', timeout: 30000 });
   } catch (e) {
@@ -566,6 +593,7 @@ async function run(argv = process.argv.slice(2), options = {}) {
 }
 
 module.exports = {
+  callPreviousNotify,
   run,
   parseArgv,
   prepareRecord,

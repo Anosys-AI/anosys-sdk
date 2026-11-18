@@ -57,3 +57,39 @@ def test_disable_switch_sends_nothing(tmp_path):
                             env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert "Collection is off" in (tmp_path / "state" / "anosys_hook.log").read_text()
+
+
+def test_previous_notify_not_rerun_when_it_wraps_us(tmp_path, monkeypatch):
+    """Codex Computer Use can wrap notify after we chained it: don't call it a second time."""
+    import json as _json
+    from anosys_sdk_codex import hook_runner, installer
+
+    marker = tmp_path / "calls.txt"
+    fake = tmp_path / "fake_notifier.sh"
+    fake.write_text(f"#!/bin/sh\necho called >> {marker}\n")
+    fake.chmod(0o755)
+    cu = [str(fake), "turn-ended"]
+    ours = installer.hook_command()
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+
+    # Wrapped: CU -> ours -> CU. Ours must not call CU again.
+    chained = ours + [installer.PREVIOUS_NOTIFY_FLAG, _json.dumps(cu)]
+    notify = cu + [installer.PREVIOUS_NOTIFY_FLAG, _json.dumps(chained)]
+    (tmp_path / "config.toml").write_text(f"notify = {installer._toml_array(notify)}\n")
+    hook_runner.call_previous_notify(cu, "{}")
+    assert not marker.exists()
+
+    # Normal: ours -> CU. Ours calls CU once.
+    (tmp_path / "config.toml").write_text(f"notify = {installer._toml_array(chained)}\n")
+    hook_runner.call_previous_notify(cu, "{}")
+    assert marker.read_text().count("called") == 1
+
+
+def test_reinstall_flattens_self_wrapped_chain(tmp_path):
+    import json as _json
+    from anosys_sdk_codex import installer
+    cu = ["/x/SkyComputerUseClient", "turn-ended"]
+    old_ours = ["/old/python", "-m", "anosys_sdk_codex.hook_runner"]
+    chained = old_ours + [installer.PREVIOUS_NOTIFY_FLAG, _json.dumps(cu)]
+    notify = cu + [installer.PREVIOUS_NOTIFY_FLAG, _json.dumps(chained)]
+    assert installer._notify_without_ours(notify) == cu

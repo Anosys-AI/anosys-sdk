@@ -133,9 +133,18 @@ function notifyWithoutOurs(notify) {
     let inner = null;
     try { inner = notifyWithoutOurs(JSON.parse(prevValue)); } catch { inner = null; }
     const rest = [...items.slice(0, flag), ...items.slice(flag + 2)];
+    // The wrapper had chained to itself through us (e.g. Codex Computer Use re-wrapping
+    // notify): keep one copy instead of calling the same notifier twice.
+    if (inner && JSON.stringify(notifyHead(inner)) === JSON.stringify(rest)) return inner;
     return inner ? [...rest, PREVIOUS_NOTIFY_FLAG, JSON.stringify(inner)] : rest;
   }
   return items;
+}
+
+/** The command without its --previous-notify argument. */
+function notifyHead(command) {
+  const i = command.indexOf(PREVIOUS_NOTIFY_FLAG);
+  return i === -1 ? [...command] : [...command.slice(0, i), ...command.slice(i + 2)];
 }
 
 // One top-level `notify = [...]` line (its strings may themselves contain brackets)
@@ -443,6 +452,8 @@ module.exports = {
   loadToml,
   writeTomlAtomic,
   hasAnosysHook,
+  isOurs,
+  notifyHead,
   updateCodexConfig,
   removeCodexConfig,
   updateCodexEnv,

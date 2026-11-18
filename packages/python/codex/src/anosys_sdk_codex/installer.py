@@ -148,8 +148,20 @@ def _notify_without_ours(notify: Any) -> Optional[List[str]]:
         except json.JSONDecodeError:
             inner = None
         rest = items[:i] + items[i + 2 :]
+        if inner and _notify_head(inner) == rest:
+            # The wrapper had chained to itself through us (e.g. Codex Computer Use re-wrapping
+            # notify): keep one copy instead of calling the same notifier twice.
+            return inner
         return rest + [PREVIOUS_NOTIFY_FLAG, json.dumps(inner)] if inner else rest
     return items
+
+
+def _notify_head(command: List[str]) -> List[str]:
+    """The command without its ``--previous-notify`` argument."""
+    if PREVIOUS_NOTIFY_FLAG in command:
+        i = command.index(PREVIOUS_NOTIFY_FLAG)
+        return command[:i] + command[i + 2 :]
+    return list(command)
 
 
 def _toml_array(values: List[str]) -> str:

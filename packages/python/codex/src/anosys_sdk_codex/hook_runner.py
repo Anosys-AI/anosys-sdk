@@ -83,7 +83,7 @@ def save_state(state: Dict[str, Any]) -> None:
 
 
 def _headers() -> Dict[str, str]:
-    headers = {"Content-Type": "application/json", "User-Agent": "anosys-codex-hook/0.3.1"}
+    headers = {"Content-Type": "application/json", "User-Agent": "anosys-codex-hook/0.3.2"}
     if API_KEY:
         headers["anosys-apikey"] = API_KEY
         headers["x-api-key"] = API_KEY
@@ -496,9 +496,37 @@ def parse_argv(argv: List[str]) -> tuple:
     return previous, raw
 
 
+def _wrappers_around_us() -> List[List[str]]:
+    """
+    Commands that wrap the AnoSys hook in the configured notify chain, outermost
+    first. Another tool (e.g. Codex Computer Use) can wrap notify again after we
+    chained it, so the same notifier ends up both before and after us.
+    """
+    try:
+        from anosys_sdk_codex.installer import _is_ours, _notify_head, get_config_path, load_toml
+        command = load_toml(get_config_path()).get("notify")
+        outer: List[List[str]] = []
+        while isinstance(command, list) and command:
+            items = [str(x) for x in command]
+            head = _notify_head(items)
+            if any(_is_ours(x) for x in head):
+                return outer
+            outer.append(head)
+            if PREVIOUS_NOTIFY_FLAG not in items:
+                return []
+            command = json.loads(items[items.index(PREVIOUS_NOTIFY_FLAG) + 1])
+    except Exception:
+        pass
+    return []
+
+
 def call_previous_notify(previous: Any, raw: str) -> None:
     """Run the notify command that was configured before AnoSys, unchanged."""
     if not isinstance(previous, list) or not previous:
+        return
+    from anosys_sdk_codex.installer import _notify_head
+    if _notify_head([str(x) for x in previous]) in _wrappers_around_us():
+        # That notifier already ran: it is the one that called us
         return
     try:
         import subprocess
