@@ -22,6 +22,8 @@ Instructions for AI coding agents (Claude Code, Codex, Cursor and others). Use t
 
 Coding-assistant tracking (Claude Code, Codex, Antigravity) is installed by the user with one command, not added to project code; see [Track coding-assistant spend](README.md#track-coding-assistant-spend).
 
+**Connect yourself to Anosys.ai data.** If the user wants you to read their Anosys.ai traces, problems or evals, run `npx -y anosys-sdk-mcp install --target <your tool> -y` with `ANOSYS_MCP_API_KEY` (an `ak_mcp_...` key from the Console, not the ingestion key) already exported. Never ask the user to paste the key into the chat, and never write it into a project file; `--workspace` writes a reference to the variable instead. See [anosys-sdk-mcp](packages/js/mcp/README.md).
+
 Package guides: [packages/python](packages/python) and [packages/js](packages/js). Data controls: [docs/DATA_CONTROLS.md](docs/DATA_CONTROLS.md).
 
 ## Work in this repository
