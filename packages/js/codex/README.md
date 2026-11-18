@@ -94,6 +94,24 @@ anosys-codex uninstall
 
 The run handler is invoked by Codex after a turn completes.
 
+## Anosys.ai MCP server and skill
+
+Let Codex read your Anosys.ai workspace (architecture, problems, evals, traces and read-only SQL) through the Anosys.ai MCP server, and install the `anosys-platform-intelligence` skill. Create an MCP key (`ak_mcp_...`) in the [Console](https://console.anosys.ai) under **My Profile → MCP Keys**; your ingestion key does not work here.
+
+```bash
+export ANOSYS_MCP_API_KEY=ak_mcp_...
+
+# Add it when you install the hook
+anosys-codex install --api-key YOUR_INGESTION_KEY --with-mcp --auto-update --yes
+
+# Or on its own
+anosys-codex mcp install -y
+anosys-codex mcp status
+anosys-codex mcp uninstall
+```
+
+With `--workspace` the server goes in the project's `.codex/config.toml`, which refers to `ANOSYS_MCP_API_KEY` instead of storing the key, so it is safe to commit. Use `--skill-only` to install just the skill. All options and other tools: [anosys-sdk-mcp](https://github.com/Anosys-AI/anosys-sdk/blob/main/packages/js/mcp/README.md).
+
 ## License
 
 Apache License 2.0.

@@ -11,6 +11,7 @@ on:
       - "antigravity-js-v*"
       - "anthropic-js-v*"
       - "claude-agents-js-v*"
+      - "mcp-js-v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -43,6 +44,7 @@ jobs:
             antigravity-js-v*)    dir="packages/js/antigravity" ;;
             anthropic-js-v*)      dir="packages/js/anthropic" ;;
             claude-agents-js-v*)  dir="packages/js/claude-agents" ;;
+            mcp-js-v*)            dir="packages/js/mcp" ;;
             *)                    echo "Unknown tag prefix: $tag" >&2; exit 1 ;;
           esac
           echo "dir=$dir" >> "$GITHUB_OUTPUT"

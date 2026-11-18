@@ -3,7 +3,18 @@
 
 const fs = require('fs');
 const readline = require('readline');
-const { METADATA, cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, writeConsent } = require('anosys-sdk-core');
+const {
+  METADATA,
+  applyInstallMcpOptions,
+  cmdPrivacy,
+  cmdPurge,
+  effectiveLevel,
+  parseMcpCliArgs,
+  printDoctor,
+  promptHidden,
+  runMcpSubcommand,
+  writeConsent,
+} = require('anosys-sdk-core');
 const {
   INGESTION_URL,
   hookCommand,
@@ -95,6 +106,11 @@ async function cmdInstall(args) {
     console.log('\n✅ Codex hook installed successfully.');
     console.log('\nBy default only metadata is sent (no prompts, answers, commands or files).');
     console.log('To send full content, accept the data-collection policy: anosys-codex privacy full\n');
+    await applyInstallMcpOptions({
+      harness: 'codex',
+      ...parseMcpCliArgs(args),
+      promptFn: promptHidden,
+    });
   } else {
     console.log('\n================================================================');
     console.log('Add the following to your ~/.codex/config.toml file:');
@@ -175,11 +191,13 @@ async function main() {
       hasAnosysHook(data) ? JSON.stringify(data.notify) : null,
       { config: getConfigPath(), 'env file': getEnvPath(), state: hookRunner.STATE_FILE,
         'pending queue': hookRunner.PENDING_FILE, log: hookRunner.LOG_FILE });
+  } else if (cmd === 'mcp') {
+    process.exit(await runMcpSubcommand({ defaultHarness: 'codex', argv: args.slice(1), promptFn: promptHidden, cliName: 'anosys-codex' }));
   } else if (cmd === 'run') {
     await run(args.slice(1));
     process.exit(0);
   } else {
-    console.log('Usage: anosys-codex <install|uninstall|status|privacy|doctor|purge|run> [--api-key <key>] [-y|--yes] [--auto-update|--no-auto-update]');
+    console.log('Usage: anosys-codex <install|uninstall|status|privacy|doctor|purge|mcp|run> [--api-key <key>] [-y|--yes] [--auto-update|--no-auto-update]');
     process.exit(1);
   }
 }

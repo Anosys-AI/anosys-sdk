@@ -8,6 +8,7 @@ Commands:
   privacy    Show or change what is collected (off | metadata | full)
   doctor     Show installed copies, the active hook and local files
   purge      Delete local queued records and logs
+  mcp        Configure AnoSys Public MCP server and SKILL.md
   run        Execute the hook (invoked by Claude Code on every Stop event)
 """
 
@@ -16,6 +17,7 @@ import asyncio
 import sys
 
 from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
+from anosys_sdk_core.mcp_installer import add_mcp_install_flags, add_mcp_subparser, apply_install_mcp_flags
 from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
 
 from anosys_sdk_claude_code.installer import (
@@ -49,8 +51,10 @@ def cmd_install(args: argparse.Namespace) -> None:
     print("\nAnoSys Claude Code Hook Installer")
     print("=" * 40)
 
+    yes = getattr(args, "yes", False)
+
     api_key = args.api_key
-    if not api_key:
+    if not api_key and not yes:
         api_key = _prompt("AnoSys API key for logs (leave blank to skip): ")
     if api_key:
         print("Validating Logs API key...")
@@ -72,8 +76,11 @@ def cmd_install(args: argparse.Namespace) -> None:
 
     auto_update = args.auto_update
     if auto_update is None:
-        choice = _prompt("Would you like to automatically update ~/.claude/settings.json? (Y/n): ", "y").lower()
-        auto_update = choice != 'n'
+        if yes:
+            auto_update = True
+        else:
+            choice = _prompt("Would you like to automatically update ~/.claude/settings.json? (Y/n): ", "y").lower()
+            auto_update = choice != 'n'
 
     new_env: dict = {
         "ANOSYS_HOOK_DRY_RUN": "false",
@@ -117,6 +124,7 @@ def cmd_install(args: argparse.Namespace) -> None:
         print("\nBy default only metadata is sent (no prompts, answers, tool output or files).")
         print("To send full content, accept the data-collection policy: anosys-claude-code privacy full")
         print("\nDone. The hook will fire automatically after each Claude Code session.")
+        apply_install_mcp_flags("claude-code", args)
     else:
         print("\n================================================================")
         print("Add the following to your ~/.claude/settings.json file options:")
@@ -250,6 +258,7 @@ def main() -> None:
 
     p_install = sub.add_parser("install", help="Register the AnoSys Stop hook")
     p_install.add_argument("--api-key", metavar="KEY", help="AnoSys API key for logs")
+    p_install.add_argument("-y", "--yes", "--non-interactive", dest="yes", action="store_true", default=False, help="Automatic yes to prompts (non-interactive mode)")
     # Kept so old install commands still work; collection is set with `privacy`
     p_install.add_argument("--redaction", action="store_true", help=argparse.SUPPRESS)
     p_install.add_argument("--no-redaction", action="store_true", help=argparse.SUPPRESS)
@@ -257,6 +266,7 @@ def main() -> None:
                            help="Also enable Claude Code's own OTel export (includes your account email)")
     p_install.add_argument("--auto-update", action="store_true", default=None, help="Automatically update settings.json")
     p_install.add_argument("--no-auto-update", action="store_false", dest="auto_update", help="Do not automatically update settings.json")
+    add_mcp_install_flags(p_install)
     p_install.set_defaults(func=cmd_install)
 
     p_uninstall = sub.add_parser("uninstall", help="Remove the AnoSys Stop hook")
@@ -267,6 +277,7 @@ def main() -> None:
 
     add_privacy_parser(sub, "anosys-claude-code")
     add_maintenance_parsers(sub, _purge_paths, _doctor)
+    add_mcp_subparser(sub, "claude-code")
 
     p_run = sub.add_parser("run", help="Execute the hook (called by Claude Code)")
     p_run.set_defaults(func=cmd_run)

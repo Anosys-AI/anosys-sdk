@@ -46,6 +46,7 @@ Components:
   antigravity-js    packages/js/antigravity           (anosys-sdk-antigravity)
   anthropic-js      packages/js/anthropic             (anosys-sdk-anthropic)
   claude-agents-js  packages/js/claude-agents         (anosys-sdk-claude-agents)
+  mcp-js            packages/js/mcp                   (anosys-sdk-mcp)
 
 Version: semver, e.g. 1.0.5 or 2.0.0-rc.1
 
@@ -87,6 +88,7 @@ case "$component" in
   antigravity-js)    dir="packages/js/antigravity";       lang="node"   ;;
   anthropic-js)      dir="packages/js/anthropic";         lang="node"   ;;
   claude-agents-js)  dir="packages/js/claude-agents";     lang="node"   ;;
+  mcp-js)            dir="packages/js/mcp";               lang="node"   ;;
   *)
     err "unknown component: $component"
     usage

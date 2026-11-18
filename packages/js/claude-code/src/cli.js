@@ -9,13 +9,26 @@
  *   privacy    Show or change what is collected (off | metadata | full)
  *   doctor     Show the active hook and local files
  *   purge      Delete local queued records and logs
+ *   mcp        Configure AnoSys Public MCP server and SKILL.md
  *   run        Execute the hook (invoked by Claude Code on every Stop event)
  */
 
 'use strict';
 
 const readline = require('readline');
-const { METADATA, cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, runHookSafely, writeConsent } = require('anosys-sdk-core');
+const {
+  METADATA,
+  applyInstallMcpOptions,
+  cmdPrivacy,
+  cmdPurge,
+  effectiveLevel,
+  parseMcpCliArgs,
+  printDoctor,
+  promptHidden,
+  runHookSafely,
+  runMcpSubcommand,
+  writeConsent,
+} = require('anosys-sdk-core');
 const {
   SETTINGS_PATH,
   loadSettings,
@@ -53,7 +66,7 @@ async function cmdInstall(args) {
   console.log('='.repeat(40));
 
   let apiKey = args.apiKey;
-  if (!apiKey) {
+  if (!apiKey && !args.yes) {
     apiKey = await prompt('AnoSys API key for logs (leave blank to skip): ');
   }
   if (apiKey) {
@@ -81,8 +94,12 @@ async function cmdInstall(args) {
 
   let autoUpdate = args.autoUpdate;
   if (autoUpdate === null) {
-    const choice = await prompt('Would you like to automatically update ~/.claude/settings.json? (Y/n): ', 'y');
-    autoUpdate = choice.toLowerCase() !== 'n';
+    if (args.yes) {
+      autoUpdate = true;
+    } else {
+      const choice = await prompt('Would you like to automatically update ~/.claude/settings.json? (Y/n): ', 'y');
+      autoUpdate = choice.toLowerCase() !== 'n';
+    }
   }
 
   const newEnv = {
@@ -131,6 +148,11 @@ async function cmdInstall(args) {
     console.log('\nDone. The hook will fire automatically after each Claude Code turn.');
     console.log('By default only metadata is sent (no prompts, answers, tool output or files).');
     console.log('To send full content, accept the data-collection policy: anosys-sdk-claude-code privacy full');
+    await applyInstallMcpOptions({
+      harness: 'claude-code',
+      ...(args.mcpOpts || {}),
+      promptFn: promptHidden,
+    });
   } else {
     console.log('\n================================================================');
     console.log('Add the following to your ~/.claude/settings.json file options:');
@@ -247,6 +269,7 @@ async function main() {
     console.log('  privacy    Show or change what is collected (off | metadata | full)');
     console.log('  doctor     Show the active hook and local files');
     console.log('  purge      Delete local queued records and logs');
+    console.log('  mcp        Configure AnoSys Public MCP server and SKILL.md');
     console.log('  run        Execute the hook (called by Claude Code)');
     process.exit(1);
   }
@@ -257,6 +280,8 @@ async function main() {
     noRedaction: false,
     otelKey: null,
     autoUpdate: null,
+    yes: false,
+    mcpOpts: parseMcpCliArgs(argv.slice(1)),
   };
 
   for (let i = 1; i < argv.length; i++) {
@@ -273,6 +298,8 @@ async function main() {
       args.autoUpdate = true;
     } else if (arg === '--no-auto-update') {
       args.autoUpdate = false;
+    } else if (arg === '-y' || arg === '--yes' || arg === '--non-interactive') {
+      args.yes = true;
     }
   }
 
@@ -280,6 +307,9 @@ async function main() {
     switch (command) {
       case 'install':
         await cmdInstall(args);
+        break;
+      case 'mcp':
+        process.exit(await runMcpSubcommand({ defaultHarness: 'claude-code', argv: argv.slice(1), promptFn: promptHidden, cliName: 'anosys-sdk-claude-code' }));
         break;
       case 'uninstall':
         cmdUninstall();

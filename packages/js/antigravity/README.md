@@ -51,6 +51,24 @@ The hook reads only the session that just ended, never earlier history, and its 
 
 See the [complete setup guide](../../../docs/ANTIGRAVITY.md), [variables reference](../../../docs/ANTIGRAVITY_VARIABLES.md), and [content controls](../../../docs/DATA_CONTROLS.md) for configuration paths, environment precedence, diagnostics, and limitations.
 
+## Anosys.ai MCP server and skill
+
+Let Antigravity read your Anosys.ai workspace (architecture, problems, evals, traces and read-only SQL) through the Anosys.ai MCP server, and install the `anosys-platform-intelligence` skill. Create an MCP key (`ak_mcp_...`) in the [Console](https://console.anosys.ai) under **My Profile → MCP Keys**; your ingestion key does not work here.
+
+```bash
+export ANOSYS_MCP_API_KEY=ak_mcp_...
+
+# Add it when you install the hook
+anosys-antigravity install --api-key YOUR_INGESTION_KEY --with-mcp -y
+
+# Or on its own
+anosys-antigravity mcp install -y
+anosys-antigravity mcp status
+anosys-antigravity mcp uninstall
+```
+
+Antigravity cannot read the key from the environment, so the server always goes in your user config (`~/.gemini/config/mcp_config.json`); `--workspace` only puts the skill in the project. Use `--skill-only` to install just the skill. All options and other tools: [anosys-sdk-mcp](https://github.com/Anosys-AI/anosys-sdk/blob/main/packages/js/mcp/README.md).
+
 ## License
 
 [Apache License 2.0](LICENSE).

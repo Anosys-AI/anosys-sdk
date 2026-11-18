@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 from anosys_sdk_core.privacy import BASE_METADATA_FIELDS
 
-INTEGRATION_VERSION = '0.3.0'
+INTEGRATION_VERSION = '0.4.0'
 
 OS_USER = getpass.getuser()
 

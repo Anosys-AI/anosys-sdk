@@ -69,7 +69,7 @@ function saveState(state) {
 }
 
 function headers() {
-  const h = { 'Content-Type': 'application/json', 'User-Agent': 'anosys-codex-hook/0.2.0' };
+  const h = { 'Content-Type': 'application/json', 'User-Agent': 'anosys-codex-hook/0.3.0' };
   if (API_KEY) {
     h['anosys-apikey'] = API_KEY;
     h['x-api-key'] = API_KEY;

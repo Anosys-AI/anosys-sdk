@@ -72,6 +72,18 @@ anosys-antigravity uninstall
 
 For workspace installations, pass --workspace to status and uninstall as well as install.
 
+## Anosys.ai MCP server and skill
+
+Antigravity can also read your Anosys.ai workspace through the Anosys.ai MCP server. Create an MCP key (`ak_mcp_...`) in the [Console](https://console.anosys.ai) under **My Profile → MCP Keys**, then:
+
+```bash
+export ANOSYS_MCP_API_KEY=ak_mcp_...
+anosys-antigravity mcp install -y      # or: anosys-antigravity install --api-key YOUR_INGESTION_KEY --with-mcp --yes
+anosys-antigravity mcp status
+```
+
+The server is registered in `~/.gemini/config/mcp_config.json` (as `serverUrl`) and the skill in `~/.gemini/config/skills/anosys-platform-intelligence/SKILL.md`. Antigravity cannot read the key from the environment, so the server always goes in this user file; `--workspace` only puts the skill in `.agents/skills/`. More options: [anosys-sdk-mcp](../packages/js/mcp/README.md).
+
 ## Data coverage and limitations
 
 The integration captures prompts, responses, available reasoning blocks, tool input/output, IDE context when present, settings changes, and execution duration. Token counters are not exposed in the hook inputs and transcripts handled by version 0.1.0. Emitted zero token fields mean **unavailable**, not zero consumption. Token spend and cost cannot be inferred from those fields.

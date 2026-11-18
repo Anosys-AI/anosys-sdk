@@ -8,6 +8,7 @@ Commands:
   privacy    Show or change what is collected (off | metadata | full)
   doctor     Show installed copies, the active hook and local files
   purge      Delete local queued records and logs
+  mcp        Configure AnoSys Public MCP server and SKILL.md
   run        Execute hook handler (invoked by Antigravity on PreInvocation/Stop)
 """
 
@@ -18,6 +19,7 @@ import os
 import sys
 
 from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
+from anosys_sdk_core.mcp_installer import add_mcp_install_flags, add_mcp_subparser, apply_install_mcp_flags
 from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
 
 from anosys_sdk_antigravity.constants import (
@@ -106,6 +108,7 @@ def cmd_install(args: argparse.Namespace) -> None:
         print("\n✅ Antigravity hook installed successfully.")
         print("\nBy default only metadata is sent (no prompts, answers, commands or files).")
         print("To send full content, accept the data-collection policy: anosys-antigravity privacy full\n")
+        apply_install_mcp_flags("antigravity", args, workspace=workspace)
     else:
         print("\n================================================================")
         print(f"Add the following to your {hooks_path} file:")
@@ -226,6 +229,7 @@ def main(argv: list[str] | None = None) -> None:
     p_install.add_argument("--workspace", action="store_true", default=False, help="Target workspace .agents/hooks.json")
     p_install.add_argument("--auto-update", dest="auto_update", action="store_true", default=None)
     p_install.add_argument("--no-auto-update", dest="auto_update", action="store_false")
+    add_mcp_install_flags(p_install)
     p_install.set_defaults(func=cmd_install)
 
     # uninstall
@@ -240,6 +244,7 @@ def main(argv: list[str] | None = None) -> None:
 
     add_privacy_parser(subparsers, "anosys-antigravity")
     add_maintenance_parsers(subparsers, _purge_paths, _doctor)
+    add_mcp_subparser(subparsers, "antigravity")
 
     # run
     p_run = subparsers.add_parser("run", help="Run the hook handler")

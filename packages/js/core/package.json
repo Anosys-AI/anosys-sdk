@@ -1,6 +1,6 @@
 {
   "name": "anosys-sdk-core",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "AnoSys SDK core for Node.js \u2014 collection levels, consent, size-limited delivery and client-side encryption shared by all AnoSys packages",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",

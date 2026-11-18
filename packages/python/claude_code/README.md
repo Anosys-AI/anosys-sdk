@@ -92,3 +92,21 @@ When installed, this package registers a `Stop` hook in `~/.claude/settings.json
 ## Content controls
 
 See the [content-controls reference](../../../docs/DATA_CONTROLS.md) for encryption coverage, default columns, size limits, and limitations. Encryption is opt-in and applies to selected string fields; it does not encrypt the complete record.
+
+## Anosys.ai MCP server and skill
+
+Let Claude Code read your Anosys.ai workspace (architecture, problems, evals, traces and read-only SQL) through the Anosys.ai MCP server, and install the `anosys-platform-intelligence` skill. Create an MCP key (`ak_mcp_...`) in the [Console](https://console.anosys.ai) under **My Profile → MCP Keys**; your ingestion key does not work here.
+
+```bash
+export ANOSYS_MCP_API_KEY=ak_mcp_...
+
+# Add it when you install the hook
+anosys-claude-code install --api-key YOUR_INGESTION_KEY --with-mcp -y
+
+# Or on its own
+anosys-claude-code mcp install -y
+anosys-claude-code mcp status
+anosys-claude-code mcp uninstall
+```
+
+With `--workspace` the server goes in the project's `.mcp.json`, which refers to `ANOSYS_MCP_API_KEY` instead of storing the key, so it is safe to commit. Use `--skill-only` to install just the skill. All options and other tools: [anosys-sdk-mcp](https://github.com/Anosys-AI/anosys-sdk/blob/main/packages/js/mcp/README.md).

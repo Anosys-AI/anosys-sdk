@@ -4,7 +4,18 @@
  */
 
 const readline = require('readline');
-const { METADATA, cmdPrivacy, cmdPurge, effectiveLevel, printDoctor, writeConsent } = require('anosys-sdk-core');
+const {
+  METADATA,
+  applyInstallMcpOptions,
+  cmdPrivacy,
+  cmdPurge,
+  effectiveLevel,
+  parseMcpCliArgs,
+  printDoctor,
+  promptHidden,
+  runMcpSubcommand,
+  writeConsent,
+} = require('anosys-sdk-core');
 const {
   HOOK_NAME,
   HOOK_COMMAND,
@@ -50,6 +61,12 @@ function parseArgs(argv) {
       args.apiKey = argv[++i];
     } else if (a === '--endpoint-url') {
       args.endpointUrl = argv[++i];
+    } else if (a === '--with-mcp' || a === '--with-skill' || a === '--skill-only' || a === '--no-skill') {
+      // parsed via mcpOpts below
+    } else if (a === '--mcp-key' || a === '--mcp-url') {
+      i++;
+    } else if (a.startsWith('--mcp-key=') || a.startsWith('--mcp-url=')) {
+      // parsed via mcpOpts below
     } else if (a.startsWith('--api-key=')) {
       args.apiKey = a.split('=')[1];
     } else if (a.startsWith('--endpoint-url=')) {
@@ -60,6 +77,7 @@ function parseArgs(argv) {
       args._.push(a);
     }
   }
+  args.mcpOpts = parseMcpCliArgs(argv);
   return args;
 }
 
@@ -123,6 +141,12 @@ async function cmdInstall(args) {
     console.log('\n✅ Antigravity hook installed successfully.');
     console.log('\nBy default only metadata is sent (no prompts, answers, commands or files).');
     console.log('To send full content, accept the data-collection policy: anosys-antigravity privacy full\n');
+    await applyInstallMcpOptions({
+      harness: 'antigravity',
+      ...(args.mcpOpts || {}),
+      workspace,
+      promptFn: promptHidden,
+    });
   } else {
     console.log('\n================================================================');
     console.log(`Add the following to your ${hooksPath} file:`);
@@ -224,6 +248,10 @@ Options:
   -y, --yes             Automatic yes to prompts (non-interactive mode)
   --workspace           Target workspace .agents/hooks.json
   --endpoint-url <url>  Custom ingestion endpoint URL
+  --with-mcp            Register AnoSys Public MCP server & SKILL.md
+  --with-skill          Install portable SKILL.md without requiring MCP key
+  --mcp-key <key>       Scoped AnoSys MCP API key (ak_mcp_...)
+  --mcp-url <url>       Custom MCP endpoint URL
   -h, --help            Show this help message
 
 Examples:
@@ -287,6 +315,10 @@ Options:
       await run();
       break;
     }
+    case 'mcp': {
+      process.exit(await runMcpSubcommand({ defaultHarness: 'antigravity', argv: argv.slice(1), promptFn: promptHidden, cliName: 'anosys-antigravity' }));
+      break;
+    }
     default:
       console.log(`
 Usage: anosys-antigravity <command> [options]
@@ -298,6 +330,7 @@ Commands:
   privacy [level]      Show or change what is collected (off | metadata | full)
   doctor               Show the active hook and local files
   purge                Delete local queued records and logs
+  mcp                  Configure AnoSys Public MCP server and SKILL.md
   run [event]          Execute hook handler
 
 Options:
@@ -305,6 +338,10 @@ Options:
   -y, --yes             Automatic yes to prompts
   --workspace           Target workspace .agents/hooks.json
   --endpoint-url <url>  Custom ingestion endpoint URL
+  --with-mcp            Register AnoSys Public MCP server & SKILL.md
+  --with-skill          Install portable SKILL.md without requiring MCP key
+  --mcp-key <key>       Scoped AnoSys MCP API key (ak_mcp_...)
+  --mcp-url <url>       Custom MCP endpoint URL
   -h, --help            Show this help message
 `);
       process.exit(args.help ? 0 : 1);

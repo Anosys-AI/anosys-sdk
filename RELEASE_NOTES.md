@@ -9,6 +9,33 @@
 
 # Release notes
 
+## Anosys.ai SDK 2.1 — November 2026
+
+This release lets coding agents read your Anosys.ai workspace. Nothing changes for applications that use the SDKs; only the coding-assistant packages gain new commands.
+
+### Anosys.ai MCP server and skill
+
+- **New package, `anosys-sdk-mcp` (npm).** `npx -y anosys-sdk-mcp install --target all` registers the read-only Anosys.ai MCP server (`https://console.anosys.ai/mcp`) and installs the `anosys-platform-intelligence` skill for Claude Code, Codex, Antigravity and Cursor. `status` and `uninstall` undo or check it. See the [guide](packages/js/mcp/README.md).
+- **New `mcp` command in the hook CLIs.** `anosys-claude-code`, `anosys-codex` and `anosys-antigravity` (Python and JavaScript) gain `mcp install|status|uninstall`, and `install` accepts `--with-mcp` to set it up together with the hook.
+- **Separate key.** The MCP server takes an MCP key (`ak_mcp_...`) created in the Console under **My Profile → MCP Keys**. Ingestion keys are rejected. The key comes from `--mcp-key`, `ANOSYS_MCP_API_KEY` or a prompt that does not echo it.
+- **No keys in project files.** With `--workspace`, the project config refers to `ANOSYS_MCP_API_KEY` instead of holding the key, so it is safe to commit. Antigravity cannot read the key from the environment, so its server always goes in the user config. User configs are written readable only by you, with a backup of the previous file.
+
+### Other changes
+
+- **Non-interactive Claude Code install.** `anosys-claude-code install` (Python and JavaScript) accepts `-y` / `--yes`, like the Codex and Antigravity installers: it skips the prompts and updates `~/.claude/settings.json`.
+
+### Versions
+
+| Package | Python | JavaScript |
+| --- | --- | --- |
+| Core | `anosys-sdk-core` 2.1.0 | `anosys-sdk-core` 2.1.0 |
+| Claude Code | `anosys-claude-code` 0.4.0 | `anosys-sdk-claude-code` 0.4.0 |
+| Codex | `anosys-codex` 0.3.0 | `anosys-sdk-codex` 0.3.0 |
+| Antigravity | `anosys-antigravity` 0.3.0 | `anosys-sdk-antigravity` 0.3.0 |
+| MCP installer | — | `anosys-sdk-mcp` 0.1.0 (new) |
+
+The coding-assistant packages need core 2.1.0. The OpenAI, OpenAI Agents, Anthropic and Claude Agent SDK packages are unchanged.
+
 ## Anosys.ai SDK 2.0 — November 2026
 
 This release changes what the SDKs collect by default and gives users and developers more control over it. The coding-tool hooks now send metadata only until the user opts in. Every package shares one collection-level setting, and encryption covers all content fields. Read the upgrade notes before rolling it out.

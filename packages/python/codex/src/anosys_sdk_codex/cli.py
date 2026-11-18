@@ -8,6 +8,7 @@ Commands:
   privacy    Show or change what is collected (off | metadata | full)
   doctor     Show installed copies, the active hook and local files
   purge      Delete local queued records and logs
+  mcp        Configure AnoSys Public MCP server and SKILL.md
   run        Execute the hook (invoked by Codex CLI on notify events)
 """
 
@@ -19,6 +20,7 @@ import os
 import sys
 
 from anosys_sdk_core.hook_cli import add_maintenance_parsers, add_privacy_parser, print_doctor
+from anosys_sdk_core.mcp_installer import add_mcp_install_flags, add_mcp_subparser, apply_install_mcp_flags
 from anosys_sdk_core.privacy import METADATA, effective_level, write_consent
 
 from anosys_sdk_codex.installer import (
@@ -98,6 +100,7 @@ def cmd_install(args: argparse.Namespace) -> None:
         print("\nRestart Codex CLI to load the notification command.")
         print("   The notify callback is separate from lifecycle hooks listed by /hooks.")
         print("   Verify callback execution and delivery in ~/.codex/state/anosys_hook.log.\n")
+        apply_install_mcp_flags("codex", args)
     else:
         print("\n================================================================")
         print("Add the following to your ~/.codex/config.toml file:")
@@ -201,6 +204,7 @@ def main(argv: list[str] | None = None) -> None:
     p_install.add_argument("--no-redaction", action="store_true", default=False, help=argparse.SUPPRESS)
     p_install.add_argument("--auto-update", dest="auto_update", action="store_true", default=None)
     p_install.add_argument("--no-auto-update", dest="auto_update", action="store_false")
+    add_mcp_install_flags(p_install)
     p_install.set_defaults(func=cmd_install)
 
     p_uninstall = subparsers.add_parser("uninstall", help="Remove AnoSys hook from ~/.codex/config.toml")
@@ -211,6 +215,7 @@ def main(argv: list[str] | None = None) -> None:
 
     add_privacy_parser(subparsers, "anosys-codex")
     add_maintenance_parsers(subparsers, _purge_paths, _doctor)
+    add_mcp_subparser(subparsers, "codex")
 
     p_run = subparsers.add_parser("run", help="Run the hook (invoked by Codex notify)")
     p_run.add_argument("rest", nargs=argparse.REMAINDER, help="Codex notification JSON")

@@ -110,3 +110,7 @@ jobs:
       - name: Test claude-agents
         working-directory: packages/js/claude-agents
         run: npm test
+
+      - name: Test mcp
+        working-directory: packages/js/mcp
+        run: npm test

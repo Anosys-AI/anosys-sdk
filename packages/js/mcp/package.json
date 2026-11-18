@@ -1,0 +1,38 @@
+{
+  "name": "anosys-sdk-mcp",
+  "version": "0.1.0",
+  "description": "AnoSys Public MCP client & AI skill installer for Claude Code, OpenAI Codex CLI, Google Antigravity, and Cursor",
+  "author": "AnoSys <support@anosys.ai>",
+  "license": "Apache-2.0",
+  "homepage": "https://anosys.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anosys-ai/anosys-sdk.git"
+  },
+  "main": "src/cli.js",
+  "bin": {
+    "anosys-sdk-mcp": "src/cli.js"
+  },
+  "files": [
+    "src/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "anosys",
+    "mcp",
+    "model-context-protocol",
+    "skills",
+    "claude-code",
+    "codex",
+    "antigravity",
+    "cursor"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "anosys-sdk-core": "^2.1.0"
+  }
+}

@@ -83,7 +83,7 @@ def save_state(state: Dict[str, Any]) -> None:
 
 
 def _headers() -> Dict[str, str]:
-    headers = {"Content-Type": "application/json", "User-Agent": "anosys-codex-hook/0.2.0"}
+    headers = {"Content-Type": "application/json", "User-Agent": "anosys-codex-hook/0.3.0"}
     if API_KEY:
         headers["anosys-apikey"] = API_KEY
         headers["x-api-key"] = API_KEY

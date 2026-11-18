@@ -65,6 +65,27 @@ from anosys_sdk_core.transport import (
     send_app_record,
     send_records,
 )
+from anosys_sdk_core.mcp_installer import (
+    DEFAULT_MCP_URL,
+    MCP_KEY_ENV,
+    MCP_SERVER_NAME,
+    PLATFORM_INTELLIGENCE_SKILL_MD,
+    SKILL_NAME,
+    add_mcp_install_flags,
+    add_mcp_subparser,
+    apply_install_mcp_flags,
+    get_mcp_client_status,
+    install_mcp_client,
+    mcp_install_notes,
+    is_uuid_like_key,
+    prompt_hidden_mcp_key,
+    resolve_mcp_key_from_env,
+    resolve_mcp_targets,
+    supported_mcp_harnesses,
+    uninstall_mcp_client,
+    validate_mcp_key_format,
+    validate_mcp_url,
+)
 
 from importlib.metadata import version, PackageNotFoundError
 
@@ -141,4 +162,24 @@ __all__ = [
     "get_encryption_key",
     "get_target_columns",
     "encrypt_payload",
+    # Public MCP & SKILL installer
+    "DEFAULT_MCP_URL",
+    "MCP_KEY_ENV",
+    "MCP_SERVER_NAME",
+    "PLATFORM_INTELLIGENCE_SKILL_MD",
+    "SKILL_NAME",
+    "add_mcp_install_flags",
+    "add_mcp_subparser",
+    "apply_install_mcp_flags",
+    "get_mcp_client_status",
+    "install_mcp_client",
+    "mcp_install_notes",
+    "is_uuid_like_key",
+    "prompt_hidden_mcp_key",
+    "resolve_mcp_key_from_env",
+    "resolve_mcp_targets",
+    "supported_mcp_harnesses",
+    "uninstall_mcp_client",
+    "validate_mcp_key_format",
+    "validate_mcp_url",
 ]

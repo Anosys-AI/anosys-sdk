@@ -1,6 +1,6 @@
 {
   "name": "anosys-sdk-claude-code",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "AnoSys observability hook for Claude Code \u2014 automatic instrumentation and logging for Claude Code sessions",
   "author": "AnoSys <support@anosys.ai>",
   "license": "Apache-2.0",
@@ -39,6 +39,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "anosys-sdk-core": "^2.0.0"
+    "anosys-sdk-core": "^2.1.0"
   }
 }
