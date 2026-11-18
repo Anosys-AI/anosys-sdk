@@ -9,6 +9,19 @@
 
 # Release notes
 
+## Anosys.ai SDK 2.1.1 — November 2026
+
+A fix for the coding-assistant hooks. Upgrade if you use Claude Code, Codex or Antigravity tracking.
+
+- **Large backlogs are no longer dropped.** Ingestion accepts at most 1,000 records per request, but the hooks only limited requests by size. A first run on a long session, or any run with more than 1,000 new records, was rejected with 413 and the records were dropped. Requests now hold at most 1,000 records (`ANOSYS_MAX_BATCH_RECORDS` changes it), and a request rejected with 413 is split in half and retried instead of dropped.
+
+| Package | Python | JavaScript |
+| --- | --- | --- |
+| Core | `anosys-sdk-core` 2.1.1 | `anosys-sdk-core` 2.1.1 |
+| Claude Code | `anosys-claude-code` 0.4.1 | `anosys-sdk-claude-code` 0.4.1 |
+| Codex | `anosys-codex` 0.3.1 | `anosys-sdk-codex` 0.3.1 |
+| Antigravity | `anosys-antigravity` 0.3.1 | `anosys-sdk-antigravity` 0.3.1 |
+
 ## Anosys.ai SDK 2.1 — November 2026
 
 This release lets coding agents read your Anosys.ai workspace. Nothing changes for applications that use the SDKs; only the coding-assistant packages gain new commands.

@@ -49,6 +49,7 @@ exports.DEFAULT_MAX_BATCH_BYTES = transport.DEFAULT_MAX_BATCH_BYTES;
 exports.PERMANENT_STATUS = transport.PERMANENT_STATUS;
 exports.isPermanent = transport.isPermanent;
 exports.maxBatchBytes = transport.maxBatchBytes;
+exports.maxBatchRecords = transport.maxBatchRecords;
 exports.jsonSize = transport.jsonSize;
 exports.fitRecord = transport.fitRecord;
 exports.chunkRecords = transport.chunkRecords;

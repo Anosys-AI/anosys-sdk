@@ -1,11 +1,15 @@
 """
 Size-limited delivery to AnoSys ingestion.
 
-AnoSys ingestion drops any request body above 10 MB. Every package that
-posts to AnoSys goes through these helpers so that:
+AnoSys ingestion drops any request body above 10 MB and any request with
+more than 1,000 records. Every package that posts to AnoSys goes through these
+helpers so that:
 
 - each request body stays under ``ANOSYS_MAX_BATCH_BYTES`` (default 10,000,000),
-  measured on the final JSON (after encryption);
+  measured on the final JSON (after encryption), and holds at most
+  ``ANOSYS_MAX_BATCH_RECORDS`` records (default 1,000);
+- a batch rejected with 413 is split in half and retried, so one oversized
+  request never drops a whole backlog;
 - a record that is too big on its own has its largest content fields
   truncated (``cvs199`` raw first), each marked with its original size, and
   is dropped with one warning if it still does not fit;
@@ -26,6 +30,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_BATCH_BYTES = 10_000_000
+# Ingestion rejects requests with more records than this (INGESTION_MAX_RECORDS)
+DEFAULT_MAX_BATCH_RECORDS = 1000
 # Headroom below the limit for headers and proxies
 _TARGET_RATIO = 0.95
 
@@ -43,6 +49,15 @@ def max_batch_bytes() -> int:
         return value if value > 1024 else DEFAULT_MAX_BATCH_BYTES
     except (TypeError, ValueError):
         return DEFAULT_MAX_BATCH_BYTES
+
+
+def max_batch_records() -> int:
+    """Records per request from ANOSYS_MAX_BATCH_RECORDS (default 1,000)."""
+    try:
+        value = int(os.environ.get("ANOSYS_MAX_BATCH_RECORDS", DEFAULT_MAX_BATCH_RECORDS))
+        return value if value >= 1 else DEFAULT_MAX_BATCH_RECORDS
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_BATCH_RECORDS
 
 
 def _target(limit: Optional[int]) -> int:
@@ -108,6 +123,7 @@ def fit_record(record: Dict[str, Any], limit: Optional[int] = None) -> Optional[
 def _chunk_pairs(records: List[Dict[str, Any]], limit: Optional[int] = None):
     """Request bodies as (original, fitted) pairs, so failures can be traced to the original."""
     target = _target(limit)
+    max_records = max_batch_records()
     chunks = []
     current = []
     current_size = 2  # "[]"
@@ -116,7 +132,7 @@ def _chunk_pairs(records: List[Dict[str, Any]], limit: Optional[int] = None):
         if fitted is None:
             continue
         size = json_size(fitted) + 1  # comma
-        if current and current_size + size > target:
+        if current and (current_size + size > target or len(current) >= max_records):
             chunks.append(current)
             current, current_size = [], 2
         current.append((record, fitted))
@@ -274,7 +290,9 @@ def send_records(
     retryable: List[Dict[str, Any]] = []
     pause: Optional[int] = None
     unreachable = False
-    for pairs in _chunk_pairs(records, limit):
+    work = list(reversed(_chunk_pairs(records, limit)))  # a stack; 413 halves go back on top
+    while work:
+        pairs = work.pop()
         chunk = [fitted for _, fitted in pairs]
         originals = [original for original, _ in pairs]  # retries keep their queue history
         if pause is not None:
@@ -294,6 +312,12 @@ def send_records(
             continue
         if status < 300:
             sent += len(chunk)
+        elif status == 413 and len(pairs) > 1:
+            # Too large for ingestion: retry as two smaller requests instead of dropping
+            half = len(pairs) // 2
+            logger.warning("Ingestion returned 413 for %d record(s); retrying in smaller batches", len(pairs))
+            work.append(pairs[half:])
+            work.append(pairs[:half])
         elif is_permanent(status):
             logger.warning("Ingestion rejected %d record(s) with %d; dropped", len(chunk), status)
             if status in PAUSE_STATUS:

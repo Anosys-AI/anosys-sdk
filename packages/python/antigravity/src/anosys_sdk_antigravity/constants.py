@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-INTEGRATION_VERSION = "0.3.0"
+INTEGRATION_VERSION = "0.3.1"
 HARNESS_NAME = "antigravity"
 HOOK_NAME = "anosys-tracing"
 HOOK_COMMAND = "anosys-antigravity run"

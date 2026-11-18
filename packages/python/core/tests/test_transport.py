@@ -9,7 +9,7 @@ import pytest
 
 from anosys_sdk_core.transport import (
     PendingQueue, chunk_records, deliver, fit_record, is_paused, json_size,
-    max_batch_bytes, send_records,
+    max_batch_bytes, max_batch_records, send_records,
 )
 
 
@@ -284,3 +284,27 @@ def test_truncated_record_keeps_its_retry_history(tmp_path, monkeypatch):
     for _ in range(2):
         deliver("u", [], queue, tmp_path / "pause.json", post=down, budget=5)
     assert queue.load()[0]["attempts"] == 3
+
+
+def test_batches_capped_at_ingestion_record_limit(monkeypatch):
+    # Ingestion rejects more than 1,000 records per request (INGESTION_MAX_RECORDS)
+    monkeypatch.delenv("ANOSYS_MAX_BATCH_RECORDS", raising=False)
+    chunks = chunk_records([{"i": i} for i in range(2_500)])
+    assert [len(c) for c in chunks] == [1000, 1000, 500]
+    monkeypatch.setenv("ANOSYS_MAX_BATCH_RECORDS", "300")
+    assert max(len(c) for c in chunk_records([{"i": i} for i in range(1_000)])) == 300
+
+
+def test_413_splits_batch_instead_of_dropping(monkeypatch):
+    monkeypatch.delenv("ANOSYS_MAX_BATCH_RECORDS", raising=False)
+    records = [{"i": i} for i in range(8)]
+    post = FakePost(413, 413, 200, 200, 200)  # 8 -> 4+4 -> 2+2 (first half), then 4
+    sent, retry, pause = send_records("u", records, post=post)
+    assert (sent, retry, pause) == (8, [], None)
+    assert [len(b) for b in post.bodies] == [8, 4, 2, 2, 4]
+    assert sorted(r["i"] for b in post.bodies[2:] for r in b) == list(range(8))
+
+
+def test_413_on_single_record_drops_it():
+    sent, retry, pause = send_records("u", [{"a": 1}, {"b": 2}], post=FakePost(413, 413, 200))
+    assert sent == 1 and retry == [] and pause is None

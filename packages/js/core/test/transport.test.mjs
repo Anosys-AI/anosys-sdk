@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  PendingQueue, chunkRecords, deliver, fitRecord, isPaused, jsonSize, maxBatchBytes, sendRecords,
+  PendingQueue, chunkRecords, deliver, fitRecord, isPaused, jsonSize, maxBatchBytes, maxBatchRecords, sendRecords,
 } from '../src/transport.js';
 
 function fakePost(...answers) {
@@ -215,5 +215,32 @@ describe('truncation keeps JSON valid and retry history (audit 4.1)', () => {
     }
     delete process.env.ANOSYS_MAX_BATCH_BYTES;
     assert.equal(queue.load()[0].attempts, 3);
+  });
+});
+
+describe('record limit and 413 split', () => {
+  it('caps each request at the ingestion record limit', () => {
+    delete process.env.ANOSYS_MAX_BATCH_RECORDS;
+    assert.equal(maxBatchRecords(), 1000);
+    const chunks = chunkRecords(Array.from({ length: 2500 }, (_, i) => ({ i })));
+    assert.deepEqual(chunks.map((c) => c.length), [1000, 1000, 500]);
+    process.env.ANOSYS_MAX_BATCH_RECORDS = '300';
+    assert.equal(Math.max(...chunkRecords(Array.from({ length: 1000 }, (_, i) => ({ i }))).map((c) => c.length)), 300);
+    delete process.env.ANOSYS_MAX_BATCH_RECORDS;
+  });
+
+  it('splits a batch rejected with 413 instead of dropping it', async () => {
+    const records = Array.from({ length: 8 }, (_, i) => ({ i }));
+    const post = fakePost(413, 413, 200, 200, 200);
+    const res = await sendRecords('u', records, { post });
+    assert.equal(res.sent, 8);
+    assert.deepEqual(res.retryable, []);
+    assert.deepEqual(post.bodies.map((b) => b.length), [8, 4, 2, 2, 4]);
+  });
+
+  it('drops a single record that still gets 413', async () => {
+    const res = await sendRecords('u', [{ a: 1 }, { b: 2 }], { post: fakePost(413, 413, 200) });
+    assert.equal(res.sent, 1);
+    assert.deepEqual(res.retryable, []);
   });
 });

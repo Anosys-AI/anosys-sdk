@@ -14,6 +14,8 @@ const fs = require('node:fs');
 const { writePrivateFile } = require('./privacy.js');
 
 const DEFAULT_MAX_BATCH_BYTES = 10000000;
+// Ingestion rejects requests with more records than this (INGESTION_MAX_RECORDS)
+const DEFAULT_MAX_BATCH_RECORDS = 1000;
 const TARGET_RATIO = 0.95;
 const PERMANENT_STATUS = new Set([400, 401, 403, 404, 413, 422]);
 const PAUSE_STATUS = new Set([401, 403]);
@@ -27,6 +29,11 @@ const log = {
 function maxBatchBytes() {
   const v = parseInt(process.env.ANOSYS_MAX_BATCH_BYTES ?? DEFAULT_MAX_BATCH_BYTES, 10);
   return Number.isFinite(v) && v > 1024 ? v : DEFAULT_MAX_BATCH_BYTES;
+}
+
+function maxBatchRecords() {
+  const v = parseInt(process.env.ANOSYS_MAX_BATCH_RECORDS ?? DEFAULT_MAX_BATCH_RECORDS, 10);
+  return Number.isFinite(v) && v >= 1 ? v : DEFAULT_MAX_BATCH_RECORDS;
 }
 
 const target = (limit) => Math.floor((limit || maxBatchBytes()) * TARGET_RATIO);
@@ -89,6 +96,7 @@ async function postRecord(url, record, { timeout = 5, headers = {}, post = defau
 /** Request bodies as [original, fitted] pairs, so failures can be traced to the original. */
 function chunkPairs(records, limit = null) {
   const t = target(limit);
+  const maxRecords = maxBatchRecords();
   const chunks = [];
   let current = [];
   let size = 2;
@@ -96,7 +104,7 @@ function chunkPairs(records, limit = null) {
     const fitted = fitRecord(record, limit);
     if (!fitted) continue;
     const s = jsonSize(fitted) + 1;
-    if (current.length && size + s > t) {
+    if (current.length && (size + s > t || current.length >= maxRecords)) {
       chunks.push(current);
       current = [];
       size = 2;
@@ -135,7 +143,9 @@ async function sendRecords(url, records, { headers = {}, timeout = 15, limit = n
   const retryable = [];
   let pause = null;
   let unreachable = false;
-  for (const pairs of chunkPairs(records, limit)) {
+  const work = chunkPairs(records, limit).reverse(); // a stack; 413 halves go back on top
+  while (work.length) {
+    const pairs = work.pop();
     const chunk = pairs.map(([, fitted]) => fitted);
     const originals = pairs.map(([original]) => original); // retries keep their queue history
     if (pause !== null) break;
@@ -152,6 +162,11 @@ async function sendRecords(url, records, { headers = {}, timeout = 15, limit = n
     }
     if (status < 300) {
       sent += chunk.length;
+    } else if (status === 413 && pairs.length > 1) {
+      // Too large for ingestion: retry as two smaller requests instead of dropping
+      const half = Math.floor(pairs.length / 2);
+      log.warn(`Ingestion returned 413 for ${pairs.length} record(s); retrying in smaller batches`);
+      work.push(pairs.slice(half), pairs.slice(0, half));
     } else if (isPermanent(status)) {
       log.warn(`Ingestion rejected ${chunk.length} record(s) with ${status}; dropped`);
       if (PAUSE_STATUS.has(status)) pause = status;
@@ -331,6 +346,7 @@ module.exports = {
   PERMANENT_STATUS,
   isPermanent,
   maxBatchBytes,
+  maxBatchRecords,
   jsonSize,
   fitRecord,
   chunkRecords,
