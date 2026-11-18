@@ -102,7 +102,7 @@ Codex can also export its own OpenTelemetry logs, traces and metrics. Add an **O
 anosys-codex install --api-key YOUR_CODEX_KEY --otel-key YOUR_OTEL_KEY --auto-update
 ```
 
-The installer adds an `[otel]` section to `~/.codex/config.toml` with prompt logging off (`log_user_prompt = false`), between `# >>> anosys-codex otel` markers. Codex's events include your account email. The new file is parsed and checked before it is written, so a bad edit can never stop Codex from starting; if `config.toml` already has an `[otel]` section of your own, it is left unchanged and the installer says so. `anosys-codex uninstall` removes the section again. This export comes from Codex itself, so `ANOSYS_DISABLE`, `.anosys` files and collection levels don't apply to it.
+The installer adds an `[otel]` section to `~/.codex/config.toml` with prompt logging off (`log_user_prompt = false`), between `# >>> anosys-codex otel` markers. Codex's events include your account email. The new file is parsed and checked before it is written, and if Codex is installed it is asked to load the new file first, so a bad edit can't stop Codex from starting; if `config.toml` already has an `[otel]` section of your own, it is left unchanged and the installer says so. `anosys-codex uninstall` removes the section again. This export comes from Codex itself, so `ANOSYS_DISABLE`, `.anosys` files and collection levels don't apply to it.
 
 ## Anosys.ai MCP server and skill
 

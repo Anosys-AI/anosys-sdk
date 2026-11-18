@@ -355,6 +355,29 @@ function sortKeys(value) {
 }
 const withoutOtel = (data) => Object.fromEntries(Object.entries(data).filter(([k]) => k !== 'otel'));
 
+/**
+ * Ask the installed Codex to load `content` from a private temporary CODEX_HOME.
+ * true: Codex loaded it. false: Codex rejected the config. null: Codex is not
+ * installed or could not be checked (nothing is concluded).
+ */
+function codexAcceptsConfig(content, timeoutMs = 20000) {
+  const { spawnSync } = require('child_process');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'anosys-codex-check-'));
+  try {
+    fs.writeFileSync(path.join(tmp, 'config.toml'), content, { mode: 0o600 });
+    const res = spawnSync('codex', ['features', 'list'], {
+      env: { ...process.env, CODEX_HOME: tmp }, encoding: 'utf8', timeout: timeoutMs,
+    });
+    if (res.error) return null; // not installed, or timed out
+    if (res.status === 0) return true;
+    return /config/i.test(res.stderr || '') ? false : null;
+  } catch (_) {
+    return null;
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 function hasAnosysOtel(customPath = null) {
   const filePath = customPath || getConfigPath();
   return fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8').includes(OTEL_BEGIN);
@@ -382,6 +405,9 @@ function updateCodexOtel(otelKey, customPath = null, baseUrl = INGESTION_URL) {
   }
   if (!sameData(withoutOtel(after), withoutOtel(before))) {
     throw new OtelConfigError('writing [otel] would have changed other settings; nothing was written');
+  }
+  if (next !== original && codexAcceptsConfig(next) === false) {
+    throw new OtelConfigError('the installed Codex rejected the new config.toml; nothing was written');
   }
   if (next === original) return false;
   writeAtomic(filePath, next);
@@ -424,6 +450,7 @@ module.exports = {
   validateApiKey,
   OtelConfigError,
   hasAnosysOtel,
+  codexAcceptsConfig,
   updateCodexOtel,
   removeCodexOtel,
 };

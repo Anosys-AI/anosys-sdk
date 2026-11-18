@@ -367,6 +367,31 @@ def _parse_strict(content: str) -> Dict[str, Any]:
         raise OtelConfigError(f"config.toml is not valid TOML ({exc})") from exc
 
 
+def codex_accepts_config(content: str, timeout: float = 20) -> Optional[bool]:
+    """
+    Ask the installed Codex to load ``content`` from a private temporary
+    CODEX_HOME. True: Codex loaded it. False: Codex rejected the config.
+    None: Codex is not installed or could not be checked (nothing is concluded).
+    """
+    import subprocess
+    codex = shutil.which("codex")
+    if not codex:
+        return None
+    with tempfile.TemporaryDirectory(prefix="anosys-codex-check-") as tmp:
+        cfg = Path(tmp) / "config.toml"
+        cfg.write_text(content, encoding="utf-8")
+        cfg.chmod(0o600)
+        env = dict(os.environ, CODEX_HOME=tmp)
+        try:
+            result = subprocess.run([codex, "features", "list"], env=env, capture_output=True,
+                                    text=True, timeout=timeout)
+        except Exception:
+            return None
+    if result.returncode == 0:
+        return True
+    return False if "config" in (result.stderr or "").lower() else None
+
+
 def has_anosys_otel(path: Path | None = None) -> bool:
     path = path or get_config_path()
     return path.is_file() and OTEL_BEGIN in path.read_text(encoding="utf-8")
@@ -393,6 +418,8 @@ def update_codex_otel(otel_key: str, path: Path | None = None, base_url: str = I
         raise OtelConfigError("the generated [otel] section did not parse as expected; nothing was written")
     if {k: v for k, v in after.items() if k != "otel"} != {k: v for k, v in before.items() if k != "otel"}:
         raise OtelConfigError("writing [otel] would have changed other settings; nothing was written")
+    if new != original and codex_accepts_config(new) is False:
+        raise OtelConfigError("the installed Codex rejected the new config.toml; nothing was written")
     if new == original:
         return False
     _write_atomic(path, new)
